@@ -84,7 +84,7 @@ export default function InvitePage() {
             albumId: inviteData.album_id,
             albumTitle: (inviteData.albums as any)?.title || 'Album',
             defaultRole: inviteData.default_role,
-            requiresApproval: inviteData.requires_approval,
+            requiresApproval: inviteData.requires_approval ?? false,
             expiresAt: inviteData.expires_at,
           })
           return
@@ -95,7 +95,7 @@ export default function InvitePage() {
         albumId: inviteData.album_id,
         albumTitle: (inviteData.albums as any)?.title || 'Album',
         defaultRole: inviteData.default_role,
-        requiresApproval: inviteData.requires_approval,
+        requiresApproval: inviteData.requires_approval ?? false,
         expiresAt: inviteData.expires_at,
       })
       setStatus('valid')
