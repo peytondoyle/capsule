@@ -19,6 +19,7 @@ interface AuthState {
   setError: (error: string | null) => void
   initialize: () => Promise<void>
   signInWithGoogle: () => Promise<void>
+  signInWithApple: () => Promise<void>
   signInWithEmail: (email: string) => Promise<{ success: boolean; error?: string }>
   verifyOtp: (email: string, token: string) => Promise<{ success: boolean; error?: string }>
   signOut: () => Promise<void>
@@ -82,6 +83,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+
+    if (error) {
+      set({ error: error.message })
+    }
+  },
+
+  signInWithApple: async () => {
+    const supabase = createClient()
+    set({ error: null })
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'apple',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
       },
