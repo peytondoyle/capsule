@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/authStore'
 import { Camera, Lock, Users, Cloud } from 'lucide-react'
 
 export default function HomePage() {
   const router = useRouter()
-  const { user, isLoading, initialize, signInWithGoogle, signInWithApple, signInWithEmail } = useAuthStore()
+  const { user, isLoading, initialize, signInWithGoogle, signInWithApple } = useAuthStore()
 
   useEffect(() => {
     initialize()
@@ -87,8 +87,6 @@ export default function HomePage() {
               </svg>
               Continue with Google
             </button>
-
-            <EmailSignIn onSignIn={signInWithEmail} />
           </div>
 
           {/* Features */}
@@ -122,93 +120,6 @@ export default function HomePage() {
       <footer className="container mx-auto px-4 py-8 text-center text-gray-500 text-sm">
         <p>Download the iOS app for the full experience</p>
       </footer>
-    </div>
-  )
-}
-
-function EmailSignIn({ onSignIn }: { onSignIn: (email: string) => Promise<{ success: boolean; error?: string }> }) {
-  const [showForm, setShowForm] = useState(false)
-  const [email, setEmail] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [codeSent, setCodeSent] = useState(false)
-  const [code, setCode] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  const { verifyOtp } = useAuthStore()
-
-  const handleSendCode = async () => {
-    setIsLoading(true)
-    setError(null)
-    const result = await onSignIn(email)
-    setIsLoading(false)
-
-    if (result.success) {
-      setCodeSent(true)
-    } else {
-      setError(result.error || 'Failed to send code')
-    }
-  }
-
-  const handleVerify = async () => {
-    setIsLoading(true)
-    setError(null)
-    const result = await verifyOtp(email, code)
-    setIsLoading(false)
-
-    if (!result.success) {
-      setError(result.error || 'Invalid code')
-    }
-  }
-
-  if (!showForm) {
-    return (
-      <button
-        onClick={() => setShowForm(true)}
-        className="flex items-center justify-center gap-3 px-6 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
-      >
-        Continue with Email
-      </button>
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      {!codeSent ? (
-        <>
-          <input
-            type="email"
-            placeholder="email@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            onClick={handleSendCode}
-            disabled={!email || isLoading}
-            className="px-6 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
-          >
-            {isLoading ? 'Sending...' : 'Send Code'}
-          </button>
-        </>
-      ) : (
-        <>
-          <input
-            type="text"
-            placeholder="Enter code"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            onClick={handleVerify}
-            disabled={code.length < 6 || isLoading}
-            className="px-6 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
-          >
-            {isLoading ? 'Verifying...' : 'Verify'}
-          </button>
-        </>
-      )}
-      {error && <p className="text-red-500 text-sm">{error}</p>}
     </div>
   )
 }
