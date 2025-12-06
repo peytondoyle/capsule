@@ -6,9 +6,9 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/authStore'
-import { Camera, ArrowLeft, Upload, Download, X } from 'lucide-react'
-import { formatFileSize } from '@/lib/utils'
+import { Camera, ArrowLeft, Upload } from 'lucide-react'
 import type { Database } from '@/types/database'
+import PhotoModal from '@/components/PhotoModal'
 
 type Album = Database['capsule']['Tables']['albums']['Row']
 type Photo = Database['capsule']['Tables']['photos']['Row']
@@ -231,47 +231,11 @@ export default function AlbumPage() {
 
       {/* Photo Detail Modal */}
       {selectedPhoto && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
-          <button
-            onClick={() => setSelectedPhoto(null)}
-            className="absolute top-4 right-4 p-2 text-white/80 hover:text-white"
-          >
-            <X className="h-6 w-6" />
-          </button>
-
-          <div className="max-w-4xl max-h-[90vh] relative">
-            <Image
-              src={getThumbnailUrl(selectedPhoto)}
-              alt=""
-              width={selectedPhoto.width || 1200}
-              height={selectedPhoto.height || 800}
-              className="max-h-[80vh] w-auto object-contain"
-            />
-          </div>
-
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/50 rounded-lg px-4 py-2">
-            <span className="text-white/80 text-sm">
-              {selectedPhoto.width && selectedPhoto.height
-                ? `${selectedPhoto.width} × ${selectedPhoto.height}`
-                : ''}
-            </span>
-            {selectedPhoto.file_size_bytes && (
-              <span className="text-white/80 text-sm">
-                {formatFileSize(selectedPhoto.file_size_bytes)}
-              </span>
-            )}
-            <a
-              href={selectedPhoto.original_uri}
-              download
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-white hover:text-blue-400 text-sm"
-            >
-              <Download className="h-4 w-4" />
-              Download
-            </a>
-          </div>
-        </div>
+        <PhotoModal
+          photo={selectedPhoto}
+          thumbnailUrl={getThumbnailUrl(selectedPhoto)}
+          onClose={() => setSelectedPhoto(null)}
+        />
       )}
     </div>
   )

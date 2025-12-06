@@ -6,10 +6,18 @@ struct PhotoDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var photoService = PhotoService.shared
+    @StateObject private var socialService = SocialService.shared
     @State private var showDeleteConfirmation = false
     @State private var isDeleting = false
     @State private var isDownloading = false
     @State private var downloadError: String?
+
+    // Social state
+    @State private var isLiked = false
+    @State private var isFavorited = false
+    @State private var likeCount = 0
+    @State private var commentCount = 0
+    @State private var showComments = false
 
     var body: some View {
         NavigationStack {
@@ -30,7 +38,7 @@ struct PhotoDetailView: View {
                                 image
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(maxHeight: geometry.size.height * 0.8)
+                                    .frame(maxHeight: geometry.size.height * 0.7)
                             case .failure:
                                 Rectangle()
                                     .fill(Color(.systemGray5))
@@ -48,6 +56,54 @@ struct PhotoDetailView: View {
                                 EmptyView()
                             }
                         }
+
+                        // Action bar
+                        HStack(spacing: 24) {
+                            // Like button (public)
+                            Button {
+                                Task { await toggleLike() }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: isLiked ? "heart.fill" : "heart")
+                                        .foregroundStyle(isLiked ? .red : .primary)
+                                    if likeCount > 0 {
+                                        Text("\(likeCount)")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+
+                            // Favorite button (private)
+                            Button {
+                                Task { await toggleFavorite() }
+                            } label: {
+                                Image(systemName: isFavorited ? "star.fill" : "star")
+                                    .foregroundStyle(isFavorited ? .yellow : .primary)
+                            }
+                            .buttonStyle(.plain)
+
+                            // Comments button
+                            Button {
+                                showComments = true
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "bubble.right")
+                                    if commentCount > 0 {
+                                        Text("\(commentCount)")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+
+                            Spacer()
+                        }
+                        .font(.title2)
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
 
                         // Metadata
                         VStack(alignment: .leading, spacing: 12) {
@@ -167,6 +223,51 @@ struct PhotoDetailView: View {
                         .cornerRadius(12)
                 }
             }
+            .sheet(isPresented: $showComments) {
+                CommentsSheet(photoId: photo.id, onCommentAdded: {
+                    commentCount += 1
+                }, onCommentDeleted: {
+                    commentCount = max(0, commentCount - 1)
+                })
+            }
+            .task {
+                await loadSocialData()
+            }
+        }
+    }
+
+    private func loadSocialData() async {
+        async let interactions = socialService.fetchUserInteractions(photoId: photo.id)
+        async let counts = socialService.fetchCounts(photoId: photo.id)
+
+        let (interactionResult, countsResult) = await (interactions, counts)
+        isLiked = interactionResult.liked
+        isFavorited = interactionResult.favorited
+        likeCount = countsResult.likes
+        commentCount = countsResult.comments
+    }
+
+    private func toggleLike() async {
+        // Optimistic update
+        isLiked.toggle()
+        likeCount += isLiked ? 1 : -1
+
+        let success = await socialService.toggleLike(photoId: photo.id)
+        if !success {
+            // Revert on failure
+            isLiked.toggle()
+            likeCount += isLiked ? 1 : -1
+        }
+    }
+
+    private func toggleFavorite() async {
+        // Optimistic update
+        isFavorited.toggle()
+
+        let success = await socialService.toggleFavorite(photoId: photo.id)
+        if !success {
+            // Revert on failure
+            isFavorited.toggle()
         }
     }
 
