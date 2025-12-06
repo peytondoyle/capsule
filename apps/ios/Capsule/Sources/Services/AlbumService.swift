@@ -6,6 +6,7 @@ final class AlbumService: ObservableObject {
     static let shared = AlbumService()
 
     @Published var albums: [Album] = []
+    @Published var coverPhotoUrls: [UUID: URL] = [:]
     @Published var isLoading = false
     @Published var error: Error?
 
@@ -37,16 +38,24 @@ final class AlbumService: ObservableObject {
                 return
             }
 
-            // Then fetch the albums
-            let fetchedAlbums: [Album] = try await SupabaseService.shared
+            // Then fetch the albums with cover photo paths
+            let fetchedAlbums: [AlbumWithCoverPhoto] = try await SupabaseService.shared
                 .from("albums")
-                .select()
+                .select("*, cover_photo:photos!cover_photo_id(thumbnail_path)")
                 .in("id", values: albumIds)
                 .order("updated_at", ascending: false)
                 .execute()
                 .value
 
-            albums = fetchedAlbums
+            // Extract albums and build cover photo URL map
+            albums = fetchedAlbums.map { $0.toAlbum() }
+            coverPhotoUrls = [:]
+            for albumWithCover in fetchedAlbums {
+                if let coverPhoto = albumWithCover.coverPhoto,
+                   let url = URL(string: "\(Config.supabaseURL)/storage/v1/object/public/capsule-thumbnails/\(coverPhoto.thumbnailPath)") {
+                    coverPhotoUrls[albumWithCover.id] = url
+                }
+            }
         } catch {
             self.error = error
             print("[AlbumService] Failed to fetch albums: \(error)")
@@ -190,5 +199,52 @@ private struct UpdateAlbumRequest: Encodable {
         case description
         case privacyMode = "privacy_mode"
         case coverPhotoId = "cover_photo_id"
+    }
+}
+
+// MARK: - Response Types for Joins
+
+private struct AlbumWithCoverPhoto: Decodable {
+    let id: UUID
+    let ownerId: UUID
+    let title: String
+    let description: String?
+    let coverPhotoId: UUID?
+    let privacyMode: AlbumPrivacyMode
+    let createdAt: Date
+    let updatedAt: Date
+    let coverPhoto: CoverPhotoPath?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case ownerId = "owner_id"
+        case title
+        case description
+        case coverPhotoId = "cover_photo_id"
+        case privacyMode = "privacy_mode"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case coverPhoto = "cover_photo"
+    }
+
+    func toAlbum() -> Album {
+        Album(
+            id: id,
+            ownerId: ownerId,
+            title: title,
+            description: description,
+            coverPhotoId: coverPhotoId,
+            privacyMode: privacyMode,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+}
+
+private struct CoverPhotoPath: Decodable {
+    let thumbnailPath: String
+
+    enum CodingKeys: String, CodingKey {
+        case thumbnailPath = "thumbnail_path"
     }
 }

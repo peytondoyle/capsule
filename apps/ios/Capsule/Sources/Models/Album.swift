@@ -59,3 +59,12 @@ struct AlbumWithDetails: Identifiable, Equatable {
 
     var id: UUID { album.id }
 }
+
+/// Extension to generate cover photo URL
+extension Album {
+    /// Get cover photo thumbnail URL if cover photo exists
+    func coverPhotoUrl(thumbnailPath: String?) -> URL? {
+        guard let path = thumbnailPath else { return nil }
+        return URL(string: "\(Config.supabaseURL)/storage/v1/object/public/capsule-thumbnails/\(path)")
+    }
+}

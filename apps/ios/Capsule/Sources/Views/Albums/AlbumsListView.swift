@@ -24,7 +24,10 @@ struct AlbumsListView: View {
                     List {
                         ForEach(albumService.albums) { album in
                             NavigationLink(value: album) {
-                                AlbumRowView(album: album)
+                                AlbumRowView(
+                                    album: album,
+                                    coverPhotoUrl: albumService.coverPhotoUrls[album.id]
+                                )
                             }
                         }
                     }
@@ -58,17 +61,37 @@ struct AlbumsListView: View {
 
 struct AlbumRowView: View {
     let album: Album
+    let coverPhotoUrl: URL?
 
     var body: some View {
         HStack(spacing: 16) {
-            // Thumbnail placeholder
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(.systemGray5))
-                .frame(width: 60, height: 60)
-                .overlay {
-                    Image(systemName: "photo")
-                        .foregroundStyle(.secondary)
+            // Cover photo or placeholder
+            if let coverUrl = coverPhotoUrl {
+                AsyncImage(url: coverUrl) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        Color(.systemGray5)
+                            .overlay {
+                                Image(systemName: "photo")
+                                    .foregroundStyle(.secondary)
+                            }
+                    }
                 }
+                .frame(width: 60, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(.systemGray5))
+                    .frame(width: 60, height: 60)
+                    .overlay {
+                        Image(systemName: "photo")
+                            .foregroundStyle(.secondary)
+                    }
+            }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(album.title)

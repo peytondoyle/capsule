@@ -28,6 +28,11 @@
 		E1000025299B000000000001 /* PhotoDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000026299B000000000001 /* PhotoDetailView.swift */; };
 		E1000027299B000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E1000028299B000000000001 /* Assets.xcassets */; };
 		E1000029299B000000000001 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = E100002A299B000000000001 /* Supabase */; };
+		E100002C299B000000000001 /* InviteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100002D299B000000000001 /* InviteService.swift */; };
+		E100002E299B000000000001 /* MemberService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100002F299B000000000001 /* MemberService.swift */; };
+		E1000033299B000000000001 /* MembersListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000034299B000000000001 /* MembersListView.swift */; };
+		E1000035299B000000000001 /* InviteSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000036299B000000000001 /* InviteSheet.swift */; };
+		E1000037299B000000000001 /* CoverPhotoPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000038299B000000000001 /* CoverPhotoPickerSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +59,11 @@
 		E1000028299B000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E1000031299B000000000001 /* Capsule.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Capsule.entitlements; sourceTree = "<group>"; };
 		E1000032299B000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E100002D299B000000000001 /* InviteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteService.swift; sourceTree = "<group>"; };
+		E100002F299B000000000001 /* MemberService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberService.swift; sourceTree = "<group>"; };
+		E1000034299B000000000001 /* MembersListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembersListView.swift; sourceTree = "<group>"; };
+		E1000036299B000000000001 /* InviteSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteSheet.swift; sourceTree = "<group>"; };
+		E1000038299B000000000001 /* CoverPhotoPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverPhotoPickerSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -133,6 +143,8 @@
 				E100000E299B000000000001 /* AlbumService.swift */,
 				E1000010299B000000000001 /* AuthManager.swift */,
 				E1000012299B000000000001 /* CloudStorageService.swift */,
+				E100002D299B000000000001 /* InviteService.swift */,
+				E100002F299B000000000001 /* MemberService.swift */,
 				E1000014299B000000000001 /* PhotoService.swift */,
 				E1000016299B000000000001 /* SupabaseClient.swift */,
 				E1000018299B000000000001 /* ThumbnailService.swift */,
@@ -145,9 +157,19 @@
 			children = (
 				E1000049299B000000000001 /* Albums */,
 				E100004A299B000000000001 /* Auth */,
+				E100004C299B000000000001 /* Members */,
 				E100004B299B000000000001 /* Photos */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		E100004C299B000000000001 /* Members */ = {
+			isa = PBXGroup;
+			children = (
+				E1000034299B000000000001 /* MembersListView.swift */,
+				E1000036299B000000000001 /* InviteSheet.swift */,
+			);
+			path = Members;
 			sourceTree = "<group>";
 		};
 		E1000048299B000000000001 /* Utilities */ = {
@@ -164,6 +186,7 @@
 				E100001C299B000000000001 /* AlbumDetailView.swift */,
 				E100001E299B000000000001 /* AlbumSettingsView.swift */,
 				E1000020299B000000000001 /* AlbumsListView.swift */,
+				E1000038299B000000000001 /* CoverPhotoPickerSheet.swift */,
 				E1000022299B000000000001 /* CreateAlbumSheet.swift */,
 			);
 			path = Albums;
@@ -279,6 +302,11 @@
 				E1000021299B000000000001 /* CreateAlbumSheet.swift in Sources */,
 				E1000023299B000000000001 /* SignInView.swift in Sources */,
 				E1000025299B000000000001 /* PhotoDetailView.swift in Sources */,
+				E100002C299B000000000001 /* InviteService.swift in Sources */,
+				E100002E299B000000000001 /* MemberService.swift in Sources */,
+				E1000033299B000000000001 /* MembersListView.swift in Sources */,
+				E1000035299B000000000001 /* InviteSheet.swift in Sources */,
+				E1000037299B000000000001 /* CoverPhotoPickerSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

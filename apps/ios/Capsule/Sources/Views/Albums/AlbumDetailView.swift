@@ -65,12 +65,15 @@ struct AlbumDetailView: View {
             }
         }
         .sheet(isPresented: $showSettings) {
-            AlbumSettingsView(album: album)
+            AlbumSettingsView(album: album, photos: photos)
         }
         .sheet(item: $selectedPhoto) { photo in
             PhotoDetailView(photo: photo, albumId: album.id)
         }
         .task {
+            await loadPhotos()
+        }
+        .refreshable {
             await loadPhotos()
         }
         .onChange(of: selectedPhotos) { _, newValue in
