@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.peytondoyle.capsule</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>capsule</string>
+			</array>
+		</dict>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Capsule needs access to your photos to upload them to shared albums.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Capsule needs permission to save photos to your library.</string>
+</dict>
+</plist>

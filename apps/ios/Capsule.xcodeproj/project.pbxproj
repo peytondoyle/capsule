@@ -1,0 +1,518 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		E1000001299B000000000001 /* CapsuleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000002299B000000000001 /* CapsuleApp.swift */; };
+		E1000003299B000000000001 /* Album.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000004299B000000000001 /* Album.swift */; };
+		E1000005299B000000000001 /* AlbumMember.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000006299B000000000001 /* AlbumMember.swift */; };
+		E1000007299B000000000001 /* Photo.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000008299B000000000001 /* Photo.swift */; };
+		E1000009299B000000000001 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000A299B000000000001 /* Profile.swift */; };
+		E100000B299B000000000001 /* Subset.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000C299B000000000001 /* Subset.swift */; };
+		E100000D299B000000000001 /* AlbumService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000E299B000000000001 /* AlbumService.swift */; };
+		E100000F299B000000000001 /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000010299B000000000001 /* AuthManager.swift */; };
+		E1000011299B000000000001 /* CloudStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000012299B000000000001 /* CloudStorageService.swift */; };
+		E1000013299B000000000001 /* PhotoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000014299B000000000001 /* PhotoService.swift */; };
+		E1000015299B000000000001 /* SupabaseClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000016299B000000000001 /* SupabaseClient.swift */; };
+		E1000017299B000000000001 /* ThumbnailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000018299B000000000001 /* ThumbnailService.swift */; };
+		E1000019299B000000000001 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100001A299B000000000001 /* Config.swift */; };
+		E100001B299B000000000001 /* AlbumDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100001C299B000000000001 /* AlbumDetailView.swift */; };
+		E100001D299B000000000001 /* AlbumSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100001E299B000000000001 /* AlbumSettingsView.swift */; };
+		E100001F299B000000000001 /* AlbumsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000020299B000000000001 /* AlbumsListView.swift */; };
+		E1000021299B000000000001 /* CreateAlbumSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000022299B000000000001 /* CreateAlbumSheet.swift */; };
+		E1000023299B000000000001 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000024299B000000000001 /* SignInView.swift */; };
+		E1000025299B000000000001 /* PhotoDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000026299B000000000001 /* PhotoDetailView.swift */; };
+		E1000027299B000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E1000028299B000000000001 /* Assets.xcassets */; };
+		E1000029299B000000000001 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = E100002A299B000000000001 /* Supabase */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		E1000030299B000000000001 /* Capsule.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Capsule.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1000002299B000000000001 /* CapsuleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapsuleApp.swift; sourceTree = "<group>"; };
+		E1000004299B000000000001 /* Album.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Album.swift; sourceTree = "<group>"; };
+		E1000006299B000000000001 /* AlbumMember.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumMember.swift; sourceTree = "<group>"; };
+		E1000008299B000000000001 /* Photo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Photo.swift; sourceTree = "<group>"; };
+		E100000A299B000000000001 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
+		E100000C299B000000000001 /* Subset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Subset.swift; sourceTree = "<group>"; };
+		E100000E299B000000000001 /* AlbumService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumService.swift; sourceTree = "<group>"; };
+		E1000010299B000000000001 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
+		E1000012299B000000000001 /* CloudStorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudStorageService.swift; sourceTree = "<group>"; };
+		E1000014299B000000000001 /* PhotoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoService.swift; sourceTree = "<group>"; };
+		E1000016299B000000000001 /* SupabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseClient.swift; sourceTree = "<group>"; };
+		E1000018299B000000000001 /* ThumbnailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailService.swift; sourceTree = "<group>"; };
+		E100001A299B000000000001 /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
+		E100001C299B000000000001 /* AlbumDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumDetailView.swift; sourceTree = "<group>"; };
+		E100001E299B000000000001 /* AlbumSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumSettingsView.swift; sourceTree = "<group>"; };
+		E1000020299B000000000001 /* AlbumsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumsListView.swift; sourceTree = "<group>"; };
+		E1000022299B000000000001 /* CreateAlbumSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAlbumSheet.swift; sourceTree = "<group>"; };
+		E1000024299B000000000001 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
+		E1000026299B000000000001 /* PhotoDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoDetailView.swift; sourceTree = "<group>"; };
+		E1000028299B000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E1000031299B000000000001 /* Capsule.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Capsule.entitlements; sourceTree = "<group>"; };
+		E1000032299B000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E100003F299B000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1000029299B000000000001 /* Supabase in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E1000040299B000000000001 = {
+			isa = PBXGroup;
+			children = (
+				E1000041299B000000000001 /* Capsule */,
+				E1000042299B000000000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E1000041299B000000000001 /* Capsule */ = {
+			isa = PBXGroup;
+			children = (
+				E1000043299B000000000001 /* Sources */,
+				E1000028299B000000000001 /* Assets.xcassets */,
+				E1000031299B000000000001 /* Capsule.entitlements */,
+				E1000032299B000000000001 /* Info.plist */,
+			);
+			path = Capsule;
+			sourceTree = "<group>";
+		};
+		E1000042299B000000000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E1000030299B000000000001 /* Capsule.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E1000043299B000000000001 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				E1000044299B000000000001 /* App */,
+				E1000045299B000000000001 /* Models */,
+				E1000046299B000000000001 /* Services */,
+				E1000047299B000000000001 /* Views */,
+				E1000048299B000000000001 /* Utilities */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		E1000044299B000000000001 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				E1000002299B000000000001 /* CapsuleApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		E1000045299B000000000001 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				E1000004299B000000000001 /* Album.swift */,
+				E1000006299B000000000001 /* AlbumMember.swift */,
+				E1000008299B000000000001 /* Photo.swift */,
+				E100000A299B000000000001 /* Profile.swift */,
+				E100000C299B000000000001 /* Subset.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		E1000046299B000000000001 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				E100000E299B000000000001 /* AlbumService.swift */,
+				E1000010299B000000000001 /* AuthManager.swift */,
+				E1000012299B000000000001 /* CloudStorageService.swift */,
+				E1000014299B000000000001 /* PhotoService.swift */,
+				E1000016299B000000000001 /* SupabaseClient.swift */,
+				E1000018299B000000000001 /* ThumbnailService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		E1000047299B000000000001 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				E1000049299B000000000001 /* Albums */,
+				E100004A299B000000000001 /* Auth */,
+				E100004B299B000000000001 /* Photos */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		E1000048299B000000000001 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				E100001A299B000000000001 /* Config.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		E1000049299B000000000001 /* Albums */ = {
+			isa = PBXGroup;
+			children = (
+				E100001C299B000000000001 /* AlbumDetailView.swift */,
+				E100001E299B000000000001 /* AlbumSettingsView.swift */,
+				E1000020299B000000000001 /* AlbumsListView.swift */,
+				E1000022299B000000000001 /* CreateAlbumSheet.swift */,
+			);
+			path = Albums;
+			sourceTree = "<group>";
+		};
+		E100004A299B000000000001 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				E1000024299B000000000001 /* SignInView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		E100004B299B000000000001 /* Photos */ = {
+			isa = PBXGroup;
+			children = (
+				E1000026299B000000000001 /* PhotoDetailView.swift */,
+			);
+			path = Photos;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E1000050299B000000000001 /* Capsule */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1000060299B000000000001 /* Build configuration list for PBXNativeTarget "Capsule" */;
+			buildPhases = (
+				E1000051299B000000000001 /* Sources */,
+				E100003F299B000000000001 /* Frameworks */,
+				E1000052299B000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Capsule;
+			packageProductDependencies = (
+				E100002A299B000000000001 /* Supabase */,
+			);
+			productName = Capsule;
+			productReference = E1000030299B000000000001 /* Capsule.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E1000053299B000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					E1000050299B000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = E1000061299B000000000001 /* Build configuration list for PBXProject "Capsule" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E1000040299B000000000001;
+			packageReferences = (
+				E100002B299B000000000001 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
+			productRefGroup = E1000042299B000000000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E1000050299B000000000001 /* Capsule */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E1000052299B000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1000027299B000000000001 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E1000051299B000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1000001299B000000000001 /* CapsuleApp.swift in Sources */,
+				E1000003299B000000000001 /* Album.swift in Sources */,
+				E1000005299B000000000001 /* AlbumMember.swift in Sources */,
+				E1000007299B000000000001 /* Photo.swift in Sources */,
+				E1000009299B000000000001 /* Profile.swift in Sources */,
+				E100000B299B000000000001 /* Subset.swift in Sources */,
+				E100000D299B000000000001 /* AlbumService.swift in Sources */,
+				E100000F299B000000000001 /* AuthManager.swift in Sources */,
+				E1000011299B000000000001 /* CloudStorageService.swift in Sources */,
+				E1000013299B000000000001 /* PhotoService.swift in Sources */,
+				E1000015299B000000000001 /* SupabaseClient.swift in Sources */,
+				E1000017299B000000000001 /* ThumbnailService.swift in Sources */,
+				E1000019299B000000000001 /* Config.swift in Sources */,
+				E100001B299B000000000001 /* AlbumDetailView.swift in Sources */,
+				E100001D299B000000000001 /* AlbumSettingsView.swift in Sources */,
+				E100001F299B000000000001 /* AlbumsListView.swift in Sources */,
+				E1000021299B000000000001 /* CreateAlbumSheet.swift in Sources */,
+				E1000023299B000000000001 /* SignInView.swift in Sources */,
+				E1000025299B000000000001 /* PhotoDetailView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		E1000054299B000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E1000055299B000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		E1000056299B000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Capsule/Capsule.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Capsule/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Capsule;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.peytondoyle.capsule;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E1000057299B000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Capsule/Capsule.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Capsule/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Capsule;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.peytondoyle.capsule;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E1000060299B000000000001 /* Build configuration list for PBXNativeTarget "Capsule" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1000056299B000000000001 /* Debug */,
+				E1000057299B000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1000061299B000000000001 /* Build configuration list for PBXProject "Capsule" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1000054299B000000000001 /* Debug */,
+				E1000055299B000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		E100002B299B000000000001 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E100002A299B000000000001 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E100002B299B000000000001 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E1000053299B000000000001 /* Project object */;
+}
