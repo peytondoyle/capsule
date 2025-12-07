@@ -32,22 +32,22 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
       {/* Header */}
       <header className="container mx-auto px-4 py-6">
         <div className="flex items-center gap-2">
           <Camera className="h-8 w-8 text-blue-600" />
-          <span className="text-xl font-bold">Capsule</span>
+          <span className="text-xl font-bold text-gray-900 dark:text-white">Capsule</span>
         </div>
       </header>
 
       {/* Hero */}
       <main className="container mx-auto px-4 py-20">
         <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-5xl font-bold text-gray-900 mb-6">
+          <h1 className="text-5xl font-bold text-gray-900 dark:text-white mb-6">
             Share photos, keep memories
           </h1>
-          <p className="text-xl text-gray-600 mb-12">
+          <p className="text-xl text-gray-600 dark:text-gray-300 mb-12">
             Full-resolution photo sharing without storage limits. Your photos stay in your cloud.
           </p>
 
@@ -65,7 +65,7 @@ export default function HomePage() {
 
             <button
               onClick={signInWithGoogle}
-              className="flex items-center justify-center gap-3 px-6 py-3 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition-colors"
+              className="flex items-center justify-center gap-3 px-6 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path
@@ -91,24 +91,24 @@ export default function HomePage() {
 
           {/* Features */}
           <div className="grid sm:grid-cols-3 gap-8 text-left">
-            <div className="p-6 bg-white rounded-xl shadow-sm">
+            <div className="p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
               <Cloud className="h-10 w-10 text-blue-600 mb-4" />
-              <h3 className="font-semibold text-lg mb-2">Your Storage</h3>
-              <p className="text-gray-600 text-sm">
+              <h3 className="font-semibold text-lg mb-2 text-gray-900 dark:text-white">Your Storage</h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">
                 Photos stay in your iCloud Drive. No extra subscriptions.
               </p>
             </div>
-            <div className="p-6 bg-white rounded-xl shadow-sm">
+            <div className="p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
               <Users className="h-10 w-10 text-blue-600 mb-4" />
-              <h3 className="font-semibold text-lg mb-2">Easy Sharing</h3>
-              <p className="text-gray-600 text-sm">
+              <h3 className="font-semibold text-lg mb-2 text-gray-900 dark:text-white">Easy Sharing</h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">
                 Invite family and friends with a simple link.
               </p>
             </div>
-            <div className="p-6 bg-white rounded-xl shadow-sm">
+            <div className="p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
               <Lock className="h-10 w-10 text-blue-600 mb-4" />
-              <h3 className="font-semibold text-lg mb-2">Full Control</h3>
-              <p className="text-gray-600 text-sm">
+              <h3 className="font-semibold text-lg mb-2 text-gray-900 dark:text-white">Full Control</h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">
                 Manage permissions and organize your way.
               </p>
             </div>
@@ -117,7 +117,7 @@ export default function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="container mx-auto px-4 py-8 text-center text-gray-500 text-sm">
+      <footer className="container mx-auto px-4 py-8 text-center text-gray-500 dark:text-gray-400 text-sm">
         <p>Download the iOS app for the full experience</p>
       </footer>
     </div>
