@@ -97,14 +97,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const supabase = createClient()
     set({ error: null })
 
-    const { error } = await supabase.auth.signInWithOAuth({
+    console.log('[Apple Auth] Starting sign in...')
+    console.log('[Apple Auth] Redirect URL:', `${window.location.origin}/auth/callback`)
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'apple',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
       },
     })
 
+    console.log('[Apple Auth] Response data:', data)
     if (error) {
+      console.error('[Apple Auth] Error:', error)
       set({ error: error.message })
     }
   },
