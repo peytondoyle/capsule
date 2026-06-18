@@ -47,3 +47,6 @@ coverage/
 *.log
 *.pem
 Thumbs.db
+
+# Vercel env files (auto-generated)
+.env.vercel.*

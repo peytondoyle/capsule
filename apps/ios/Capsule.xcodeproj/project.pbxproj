@@ -7,6 +7,38 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		9CEB01502EE9A0000085FB6E /* Activity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01512EE9A0000085FB6E /* Activity.swift */; };
+		9CEB01522EE9A0000085FB6E /* ActivityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01532EE9A0000085FB6E /* ActivityService.swift */; };
+		9CEB01222EE5A09C0085FB6E /* SocialService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01212EE5A09C0085FB6E /* SocialService.swift */; };
+		9CEB01242EE5A0C80085FB6E /* CommentsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01232EE5A0C80085FB6E /* CommentsSheet.swift */; };
+		9CEB01262EE5A0EA0085FB6E /* Comment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01252EE5A0EA0085FB6E /* Comment.swift */; };
+		9CEB01272EE6B0000085FB6E /* ProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01282EE6B0000085FB6E /* ProfileService.swift */; };
+		9CEB01292EE6C0000085FB6E /* Notification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB012A2EE6C0000085FB6E /* Notification.swift */; };
+		9CEB012B2EE6C0000085FB6E /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB012C2EE6C0000085FB6E /* NotificationService.swift */; };
+		9CEB012D2EE6D0000085FB6E /* SubsetService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB012E2EE6D0000085FB6E /* SubsetService.swift */; };
+		9CEB012F2EE6D0000085FB6E /* SubsetsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01302EE6D0000085FB6E /* SubsetsListView.swift */; };
+		9CEB01312EE6D0000085FB6E /* CreateSubsetSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01322EE6D0000085FB6E /* CreateSubsetSheet.swift */; };
+		9CEB01332EE6D0000085FB6E /* SubsetDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01342EE6D0000085FB6E /* SubsetDetailSheet.swift */; };
+		9CEB01352EE5E2620085FB6E /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB012C2EE5E2620085FB6E /* MockData.swift */; };
+		9CEB01362EE5E2620085FB6E /* LabAlbumsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01322EE5E2620085FB6E /* LabAlbumsListView.swift */; };
+		9CEB01362EE7A0000085FB6E /* InteractivePhotoCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01372EE7A0000085FB6E /* InteractivePhotoCell.swift */; };
+		9CEB01382EE5E2620085FB6E /* LabHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01332EE5E2620085FB6E /* LabHomeView.swift */; };
+		9CEB01382EE8A0000085FB6E /* CapsuleColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01392EE8A0000085FB6E /* CapsuleColors.swift */; };
+		9CEB01392EE5E2620085FB6E /* CapsuleSegmentedControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01292EE5E2620085FB6E /* CapsuleSegmentedControl.swift */; };
+		9CEB013A2EE5E2620085FB6E /* MemoryTileGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB012A2EE5E2620085FB6E /* MemoryTileGrid.swift */; };
+		9CEB013A2EE8A0000085FB6E /* CapsuleAnimations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB013B2EE8A0000085FB6E /* CapsuleAnimations.swift */; };
+		9CEB013B2EE5E2620085FB6E /* CapsuleAlbumCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01272EE5E2620085FB6E /* CapsuleAlbumCard.swift */; };
+		9CEB013C2EE5E2620085FB6E /* CapsuleHeroHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01282EE5E2620085FB6E /* CapsuleHeroHeader.swift */; };
+		9CEB013C2EE8A0000085FB6E /* AlbumHeroHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB013D2EE8A0000085FB6E /* AlbumHeroHeader.swift */; };
+		9CEB013D2EE5E2620085FB6E /* LabAlbumDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01302EE5E2620085FB6E /* LabAlbumDetailView.swift */; };
+		9CEB013E2EE5E2620085FB6E /* LabAlbumSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01312EE5E2620085FB6E /* LabAlbumSettingsView.swift */; };
+		9CEB013E2EE8A0000085FB6E /* AlbumCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB013F2EE8A0000085FB6E /* AlbumCardView.swift */; };
+		9CEB01402EE8B0000085FB6E /* TimeGroupedPhotosView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01412EE8B0000085FB6E /* TimeGroupedPhotosView.swift */; };
+		9CEB01422EE8C0000085FB6E /* CapsuleFlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01432EE8C0000085FB6E /* CapsuleFlowLayout.swift */; };
+		9CEB01452EE5E5B80085FB6E /* LabSignatureDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01442EE5E5B80085FB6E /* LabSignatureDesign.swift */; };
+		9CEB01492EE5E5E70085FB6E /* ArchitecturalHeroHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01462EE5E5E70085FB6E /* ArchitecturalHeroHeader.swift */; };
+		9CEB014A2EE5E5E70085FB6E /* SignatureAlbumCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01482EE5E5E70085FB6E /* SignatureAlbumCard.swift */; };
+		9CEB014B2EE5E5E70085FB6E /* EditorialSectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEB01472EE5E5E70085FB6E /* EditorialSectionHeader.swift */; };
 		E1000001299B000000000001 /* CapsuleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000002299B000000000001 /* CapsuleApp.swift */; };
 		E1000003299B000000000001 /* Album.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000004299B000000000001 /* Album.swift */; };
 		E1000005299B000000000001 /* AlbumMember.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000006299B000000000001 /* AlbumMember.swift */; };
@@ -36,7 +68,38 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		E1000030299B000000000001 /* Capsule.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Capsule.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9CEB01512EE9A0000085FB6E /* Activity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Activity.swift; sourceTree = "<group>"; };
+		9CEB01532EE9A0000085FB6E /* ActivityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityService.swift; sourceTree = "<group>"; };
+		9CEB01212EE5A09C0085FB6E /* SocialService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialService.swift; sourceTree = "<group>"; };
+		9CEB01232EE5A0C80085FB6E /* CommentsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentsSheet.swift; sourceTree = "<group>"; };
+		9CEB01252EE5A0EA0085FB6E /* Comment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Comment.swift; sourceTree = "<group>"; };
+		9CEB01272EE5E2620085FB6E /* CapsuleAlbumCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapsuleAlbumCard.swift; sourceTree = "<group>"; };
+		9CEB01282EE5E2620085FB6E /* CapsuleHeroHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapsuleHeroHeader.swift; sourceTree = "<group>"; };
+		9CEB01282EE6B0000085FB6E /* ProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileService.swift; sourceTree = "<group>"; };
+		9CEB01292EE5E2620085FB6E /* CapsuleSegmentedControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapsuleSegmentedControl.swift; sourceTree = "<group>"; };
+		9CEB012A2EE5E2620085FB6E /* MemoryTileGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryTileGrid.swift; sourceTree = "<group>"; };
+		9CEB012A2EE6C0000085FB6E /* Notification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notification.swift; sourceTree = "<group>"; };
+		9CEB012C2EE5E2620085FB6E /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockData.swift; sourceTree = "<group>"; };
+		9CEB012C2EE6C0000085FB6E /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		9CEB012E2EE6D0000085FB6E /* SubsetService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubsetService.swift; sourceTree = "<group>"; };
+		9CEB01302EE5E2620085FB6E /* LabAlbumDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabAlbumDetailView.swift; sourceTree = "<group>"; };
+		9CEB01302EE6D0000085FB6E /* SubsetsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubsetsListView.swift; sourceTree = "<group>"; };
+		9CEB01312EE5E2620085FB6E /* LabAlbumSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabAlbumSettingsView.swift; sourceTree = "<group>"; };
+		9CEB01322EE5E2620085FB6E /* LabAlbumsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabAlbumsListView.swift; sourceTree = "<group>"; };
+		9CEB01322EE6D0000085FB6E /* CreateSubsetSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateSubsetSheet.swift; sourceTree = "<group>"; };
+		9CEB01332EE5E2620085FB6E /* LabHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabHomeView.swift; sourceTree = "<group>"; };
+		9CEB01342EE6D0000085FB6E /* SubsetDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubsetDetailSheet.swift; sourceTree = "<group>"; };
+		9CEB01372EE7A0000085FB6E /* InteractivePhotoCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractivePhotoCell.swift; sourceTree = "<group>"; };
+		9CEB01392EE8A0000085FB6E /* CapsuleColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapsuleColors.swift; sourceTree = "<group>"; };
+		9CEB013B2EE8A0000085FB6E /* CapsuleAnimations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapsuleAnimations.swift; sourceTree = "<group>"; };
+		9CEB013D2EE8A0000085FB6E /* AlbumHeroHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumHeroHeader.swift; sourceTree = "<group>"; };
+		9CEB013F2EE8A0000085FB6E /* AlbumCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumCardView.swift; sourceTree = "<group>"; };
+		9CEB01412EE8B0000085FB6E /* TimeGroupedPhotosView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeGroupedPhotosView.swift; sourceTree = "<group>"; };
+		9CEB01432EE8C0000085FB6E /* CapsuleFlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapsuleFlowLayout.swift; sourceTree = "<group>"; };
+		9CEB01442EE5E5B80085FB6E /* LabSignatureDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabSignatureDesign.swift; sourceTree = "<group>"; };
+		9CEB01462EE5E5E70085FB6E /* ArchitecturalHeroHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchitecturalHeroHeader.swift; sourceTree = "<group>"; };
+		9CEB01472EE5E5E70085FB6E /* EditorialSectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorialSectionHeader.swift; sourceTree = "<group>"; };
+		9CEB01482EE5E5E70085FB6E /* SignatureAlbumCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignatureAlbumCard.swift; sourceTree = "<group>"; };
 		E1000002299B000000000001 /* CapsuleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapsuleApp.swift; sourceTree = "<group>"; };
 		E1000004299B000000000001 /* Album.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Album.swift; sourceTree = "<group>"; };
 		E1000006299B000000000001 /* AlbumMember.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumMember.swift; sourceTree = "<group>"; };
@@ -57,10 +120,11 @@
 		E1000024299B000000000001 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		E1000026299B000000000001 /* PhotoDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoDetailView.swift; sourceTree = "<group>"; };
 		E1000028299B000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		E1000031299B000000000001 /* Capsule.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Capsule.entitlements; sourceTree = "<group>"; };
-		E1000032299B000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E100002D299B000000000001 /* InviteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteService.swift; sourceTree = "<group>"; };
 		E100002F299B000000000001 /* MemberService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberService.swift; sourceTree = "<group>"; };
+		E1000030299B000000000001 /* Capsule.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Capsule.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1000031299B000000000001 /* Capsule.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Capsule.entitlements; sourceTree = "<group>"; };
+		E1000032299B000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E1000034299B000000000001 /* MembersListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembersListView.swift; sourceTree = "<group>"; };
 		E1000036299B000000000001 /* InviteSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteSheet.swift; sourceTree = "<group>"; };
 		E1000038299B000000000001 /* CoverPhotoPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverPhotoPickerSheet.swift; sourceTree = "<group>"; };
@@ -78,6 +142,60 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		9CEB012B2EE5E2620085FB6E /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				9CEB01272EE5E2620085FB6E /* CapsuleAlbumCard.swift */,
+				9CEB01282EE5E2620085FB6E /* CapsuleHeroHeader.swift */,
+				9CEB01292EE5E2620085FB6E /* CapsuleSegmentedControl.swift */,
+				9CEB012A2EE5E2620085FB6E /* MemoryTileGrid.swift */,
+				9CEB01462EE5E5E70085FB6E /* ArchitecturalHeroHeader.swift */,
+				9CEB01472EE5E5E70085FB6E /* EditorialSectionHeader.swift */,
+				9CEB01482EE5E5E70085FB6E /* SignatureAlbumCard.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		9CEB012D2EE5E2620085FB6E /* Mock */ = {
+			isa = PBXGroup;
+			children = (
+				9CEB012C2EE5E2620085FB6E /* MockData.swift */,
+			);
+			path = Mock;
+			sourceTree = "<group>";
+		};
+		9CEB012F2EE5E2620085FB6E /* Styles */ = {
+			isa = PBXGroup;
+			children = (
+				9CEB01442EE5E5B80085FB6E /* LabSignatureDesign.swift */,
+			);
+			path = Styles;
+			sourceTree = "<group>";
+		};
+		9CEB01342EE5E2620085FB6E /* Lab */ = {
+			isa = PBXGroup;
+			children = (
+				9CEB012B2EE5E2620085FB6E /* Components */,
+				9CEB012D2EE5E2620085FB6E /* Mock */,
+				9CEB012F2EE5E2620085FB6E /* Styles */,
+				9CEB01312EE5E2620085FB6E /* LabAlbumSettingsView.swift */,
+				9CEB01322EE5E2620085FB6E /* LabAlbumsListView.swift */,
+				9CEB01332EE5E2620085FB6E /* LabHomeView.swift */,
+				9CEB01302EE5E2620085FB6E /* LabAlbumDetailView.swift */,
+			);
+			path = Lab;
+			sourceTree = "<group>";
+		};
+		9CEB01352EE6D0000085FB6E /* Subsets */ = {
+			isa = PBXGroup;
+			children = (
+				9CEB01302EE6D0000085FB6E /* SubsetsListView.swift */,
+				9CEB01322EE6D0000085FB6E /* CreateSubsetSheet.swift */,
+				9CEB01342EE6D0000085FB6E /* SubsetDetailSheet.swift */,
+			);
+			path = Subsets;
+			sourceTree = "<group>";
+		};
 		E1000040299B000000000001 = {
 			isa = PBXGroup;
 			children = (
@@ -108,6 +226,7 @@
 		E1000043299B000000000001 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				9CEB01342EE5E2620085FB6E /* Lab */,
 				E1000044299B000000000001 /* App */,
 				E1000045299B000000000001 /* Models */,
 				E1000046299B000000000001 /* Services */,
@@ -128,6 +247,9 @@
 		E1000045299B000000000001 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				9CEB01512EE9A0000085FB6E /* Activity.swift */,
+				9CEB012A2EE6C0000085FB6E /* Notification.swift */,
+				9CEB01252EE5A0EA0085FB6E /* Comment.swift */,
 				E1000004299B000000000001 /* Album.swift */,
 				E1000006299B000000000001 /* AlbumMember.swift */,
 				E1000008299B000000000001 /* Photo.swift */,
@@ -140,6 +262,11 @@
 		E1000046299B000000000001 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				9CEB01532EE9A0000085FB6E /* ActivityService.swift */,
+				9CEB012C2EE6C0000085FB6E /* NotificationService.swift */,
+				9CEB01282EE6B0000085FB6E /* ProfileService.swift */,
+				9CEB01212EE5A09C0085FB6E /* SocialService.swift */,
+				9CEB012E2EE6D0000085FB6E /* SubsetService.swift */,
 				E100000E299B000000000001 /* AlbumService.swift */,
 				E1000010299B000000000001 /* AuthManager.swift */,
 				E1000012299B000000000001 /* CloudStorageService.swift */,
@@ -159,22 +286,16 @@
 				E100004A299B000000000001 /* Auth */,
 				E100004C299B000000000001 /* Members */,
 				E100004B299B000000000001 /* Photos */,
+				9CEB01352EE6D0000085FB6E /* Subsets */,
 			);
 			path = Views;
-			sourceTree = "<group>";
-		};
-		E100004C299B000000000001 /* Members */ = {
-			isa = PBXGroup;
-			children = (
-				E1000034299B000000000001 /* MembersListView.swift */,
-				E1000036299B000000000001 /* InviteSheet.swift */,
-			);
-			path = Members;
 			sourceTree = "<group>";
 		};
 		E1000048299B000000000001 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				9CEB01392EE8A0000085FB6E /* CapsuleColors.swift */,
+				9CEB013B2EE8A0000085FB6E /* CapsuleAnimations.swift */,
 				E100001A299B000000000001 /* Config.swift */,
 			);
 			path = Utilities;
@@ -183,11 +304,15 @@
 		E1000049299B000000000001 /* Albums */ = {
 			isa = PBXGroup;
 			children = (
+				9CEB013F2EE8A0000085FB6E /* AlbumCardView.swift */,
 				E100001C299B000000000001 /* AlbumDetailView.swift */,
+				9CEB013D2EE8A0000085FB6E /* AlbumHeroHeader.swift */,
 				E100001E299B000000000001 /* AlbumSettingsView.swift */,
 				E1000020299B000000000001 /* AlbumsListView.swift */,
+				9CEB01432EE8C0000085FB6E /* CapsuleFlowLayout.swift */,
 				E1000038299B000000000001 /* CoverPhotoPickerSheet.swift */,
 				E1000022299B000000000001 /* CreateAlbumSheet.swift */,
+				9CEB01412EE8B0000085FB6E /* TimeGroupedPhotosView.swift */,
 			);
 			path = Albums;
 			sourceTree = "<group>";
@@ -203,9 +328,20 @@
 		E100004B299B000000000001 /* Photos */ = {
 			isa = PBXGroup;
 			children = (
+				9CEB01232EE5A0C80085FB6E /* CommentsSheet.swift */,
+				9CEB01372EE7A0000085FB6E /* InteractivePhotoCell.swift */,
 				E1000026299B000000000001 /* PhotoDetailView.swift */,
 			);
 			path = Photos;
+			sourceTree = "<group>";
+		};
+		E100004C299B000000000001 /* Members */ = {
+			isa = PBXGroup;
+			children = (
+				E1000034299B000000000001 /* MembersListView.swift */,
+				E1000036299B000000000001 /* InviteSheet.swift */,
+			);
+			path = Members;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -239,7 +375,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2610;
 				TargetAttributes = {
 					E1000050299B000000000001 = {
 						CreatedOnToolsVersion = 15.0;
@@ -283,10 +419,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9CEB01502EE9A0000085FB6E /* Activity.swift in Sources */,
+				9CEB01522EE9A0000085FB6E /* ActivityService.swift in Sources */,
 				E1000001299B000000000001 /* CapsuleApp.swift in Sources */,
 				E1000003299B000000000001 /* Album.swift in Sources */,
 				E1000005299B000000000001 /* AlbumMember.swift in Sources */,
 				E1000007299B000000000001 /* Photo.swift in Sources */,
+				9CEB01492EE5E5E70085FB6E /* ArchitecturalHeroHeader.swift in Sources */,
+				9CEB014A2EE5E5E70085FB6E /* SignatureAlbumCard.swift in Sources */,
+				9CEB014B2EE5E5E70085FB6E /* EditorialSectionHeader.swift in Sources */,
 				E1000009299B000000000001 /* Profile.swift in Sources */,
 				E100000B299B000000000001 /* Subset.swift in Sources */,
 				E100000D299B000000000001 /* AlbumService.swift in Sources */,
@@ -297,16 +438,43 @@
 				E1000017299B000000000001 /* ThumbnailService.swift in Sources */,
 				E1000019299B000000000001 /* Config.swift in Sources */,
 				E100001B299B000000000001 /* AlbumDetailView.swift in Sources */,
+				9CEB01352EE5E2620085FB6E /* MockData.swift in Sources */,
+				9CEB01362EE5E2620085FB6E /* LabAlbumsListView.swift in Sources */,
+				9CEB01382EE5E2620085FB6E /* LabHomeView.swift in Sources */,
+				9CEB01392EE5E2620085FB6E /* CapsuleSegmentedControl.swift in Sources */,
+				9CEB013A2EE5E2620085FB6E /* MemoryTileGrid.swift in Sources */,
+				9CEB013B2EE5E2620085FB6E /* CapsuleAlbumCard.swift in Sources */,
+				9CEB013C2EE5E2620085FB6E /* CapsuleHeroHeader.swift in Sources */,
+				9CEB013D2EE5E2620085FB6E /* LabAlbumDetailView.swift in Sources */,
+				9CEB013E2EE5E2620085FB6E /* LabAlbumSettingsView.swift in Sources */,
 				E100001D299B000000000001 /* AlbumSettingsView.swift in Sources */,
 				E100001F299B000000000001 /* AlbumsListView.swift in Sources */,
 				E1000021299B000000000001 /* CreateAlbumSheet.swift in Sources */,
 				E1000023299B000000000001 /* SignInView.swift in Sources */,
 				E1000025299B000000000001 /* PhotoDetailView.swift in Sources */,
+				9CEB01362EE7A0000085FB6E /* InteractivePhotoCell.swift in Sources */,
+				9CEB01242EE5A0C80085FB6E /* CommentsSheet.swift in Sources */,
 				E100002C299B000000000001 /* InviteService.swift in Sources */,
 				E100002E299B000000000001 /* MemberService.swift in Sources */,
+				9CEB01272EE6B0000085FB6E /* ProfileService.swift in Sources */,
+				9CEB01222EE5A09C0085FB6E /* SocialService.swift in Sources */,
 				E1000033299B000000000001 /* MembersListView.swift in Sources */,
 				E1000035299B000000000001 /* InviteSheet.swift in Sources */,
+				9CEB01262EE5A0EA0085FB6E /* Comment.swift in Sources */,
+				9CEB01292EE6C0000085FB6E /* Notification.swift in Sources */,
+				9CEB012B2EE6C0000085FB6E /* NotificationService.swift in Sources */,
+				9CEB012D2EE6D0000085FB6E /* SubsetService.swift in Sources */,
+				9CEB012F2EE6D0000085FB6E /* SubsetsListView.swift in Sources */,
+				9CEB01312EE6D0000085FB6E /* CreateSubsetSheet.swift in Sources */,
+				9CEB01332EE6D0000085FB6E /* SubsetDetailSheet.swift in Sources */,
 				E1000037299B000000000001 /* CoverPhotoPickerSheet.swift in Sources */,
+				9CEB01382EE8A0000085FB6E /* CapsuleColors.swift in Sources */,
+				9CEB01452EE5E5B80085FB6E /* LabSignatureDesign.swift in Sources */,
+				9CEB013A2EE8A0000085FB6E /* CapsuleAnimations.swift in Sources */,
+				9CEB013C2EE8A0000085FB6E /* AlbumHeroHeader.swift in Sources */,
+				9CEB013E2EE8A0000085FB6E /* AlbumCardView.swift in Sources */,
+				9CEB01402EE8B0000085FB6E /* TimeGroupedPhotosView.swift in Sources */,
+				9CEB01422EE8C0000085FB6E /* CapsuleFlowLayout.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -348,6 +516,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 3RP42MC533;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -371,6 +540,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -411,6 +581,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 3RP42MC533;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -427,6 +598,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -440,7 +612,6 @@
 				CODE_SIGN_ENTITLEMENTS = Capsule/Capsule.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Capsule/Info.plist;
@@ -474,7 +645,6 @@
 				CODE_SIGN_ENTITLEMENTS = Capsule/Capsule.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Capsule/Info.plist;

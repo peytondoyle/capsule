@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 import AuthenticationServices
 import Supabase
 
@@ -40,14 +41,17 @@ final class AuthManager: NSObject, ObservableObject {
             // Listen for auth state changes
             for await (event, session) in SupabaseService.shared.auth.authStateChanges {
                 guard !Task.isCancelled else { break }
+                print("[AuthManager] Auth state changed: \(event)")
 
                 switch event {
                 case .signedIn:
+                    print("[AuthManager] User signed in: \(session?.user.id.uuidString ?? "nil")")
                     self.currentUser = session?.user
                     self.isAuthenticated = true
                     if let userId = session?.user.id {
                         await loadProfile(userId: userId)
                     }
+                    print("[AuthManager] isAuthenticated = \(self.isAuthenticated)")
 
                 case .signedOut:
                     self.currentUser = nil
@@ -113,17 +117,20 @@ final class AuthManager: NSObject, ObservableObject {
     /// Initiates Sign in with Apple flow
     func signInWithApple() {
         errorMessage = nil
+        print("[AuthManager] Starting Sign in with Apple...")
 
         let request = ASAuthorizationAppleIDProvider().createRequest()
         request.requestedScopes = [.email, .fullName]
 
         let controller = ASAuthorizationController(authorizationRequests: [request])
         controller.delegate = self
+        controller.presentationContextProvider = self
         controller.performRequests()
+        print("[AuthManager] ASAuthorizationController requests started")
     }
 
     /// Handle the Apple ID credential and sign in with Supabase
-    private func handleAppleSignIn(credential: ASAuthorizationAppleIDCredential) async {
+    func handleAppleCredential(_ credential: ASAuthorizationAppleIDCredential) async {
         guard let identityToken = credential.identityToken,
               let tokenString = String(data: identityToken, encoding: .utf8) else {
             errorMessage = "Failed to get identity token"
@@ -131,12 +138,15 @@ final class AuthManager: NSObject, ObservableObject {
         }
 
         do {
-            try await SupabaseService.shared.auth.signInWithIdToken(
+            print("[AuthManager] Signing in with Apple ID token...")
+            let session = try await SupabaseService.shared.auth.signInWithIdToken(
                 credentials: .init(
                     provider: .apple,
                     idToken: tokenString
                 )
             )
+            print("[AuthManager] Sign in successful! User ID: \(session.user.id)")
+            print("[AuthManager] User email: \(session.user.email ?? "none")")
         } catch {
             errorMessage = error.localizedDescription
             print("[AuthManager] Supabase sign in failed: \(error)")
@@ -192,6 +202,20 @@ final class AuthManager: NSObject, ObservableObject {
     }
 }
 
+// MARK: - ASAuthorizationControllerPresentationContextProviding
+
+extension AuthManager: ASAuthorizationControllerPresentationContextProviding {
+    @MainActor
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        // Get the first window scene's key window
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = scene.windows.first else {
+            fatalError("No window found")
+        }
+        return window
+    }
+}
+
 // MARK: - ASAuthorizationControllerDelegate
 
 extension AuthManager: ASAuthorizationControllerDelegate {
@@ -199,12 +223,15 @@ extension AuthManager: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
+        print("[AuthManager] Apple authorization completed")
         guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            print("[AuthManager] Failed to get Apple credential")
             return
         }
+        print("[AuthManager] Got Apple credential, user: \(credential.user)")
 
         Task { @MainActor in
-            await handleAppleSignIn(credential: credential)
+            await handleAppleCredential(credential)
         }
     }
 

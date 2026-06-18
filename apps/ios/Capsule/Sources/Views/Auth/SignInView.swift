@@ -29,8 +29,22 @@ struct SignInView: View {
             VStack(spacing: 16) {
                 SignInWithAppleButton(.signIn) { request in
                     request.requestedScopes = [.email, .fullName]
-                } onCompletion: { _ in
-                    // Handled by AuthManager
+                } onCompletion: { result in
+                    switch result {
+                    case .success(let authorization):
+                        if let credential = authorization.credential as? ASAuthorizationAppleIDCredential {
+                            Task {
+                                await authManager.handleAppleCredential(credential)
+                            }
+                        }
+                    case .failure(let error):
+                        if let authError = error as? ASAuthorizationError,
+                           authError.code == .canceled {
+                            // User canceled - ignore
+                        } else {
+                            authManager.errorMessage = error.localizedDescription
+                        }
+                    }
                 }
                 .signInWithAppleButtonStyle(.black)
                 .frame(height: 50)

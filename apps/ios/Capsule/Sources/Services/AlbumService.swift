@@ -7,6 +7,8 @@ final class AlbumService: ObservableObject {
 
     @Published var albums: [Album] = []
     @Published var coverPhotoUrls: [UUID: URL] = [:]
+    @Published var photoCounts: [UUID: Int] = [:]
+    @Published var memberCounts: [UUID: Int] = [:]
     @Published var isLoading = false
     @Published var error: Error?
 
@@ -56,12 +58,48 @@ final class AlbumService: ObservableObject {
                     coverPhotoUrls[albumWithCover.id] = url
                 }
             }
+
+            // Fetch photo counts and member counts for each album
+            await fetchAlbumStats(albumIds: albumIds)
+
         } catch {
             self.error = error
             print("[AlbumService] Failed to fetch albums: \(error)")
         }
 
         isLoading = false
+    }
+
+    /// Fetch photo and member counts for albums
+    private func fetchAlbumStats(albumIds: [String]) async {
+        // Fetch photo counts
+        for albumIdString in albumIds {
+            guard let albumId = UUID(uuidString: albumIdString) else { continue }
+
+            do {
+                // Photo count
+                let photos: [Photo] = try await SupabaseService.shared
+                    .from("photos")
+                    .select("id")
+                    .eq("album_id", value: albumIdString)
+                    .execute()
+                    .value
+                photoCounts[albumId] = photos.count
+
+                // Member count
+                let members: [AlbumMember] = try await SupabaseService.shared
+                    .from("album_members")
+                    .select("user_id")
+                    .eq("album_id", value: albumIdString)
+                    .execute()
+                    .value
+                memberCounts[albumId] = members.count
+            } catch {
+                print("[AlbumService] Failed to fetch stats for album \(albumIdString): \(error)")
+                photoCounts[albumId] = 0
+                memberCounts[albumId] = 1
+            }
+        }
     }
 
     /// Fetch a single album by ID
