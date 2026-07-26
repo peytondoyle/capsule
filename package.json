@@ -1,21 +1,34 @@
 {
   "name": "capsule",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Cross-platform photo sharing with decentralized storage",
-  "workspaces": [
-    "apps/web"
-  ],
+  "description": "A personal archive of the objects people gave you.",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "dev": "npm run dev --workspace=apps/web",
-    "build": "npm run build --workspace=apps/web",
-    "lint": "npm run lint --workspace=apps/web",
-    "db:migrate": "supabase db push",
-    "db:types": "supabase gen types typescript --project-id kjdoiozqefbjkbsimvbs > apps/web/src/types/database.ts",
-    "db:reset": "supabase db reset",
-    "ios": "open apps/ios/Capsule.xcodeproj"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit"
+  },
+  "overrides": {
+    "sharp": "^0.35.3"
+  },
+  "dependencies": {
+    "next": "16.2.12",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "supabase": "^1.200.0"
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.2.12",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~5.9.3"
   }
 }

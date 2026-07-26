@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+
+/* Phase 0 scaffold: only the two things the whole design rests on — the
+   prose/metadata font split and the shared easing. The three surface
+   palettes (ledger / board / cabinet) land in phase 3. */
+@theme {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue',
+    system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+
+  --ease-capsule: cubic-bezier(0.2, 0.85, 0.25, 1);
+  --dur-capsule: 300ms;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+/* Every date, count, id, dimension, field label and percentage in this app is
+   mono, letter-spaced and tabular. Prose is warm, data is archival. */
+.mn {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

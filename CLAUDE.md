@@ -1,35 +1,100 @@
 # capsule
-Photo sharing platform — Next.js monorepo (Turborepo), Supabase. Also has an iOS app.
 
-> **PAUSED — backend is gone (as of 2026-07-25).** Both web and iOS point at Supabase
-> project `kjdoiozqefbjkbsimvbs` (peyton-prod), which was deleted in the 2026-06-28
-> incident. That host now returns NXDOMAIN, so the app builds and runs but renders
-> empty — the mock-data fallback in `apps/web/src/app/albums/page.tsx:28` never fires
-> because `NEXT_PUBLIC_SUPABASE_URL` is still populated with the dead URL.
-> The Vercel project was also deleted; `apps/web/.vercel/project.json` is stale.
->
-> To revive: create a fresh Supabase project, replay the 6 migrations in
-> `supabase/migrations/`, then update `apps/web/.env.local`, `supabase/config.toml`,
-> the `db:types --project-id` flag in `package.json`, and
-> `apps/ios/Capsule/Sources/Utilities/Config.swift:6-8`.
-> While you're there: move the anon key out of `Config.swift` — it's committed in plaintext.
+**A personal archive of the objects people gave you.** Not a photo app. Each record is a
+singular *object* — a boarding pass, a pressed fern, an enamel pin, a brass owl — that was
+given to you by a *person*, at a *place*, on an *occasion*, and carries *a story*. You
+either still physically have it or you don't.
 
-> Next.js has breaking changes. Check `node_modules/next/dist/docs/` before assuming APIs match training data.
+Full spec, data model, and phase plan: **[docs/CAPSULE-V2-PLAN.md](docs/CAPSULE-V2-PLAN.md)**.
+Read it before touching anything structural.
+
+> **v1 was deleted, not migrated.** v1 was photo sharing (albums → members → photos,
+> invites, Supabase RLS) against Supabase project `kjdoiozqefbjkbsimvbs`, which no longer
+> exists. The SwiftUI iOS app is retired — PWA only. All of it is recoverable from git
+> history at `4deef1e`; v1 planning docs are in `docs/archive/v1/`. Nothing in v1 is a
+> reference for v2.
+
+## Status
+
+Phase 0 complete (scaffold). Phase 1 next: Vercel project, Neon, Blob, Clerk.
 
 ## Stack
-- Turborepo monorepo, apps/web (Next.js), apps/ios (Xcode)
-- Supabase (database + storage)
-- TypeScript
+
+- **Next.js 16** App Router (Turbopack), React 19, TypeScript, Tailwind v4 (CSS-first)
+- **Clerk** auth — `proxy.ts` at root (Next 16 renamed `middleware.ts` → `proxy.ts`)
+- **Neon Postgres** + Drizzle ORM (via Vercel Marketplace)
+- **Vercel Blob** for originals + derivatives
+- **PWA** — installable, offline capture, share target
+- Single app at the repo root. **Not a monorepo.** No workspaces, no Turborepo.
+  (v1's CLAUDE.md claimed Turborepo; there was never a `turbo.json`.)
 
 ## Verify
-`npm run build` — runs `build --workspace=apps/web`. Run after every edit.
 
-## Danger Zones
-- **Supabase schema / migrations**: `npm run db:migrate` affects prod — confirm before running
-- **DB types**: regenerate with `npm run db:types` after schema changes
+Run all three after every edit. Never report work as done without showing this output:
+
+```bash
+npm run build && npm run typecheck && npm run lint
+```
+
+`npm run dev` serves on :3000 (`.claude/launch.json` has the preview config).
+
+## Non-negotiable design rules
+
+From the design source (Claude Design project `665e9737-ca19-4932-8725-f907669cb6fb`).
+Violating these makes the app look wrong in a way no amount of polish recovers.
+
+- **Prose is warm, data is archival.** Every date, count, id, dimension, field label, and
+  percentage is mono, uppercase, letter-spaced (.06–.24em), `tabular-nums` — use `.mn`.
+  Every title, story, and human sentence is sans with tight tracking.
+- **Hairline rules, never boxes.** 1px at 8–14% ink. No bordered cards.
+- **Every object is a die-cut cutout with a white sticker edge and a real shadow** — never a
+  rectangle in a card.
+- **Shadows use `filter: drop-shadow`, not `box-shadow`.** Only `filter` traces the
+  `clip-path` silhouette instead of a bounding box. Two layers, `--lift` for the near one.
+- **Rotation is persisted, never random at render.** `Math.random()` in a component
+  reshuffles the whole archive on every navigation.
+- Ledger / Board / Cabinet are three *surfaces*, not light/dark mode. They're selected by
+  `data-surface` on `<main>`; each redefines the palette variables.
+
+## Data access — this replaces RLS
+
+Supabase enforced ownership in the database. **Neon does not.** A single query missing its
+owner filter is a cross-tenant leak.
+
+- All DB access lives in `src/server/**`, which starts with `import 'server-only'`.
+- Every data function takes `ownerId` as its **first parameter**. No exceptions.
+- Never import `drizzle-orm` or `@neondatabase/serverless` outside `src/server/`.
+- `auth.protect()` guards the resource (page / Server Action / Route Handler), not the proxy.
+
+## Danger zones
+
+- **Drizzle migrations** — `drizzle-kit push` against a real branch mutates data. Confirm first.
+- **Blob deletes** — `del()` is permanent. Originals are the only copy of a user's memory.
+- `drizzle-kit` and `tsx` do **not** read `.env.local`. Use
+  `npx dotenv -e .env.local -- npx drizzle-kit push`.
+
+## Pinned versions — do not "upgrade" these without checking
+
+| Pin | Why |
+|---|---|
+| `typescript ~5.9.3` | `typescript-eslint@8` (bundled by `eslint-config-next@16`) peers `typescript >=4.8.4 <6.1.0`. TS 7 is `latest` but breaks `npm run lint`. |
+| `eslint ^9.39.5` | eslint 10 crashes `eslint-plugin-react` inside `eslint-config-next@16` (`getReactVersionFromContext`). Verified, not assumed. |
+| `overrides.sharp ^0.35.3` | Next pins `sharp ^0.34.5`, whose libvips 8.17 carries CVE-2026-33327/33328/35590/35591. The override lands libvips 8.18.3. Phase 6 uses sharp directly. |
+
+**Accepted `npm audit` findings** (do not chase these):
+`postcss` — 8.5.23 is the newest published version and is still flagged; no patch exists,
+and npm's suggested "fix" is downgrading Next to 9.x. `brace-expansion` / `minimatch` —
+dev-only DoS reachable only through the eslint plugin chain's own glob patterns; the fix
+requires eslint 10, which is broken (above).
+
+## Next.js
+
+Next has breaking changes between majors. Check `node_modules/next/dist/docs/` before
+assuming an API matches training data. Notably in 16: `middleware.ts` → `proxy.ts`,
+Turbopack is the default builder, and `next lint` is gone (`npm run lint` calls eslint
+directly).
 
 ## Subagents
-Spawn an Explore subagent for any file search, grep, or broad codebase exploration — keeps the main context window clean.
 
-## Notes
-- iOS app: open `apps/ios/Capsule.xcodeproj` in Xcode
+Spawn an Explore subagent for any file search, grep, or broad codebase exploration — keeps
+the main context window clean.
