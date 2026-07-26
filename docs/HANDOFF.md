@@ -3,8 +3,12 @@
 Branch: **`v2-rebuild`** (not merged to `master`). Working tree committed.
 Plan: [CAPSULE-V2-PLAN.md](CAPSULE-V2-PLAN.md) · Rules: [../CLAUDE.md](../CLAUDE.md)
 
-**Phase 0 complete. Phase 1 complete except two steps only you can do** (both listed under
-*Needs you* below; neither blocks phase 2).
+**Phases 0–2 complete**, except two steps only you can do (both under *Needs you* below;
+neither blocks phase 3). Phase 3 is the design system.
+
+Before doing UI work, reseed onto your own account so the Ledger is not empty:
+sign in once, then `npm run db:seed -- --owner <your clerk user id>`. The archive currently
+sits on a synthetic `user_seed_dev` row, which no signed-in session will ever match.
 
 ---
 
@@ -168,28 +172,48 @@ chain's own globs.
 
 ---
 
-## Start of phase 2
+## Phase 2, as built
 
-Phase 2 is the full object graph — see the plan's schema section. Order that works:
+14 tables, 11 enums, `pg_trgm` with 4 GIN indexes. Schema in
+[src/server/db/schema.ts](../src/server/db/schema.ts); migrations `0000`–`0002`.
 
-1. Extend [src/server/db/schema.ts](../src/server/db/schema.ts) with `objects`, `object_faces`,
-   `people`, `object_people`, `places`, `occasions`, `tags`, `object_tags`, `collections`,
-   `collection_objects`, `intake_batches`, `intake_items`, `shares`, `activity`.
-2. `pg_trgm` + GIN indexes on `objects.title`, `objects.story`, `people.name`, `places.name`.
-   Confirmed available on this Neon instance, along with `pgcrypto`, `uuid-ossp`, and
-   `vector 0.8.0` if semantic search ever happens.
-3. Lot allocation needs a real transaction. `drizzle-orm/neon-http` **cannot** do multi-statement
-   transactions — use `drizzle-orm/neon-serverless` (ws `Pool`) against `DATABASE_URL_UNPOOLED`
-   for `UPDATE owner_counters SET next_lot = next_lot + 1 ... RETURNING`.
-4. `npm run db:generate` then `npm run db:migrate`. Both already wrap `dotenv -e .env.local`
-   because drizzle-kit does not read it.
-5. Seed ~40 objects / 6 people / 5 places. A seed script importing `src/server/**` needs
-   `NODE_OPTIONS='--conditions=react-server' npx tsx …`, otherwise `import 'server-only'` throws.
-6. Phase 2's gate: `drizzle-kit check` clean, seed runs, and lot numbers stay gapless under
-   concurrent inserts.
+- **Lot allocation** runs on `drizzle-orm/neon-serverless` over a ws `Pool`
+  ([src/server/db/pool.ts](../src/server/db/pool.ts)) because `neon-http` cannot hold a
+  transaction open. The counter bump and the object insert commit together, so a failed
+  insert cannot leave OBJ-0148 following OBJ-0146. Deleting an object *does* retire its lot
+  for good — lots are never reused, so lot numbers and object counts drift apart by design.
+- **`name_key`** is a generated `lower(name)` column on people/places/occasions/tags.
+  The dedup has to be case-insensitive because intake writes into these constantly, and a
+  generated column is the only form `onConflictDoUpdate` can target — an expression index
+  is not addressable from drizzle's typed API.
+- **Bug found and fixed**, which would have surfaced in phase 4: drizzle decides whether a
+  left-joined group is null from its **first selected column**. `listTimeline` led with
+  `cutout_url`, which is null for every object between intake and phase 6, so every face
+  read as missing. The join now leads with `id`. Watch for this in any new left join.
 
-Then delete `/api/health`'s temporary role in the proof story if you like — it is small and
-worth keeping.
+`npm run db:verify -- --owner <id>` runs 21 assertions over the seeded archive — gapless
+allocation under 12 concurrent inserts, counter rollback on failure, the unfiled predicate,
+timeline ordering and face join, search reaching giver and place, and cross-owner isolation.
+
+## Start of phase 3
+
+The design system, and the linchpin of the whole build. Order that works:
+
+1. Tokens: the three `data-surface` palettes from the plan's §1 into `globals.css`, plus the
+   self-hosted Inter / IBM Plex Mono fallbacks behind the SF stack.
+2. `<Cutout>` first and carefully — everything else is downstream of it. All 7 silhouette
+   presets × 4 cut styles × the two-layer `filter: drop-shadow`. `objects.silhouette`,
+   `cut_style` and `rotation_deg` are already populated by the seed, so it has real input.
+3. `<TiltSurface>` porting the doc's exact math: `perspective(800px)`,
+   `rotateY(dx*13deg) rotateX(-dy*13deg) translateZ(6px)`, reset on `pointerleave`, gated on
+   `prefers-reduced-motion`.
+4. Then the rest: `<FieldRows>`, `<MonoLabel>`, `<Chip>`, `<RetentionToggle>`, `<Inspector>`,
+   `<SheetPhone>`, `<ShelfRule>`, `<GrainSurface>`, `<StickerDeck>`, `<ScanFrame>`.
+5. Gate: a `/design` gallery rendering every primitive × every surface × every state, diffed
+   against the design doc.
+
+[src/app/sign-in/cutout.tsx](../src/app/sign-in/cutout.tsx) is the throwaway stand-in and
+should be deleted once the real primitive exists.
 
 ## Things to clean up when convenient
 
