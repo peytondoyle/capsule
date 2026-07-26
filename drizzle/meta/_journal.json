@@ -8,6 +8,20 @@
       "when": 1785074550810,
       "tag": "0000_cute_jigsaw",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785097899300,
+      "tag": "0001_enable_pg_trgm",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785098080028,
+      "tag": "0002_tired_moondragon",
+      "breakpoints": true
     }
   ]
 }

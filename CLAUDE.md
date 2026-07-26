@@ -16,7 +16,7 @@ Read it before touching anything structural.
 
 ## Status
 
-Phases 0–1 complete on branch `v2-rebuild`. Phase 2 next: the full object graph.
+Phases 0–2 complete on branch `v2-rebuild`. Phase 3 next: the design system.
 **Read [docs/HANDOFF.md](docs/HANDOFF.md) first** — it has the live resource ids, what is and
 isn't verified, the two dashboard-only steps still outstanding, and the platform gotchas found
 in phase 1.
@@ -40,6 +40,10 @@ npm run build && npm run typecheck && npm run lint
 ```
 
 `npm run dev` serves on :3000 (`.claude/launch.json` has the preview config).
+
+Database work: `db:generate` → `db:migrate` → `db:check`. `db:seed -- --owner <clerk id>`
+fills an archive with the design doc's own fixtures; `db:verify -- --owner <id>` runs the
+21 data-layer assertions. Both need the `react-server` condition, which their npm scripts set.
 
 ## Non-negotiable design rules
 
