@@ -1,0 +1,191 @@
+/**
+ * Ledger, Board and Cabinet are three *surfaces*, not light/dark mode. The view
+ * switcher sets `data-surface` on the shell; each surface redefines the same
+ * variable names, so every primitive downstream is written once.
+ *
+ * Values come from Capsule.dc.html. Do not "harmonise" them — the palettes are
+ * deliberately different temperatures: Ledger is paper, Board is a work
+ * surface under a window, Cabinet is a lit vitrine.
+ *
+ * WHY THE --color-* ALIASES ARE REPEATED IN EVERY BLOCK
+ * A custom property is substituted where it is *declared*, not where it is
+ * used. Putting `--color-bg: var(--bg)` in Tailwind's `@theme` declares it on
+ * :root, which freezes it to the Ledger value — every surface then renders on
+ * cream. Re-declaring the alias inside each block makes it compute against that
+ * block's own palette, which is what lets `bg-bg` / `text-ink` / `border-hair`
+ * follow the cascade.
+ */
+
+:root,
+[data-surface='ledger'] {
+  --bg: #fbf9f5;
+  --panel: #f6f3ed;
+  --ink: #2a251d;
+  --paper: #fff;
+
+  --accent: #a8552b; /* rust — unfiled, active meta, "Next" */
+  --ok: #5b8c5a;
+
+  --hair: rgb(42 37 29 / 0.09);
+  --hair-strong: rgb(42 37 29 / 0.14);
+
+  --mute-1: rgb(42 37 29 / 0.72);
+  --mute-2: rgb(42 37 29 / 0.42);
+  --mute-3: rgb(42 37 29 / 0.35);
+
+  /* placeholder hatch, used until a cutout has been generated */
+  --fill-a: #dfd8c9;
+  --fill-b: #eae4d8;
+  --fill-ink: #948a79;
+
+  --shadow-ink: 52 42 26;
+  --lift: 10px;
+  --grain: 0;
+
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
+  --color-accent: var(--accent);
+  --color-ok: var(--ok);
+  --color-hair: var(--hair);
+  --color-hair-strong: var(--hair-strong);
+  --color-mute-1: var(--mute-1);
+  --color-mute-2: var(--mute-2);
+  --color-mute-3: var(--mute-3);
+}
+
+[data-surface='board'] {
+  --bg: #e6dfd2;
+  --panel: #fbf8f1;
+  --ink: #2b2419;
+  --paper: #fff;
+
+  --accent: #b0741f;
+  --ok: #5b8c5a;
+
+  --hair: rgb(90 74 50 / 0.14);
+  --hair-strong: rgb(90 74 50 / 0.24);
+
+  --mute-1: #4a3f2c;
+  --mute-2: #6c5d43;
+  --mute-3: #8a7a5c;
+
+  --fill-a: #ddd5c4;
+  --fill-b: #e9e2d3;
+  --fill-ink: #8d8371;
+
+  --shadow-ink: 60 46 24;
+  --lift: 10px;
+  --grain: 1;
+
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
+  --color-accent: var(--accent);
+  --color-ok: var(--ok);
+  --color-hair: var(--hair);
+  --color-hair-strong: var(--hair-strong);
+  --color-mute-1: var(--mute-1);
+  --color-mute-2: var(--mute-2);
+  --color-mute-3: var(--mute-3);
+}
+
+[data-surface='cabinet'] {
+  --bg: #151418;
+  --panel: #1b1a1f;
+  --ink: #eceae4;
+  /* Sticker edges go warm off-white here, never pure white — pure white blows
+     out against #151418 and the objects stop reading as paper. */
+  --paper: #f4f0e6;
+
+  --accent: #c9a55f; /* gold — lot numbers, scan line, awaiting entry */
+  --ok: #7fae74;
+
+  --hair: rgb(255 255 255 / 0.07);
+  --hair-strong: rgb(255 255 255 / 0.12);
+
+  --mute-1: rgb(236 234 228 / 0.75);
+  --mute-2: rgb(236 234 228 / 0.4);
+  --mute-3: rgb(236 234 228 / 0.3);
+
+  --fill-a: #c9c1b0;
+  --fill-b: #d8d1c1;
+  --fill-ink: #7d7566;
+
+  --btn: #e8e3d6;
+  --btn-ink: #151418;
+
+  --shadow-ink: 0 0 0;
+  --lift: 10px;
+  --grain: 0;
+
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
+  --color-accent: var(--accent);
+  --color-ok: var(--ok);
+  --color-hair: var(--hair);
+  --color-hair-strong: var(--hair-strong);
+  --color-mute-1: var(--mute-1);
+  --color-mute-2: var(--mute-2);
+  --color-mute-3: var(--mute-3);
+}
+
+/* ------------------------------------------------------------------ *
+ * The two things every surface shares
+ * ------------------------------------------------------------------ */
+
+/**
+ * Prose is warm, data is archival. Anything that is a date, count, id,
+ * dimension, field label or percentage gets this; nothing else does.
+ */
+.mn {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/**
+ * Two-layer shadow on `filter`, never `box-shadow` — only `filter` follows the
+ * clip-path silhouette instead of the element's bounding box. The near layer
+ * uses --lift so shadow depth stays tunable per surface and per user.
+ */
+.cutout-shadow {
+  filter: drop-shadow(0 var(--lift) 14px rgb(var(--shadow-ink) / 0.17))
+    drop-shadow(0 1px 1.5px rgb(var(--shadow-ink) / 0.14));
+  transition: transform var(--dur-capsule) var(--ease-capsule);
+}
+
+.cutout-shadow[data-state='active'] {
+  filter: drop-shadow(0 16px 24px rgb(var(--shadow-ink) / 0.22))
+    drop-shadow(0 2px 3px rgb(var(--shadow-ink) / 0.16));
+  transform: scale(1.02);
+}
+
+.cutout-shadow[data-state='dragging'] {
+  filter: drop-shadow(0 26px 36px rgb(var(--shadow-ink) / 0.3))
+    drop-shadow(0 3px 5px rgb(var(--shadow-ink) / 0.2));
+  transition: none;
+}
+
+/* Not filed yet: the dashed edge borrowed from the "+ TAG" chip, so "pending"
+   reads the same everywhere — offline queue, intake, optimistic insert. */
+.cutout-shadow[data-state='pending'] {
+  filter: drop-shadow(0 4px 8px rgb(var(--shadow-ink) / 0.12));
+  opacity: 0.72;
+}
+
+/* The Cabinet lights its objects from above; on paper the same glow reads as a
+   rendering bug, so it is scoped rather than global. */
+[data-surface='cabinet'] .cutout-shadow {
+  filter: drop-shadow(0 var(--lift) 14px rgb(0 0 0 / 0.5))
+    drop-shadow(0 1px 2px rgb(0 0 0 / 0.35));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cutout-shadow {
+    transition: none;
+  }
+}

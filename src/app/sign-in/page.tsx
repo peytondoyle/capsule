@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSignIn, useSignUp } from '@clerk/nextjs'
 
-import { Cutout } from '@/app/sign-in/cutout'
+import { Cutout } from '@/design'
 
 type Step = 'identify' | 'code'
 type Mode = 'sign-in' | 'sign-up'
@@ -158,15 +158,22 @@ export default function SignInPage() {
   }
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-[#fbf9f5] px-6 py-16 text-[#2a251d]">
+    <main className="grid min-h-dvh place-items-center bg-bg px-6 py-16 text-ink">
       <div className="w-full max-w-[344px]">
         <div className="flex justify-center">
-          <Cutout />
+          <Cutout
+            width={132}
+            silhouette="polaroid"
+            cut="edge"
+            rotate={-3}
+            aspect={1.13}
+            label="nothing filed yet"
+          />
         </div>
 
         <div className="mt-9 text-center">
           <div className="mn text-[10.5px] font-semibold tracking-[0.22em]">CAPSULE</div>
-          <p className="mx-auto mt-3 max-w-[27ch] text-pretty text-[13px] leading-relaxed text-[#2a251d]/60">
+          <p className="mx-auto mt-3 max-w-[27ch] text-pretty text-[13px] leading-relaxed text-mute-1">
             {step === 'identify'
               ? 'An archive of the objects people gave you. No password — we send a code.'
               : mode === 'sign-up'
@@ -175,14 +182,14 @@ export default function SignInPage() {
           </p>
         </div>
 
-        <hr className="my-8 border-0 border-t border-[#2a251d]/12" />
+        <hr className="my-8 border-0 border-t border-hair-strong" />
 
         {step === 'identify' ? (
           <>
             <form onSubmit={submitEmail}>
               <label
                 htmlFor="email"
-                className="mn block text-[9px] tracking-[0.14em] text-[#2a251d]/40"
+                className="mn block text-[9px] tracking-[0.14em] text-mute-2"
               >
                 EMAIL
               </label>
@@ -196,11 +203,11 @@ export default function SignInPage() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@example.com"
-                className="mt-2 w-full border-0 border-b border-[#2a251d]/20 bg-transparent pb-2 text-[15px] outline-none placeholder:text-[#2a251d]/25 focus:border-[#2a251d]/60"
+                className="mt-2 w-full border-0 border-b border-hair-strong bg-transparent pb-2 text-[15px] outline-none placeholder:text-mute-3 focus:border-ink"
               />
 
               {error ? (
-                <p className="mn mt-3 text-[9.5px] leading-relaxed tracking-[0.06em] text-[#a8552b]">
+                <p className="mn mt-3 text-[9.5px] leading-relaxed tracking-[0.06em] text-accent">
                   {error.toUpperCase()}
                 </p>
               ) : null}
@@ -208,23 +215,23 @@ export default function SignInPage() {
               <button
                 type="submit"
                 disabled={busy}
-                className="mn mt-6 h-11 w-full rounded-[9px] bg-[#2a251d] text-[10px] font-medium tracking-[0.14em] text-[#fbf9f5] transition-opacity duration-300 disabled:opacity-45"
+                className="mn mt-6 h-11 w-full rounded-[9px] bg-ink text-[10px] font-medium tracking-[0.14em] text-bg transition-opacity duration-300 disabled:opacity-45"
               >
                 {busy ? 'SENDING…' : 'CONTINUE'}
               </button>
             </form>
 
             <div className="my-6 flex items-center gap-3">
-              <span className="h-px flex-1 bg-[#2a251d]/12" />
-              <span className="mn text-[8.5px] tracking-[0.14em] text-[#2a251d]/35">OR</span>
-              <span className="h-px flex-1 bg-[#2a251d]/12" />
+              <span className="h-px flex-1 bg-hair-strong" />
+              <span className="mn text-[8.5px] tracking-[0.14em] text-mute-3">OR</span>
+              <span className="h-px flex-1 bg-hair-strong" />
             </div>
 
             <button
               type="button"
               onClick={continueWithGoogle}
               disabled={busy}
-              className="flex h-11 w-full items-center justify-center gap-2.5 rounded-[9px] border border-[#2a251d]/16 bg-white text-[13px] font-medium transition-colors duration-300 hover:border-[#2a251d]/32 disabled:opacity-45"
+              className="flex h-11 w-full items-center justify-center gap-2.5 rounded-[9px] border border-hair-strong bg-white text-[13px] font-medium transition-colors duration-300 hover:border-ink disabled:opacity-45"
             >
               <GoogleMark />
               Continue with Google
@@ -234,7 +241,7 @@ export default function SignInPage() {
           <form onSubmit={submitCode}>
             <label
               htmlFor="code"
-              className="mn block text-[9px] tracking-[0.14em] text-[#2a251d]/40"
+              className="mn block text-[9px] tracking-[0.14em] text-mute-2"
             >
               SIX-DIGIT CODE
             </label>
@@ -249,14 +256,14 @@ export default function SignInPage() {
               value={code}
               onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))}
               placeholder="——————"
-              className="mn mt-2 w-full border-0 border-b border-[#2a251d]/20 bg-transparent pb-2 text-center text-[22px] tracking-[0.42em] outline-none placeholder:text-[#2a251d]/20 focus:border-[#2a251d]/60"
+              className="mn mt-2 w-full border-0 border-b border-hair-strong bg-transparent pb-2 text-center text-[22px] tracking-[0.42em] outline-none placeholder:text-ink/20 focus:border-ink"
             />
-            <p className="mn mt-3 text-[9px] tracking-[0.08em] text-[#2a251d]/40">
+            <p className="mn mt-3 text-[9px] tracking-[0.08em] text-mute-2">
               SENT TO {email.toUpperCase()}
             </p>
 
             {error ? (
-              <p className="mn mt-3 text-[9.5px] leading-relaxed tracking-[0.06em] text-[#a8552b]">
+              <p className="mn mt-3 text-[9.5px] leading-relaxed tracking-[0.06em] text-accent">
                 {error.toUpperCase()}
               </p>
             ) : null}
@@ -264,7 +271,7 @@ export default function SignInPage() {
             <button
               type="submit"
               disabled={busy || code.length < 6}
-              className="mn mt-6 h-11 w-full rounded-[9px] bg-[#2a251d] text-[10px] font-medium tracking-[0.14em] text-[#fbf9f5] transition-opacity duration-300 disabled:opacity-45"
+              className="mn mt-6 h-11 w-full rounded-[9px] bg-ink text-[10px] font-medium tracking-[0.14em] text-bg transition-opacity duration-300 disabled:opacity-45"
             >
               {busy ? 'CHECKING…' : mode === 'sign-up' ? 'START THE ARCHIVE' : 'OPEN THE ARCHIVE'}
             </button>
@@ -274,14 +281,14 @@ export default function SignInPage() {
                 type="button"
                 onClick={resend}
                 disabled={busy}
-                className="mn text-[9px] tracking-[0.1em] text-[#2a251d]/45 underline decoration-[#2a251d]/20 underline-offset-4 disabled:opacity-45"
+                className="mn text-[9px] tracking-[0.1em] text-mute-2 underline decoration-hair-strong underline-offset-4 disabled:opacity-45"
               >
                 SEND ANOTHER
               </button>
               <button
                 type="button"
                 onClick={startOver}
-                className="mn text-[9px] tracking-[0.1em] text-[#2a251d]/45 underline decoration-[#2a251d]/20 underline-offset-4"
+                className="mn text-[9px] tracking-[0.1em] text-mute-2 underline decoration-hair-strong underline-offset-4"
               >
                 DIFFERENT EMAIL
               </button>

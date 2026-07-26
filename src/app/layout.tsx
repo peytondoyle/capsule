@@ -1,8 +1,23 @@
 import type { Metadata, Viewport } from 'next'
+import { IBM_Plex_Mono, Inter } from 'next/font/google'
 import { ClerkProvider } from '@clerk/nextjs'
 
 import { SITE } from '@/lib/site'
 import './globals.css'
+
+/**
+ * SF Pro and SF Mono are not webfont-licensable, and they are what the design
+ * is drawn in. The token stack puts the system SF families first, so on Apple
+ * hardware these two are never fetched at all; elsewhere they carry the same
+ * prose/metadata split. Self-hosted by next/font, so metadata never reflows.
+ */
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
+const plexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-plex-mono',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: SITE.name,
@@ -19,7 +34,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${plexMono.variable}`} data-surface="ledger">
       <body>
         {/* Ledger paper palette. Element-level overrides (hairlines instead of
             Clerk's default card borders) land with the design system in phase 3. */}

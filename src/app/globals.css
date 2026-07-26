@@ -1,16 +1,33 @@
 @import 'tailwindcss';
+@import '../design/tokens.css';
 
-/* Phase 0 scaffold: only the two things the whole design rests on — the
-   prose/metadata font split and the shared easing. The three surface
-   palettes (ledger / board / cabinet) land in phase 3. */
 @theme {
+  /* SF first: it is native on Apple hardware, which is most of this audience,
+     and the browser only fetches the webfonts when SF is genuinely absent.
+     The self-hosted fallbacks come from next/font in layout.tsx. */
   --font-sans:
     -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue',
-    system-ui, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+    var(--font-inter), system-ui, sans-serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', SFMono-Regular, Menlo, var(--font-plex-mono), monospace;
 
   --ease-capsule: cubic-bezier(0.2, 0.85, 0.25, 1);
   --dur-capsule: 300ms;
+
+  /* Declared here only so Tailwind generates bg-bg / text-ink / border-hair /
+     text-accent at all. The real values are set per surface in tokens.css —
+     see the comment there about why the aliases cannot live in @theme. */
+  --color-bg: #fbf9f5;
+  --color-panel: #f6f3ed;
+  --color-ink: #2a251d;
+  --color-paper: #fff;
+  --color-accent: #a8552b;
+  --color-ok: #5b8c5a;
+  --color-hair: rgb(42 37 29 / 0.09);
+  --color-hair-strong: rgb(42 37 29 / 0.14);
+  --color-mute-1: rgb(42 37 29 / 0.72);
+  --color-mute-2: rgb(42 37 29 / 0.42);
+  --color-mute-3: rgb(42 37 29 / 0.35);
 }
 
 html {
@@ -20,11 +37,14 @@ html {
 
 body {
   font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--ink);
 }
 
-/* Every date, count, id, dimension, field label and percentage in this app is
-   mono, letter-spaced and tabular. Prose is warm, data is archival. */
-.mn {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
+/* Focus rings have to be visible on paper *and* in the vitrine, so they key off
+   --ink rather than a fixed colour. */
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 3px;
 }

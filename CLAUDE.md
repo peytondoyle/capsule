@@ -16,7 +16,10 @@ Read it before touching anything structural.
 
 ## Status
 
-Phases 0–2 complete on branch `v2-rebuild`. Phase 3 next: the design system.
+Phases 0–3 complete on branch `v2-rebuild`. Phase 4 next: the Ledger.
+
+`/design` is the design-system gallery and the phase-3 gate — every primitive, every
+surface, every state. `?surface=ledger|board|cabinet` and `?section=…` isolate one at a time.
 **Read [docs/HANDOFF.md](docs/HANDOFF.md) first** — it has the live resource ids, what is and
 isn't verified, the two dashboard-only steps still outstanding, and the platform gotchas found
 in phase 1.
@@ -80,6 +83,12 @@ Violating these makes the app look wrong in a way no amount of polish recovers.
   `neon-serverless` (ws `Pool`) against `DATABASE_URL_UNPOOLED`.
 - **Scripts importing `src/server/**` need `NODE_OPTIONS='--conditions=react-server'`**, or
   `import 'server-only'` throws outside Next.
+- **Never alias a surface colour inside Tailwind's `@theme`.** A custom property is
+  substituted where it is *declared*, so `@theme { --color-bg: var(--bg) }` computes at
+  `:root` and freezes every surface to the Ledger palette. The aliases are re-declared inside
+  each `[data-surface]` block in `src/design/tokens.css` — see the comment there.
+- **`@theme` still has to declare the colour keys**, or Tailwind never generates `bg-bg` /
+  `text-ink` / `border-hair` at all. The literals in `globals.css` are placeholders.
 
 ## Data access — this replaces RLS
 

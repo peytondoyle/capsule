@@ -195,25 +195,55 @@ chain's own globs.
 allocation under 12 concurrent inserts, counter rollback on failure, the unfiled predicate,
 timeline ordering and face join, search reaching giver and place, and cross-owner isolation.
 
-## Start of phase 3
+## Phase 3, as built
 
-The design system, and the linchpin of the whole build. Order that works:
+Everything lives in [src/design/](../src/design/), barrelled through `@/design`.
+**[/design](http://localhost:3000/design)** is the gallery and the gate — `?surface=ledger|board|cabinet`
+and `?section=silhouettes|cuts|states|type|fields|texture|capture|assemblies` isolate one
+thing at a time.
 
-1. Tokens: the three `data-surface` palettes from the plan's §1 into `globals.css`, plus the
-   self-hosted Inter / IBM Plex Mono fallbacks behind the SF stack.
-2. `<Cutout>` first and carefully — everything else is downstream of it. All 7 silhouette
-   presets × 4 cut styles × the two-layer `filter: drop-shadow`. `objects.silhouette`,
-   `cut_style` and `rotation_deg` are already populated by the seed, so it has real input.
-3. `<TiltSurface>` porting the doc's exact math: `perspective(800px)`,
-   `rotateY(dx*13deg) rotateX(-dy*13deg) translateZ(6px)`, reset on `pointerleave`, gated on
-   `prefers-reduced-motion`.
-4. Then the rest: `<FieldRows>`, `<MonoLabel>`, `<Chip>`, `<RetentionToggle>`, `<Inspector>`,
-   `<SheetPhone>`, `<ShelfRule>`, `<GrainSurface>`, `<StickerDeck>`, `<ScanFrame>`.
-5. Gate: a `/design` gallery rendering every primitive × every surface × every state, diffed
-   against the design doc.
+- **`<Cutout>` is server-renderable.** The Ledger will put hundreds on a page and none of them
+  need to ship as client components. Interactivity comes from `<TiltLayer>`, one delegated
+  `pointermove` listener that finds `[data-sticker]` and composes the tilt onto the
+  server-rendered base transform — which is exactly how the design doc's own script does it.
+  Opt a cutout in with `interactive`.
+- **Two orthogonal axes**, both persisted per object: `silhouette` (the outline of the thing)
+  and `cut_style` (how it was trimmed). `full` deliberately ignores the silhouette — it is the
+  honest "I didn't cut it out" state.
+- **Measured against the doc, not eyeballed**: computed `filter` is
+  `drop-shadow(rgba(52,42,26,.17) 0 10px 14px) drop-shadow(rgba(52,42,26,.14) 0 1px 1.5px)`,
+  transition `transform .3s cubic-bezier(.2,.85,.25,1)`, hatch
+  `repeating-linear-gradient(128deg,#dfd8c9 0 5px,#eae4d8 5px 10px)`, sticker padding 5px.
+  All identical to `Capsule.dc.html`. Screenshots downscale enough to make the white edges
+  look heavier than they are — measure before "fixing" anything.
+- **Trap, now documented in CLAUDE.md**: aliasing surface colours inside Tailwind's `@theme`
+  silently froze every surface to the Ledger palette, because a custom property is substituted
+  where it is declared. The Cabinet rendered dark-on-cream and was invisible. The aliases are
+  re-declared per `[data-surface]` block.
+- Cabinet-specific: sticker edges are warm `#f4f0e6`, never pure white, and the shadow goes
+  black at 50% rather than warm brown. Pure white blows out against `#151418` and the objects
+  stop reading as paper.
 
-[src/app/sign-in/cutout.tsx](../src/app/sign-in/cutout.tsx) is the throwaway stand-in and
-should be deleted once the real primitive exists.
+The throwaway `src/app/sign-in/cutout.tsx` is gone; sign-in uses the real primitive. All
+shipped pages now use tokens (`bg-bg`, `text-ink`, `border-hair`, `text-mute-*`) — the only
+remaining literal hex is `layout.tsx`'s `theme-color` meta, which browsers cannot resolve from
+a CSS variable, and Clerk's `appearance` object.
+
+## Start of phase 4
+
+The Ledger — `/timeline`, and the first screen made of real data.
+
+1. `listTimeline(ownerId)` already returns objects newest-first with their recto face joined.
+   Group by year then month in the server component; `receivedPrecision` decides whether an
+   object belongs to a month at all.
+2. The 198px left rail: `listPeopleWithCounts` for GIVEN BY, `countUnfiled` for the rust
+   number, `activity` for "LAST ADDED / 2 DAYS AGO".
+3. Cutout widths should vary from each face's real aspect ratio — the seed already sets
+   `object_faces.width/height` per kind, which is what makes a row look hand-placed rather
+   than gridded.
+4. `<Inspector>` is built and takes `hero` / `lot` / `rows` / `story` / `footer` slots. The
+   design calls for it to be permanently present, not a drawer.
+5. Reseed onto your own account first, or the page is empty (see the top of this doc).
 
 ## Things to clean up when convenient
 
