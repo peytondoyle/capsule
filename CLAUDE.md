@@ -16,7 +16,10 @@ Read it before touching anything structural.
 
 ## Status
 
-Phase 0 complete (scaffold). Phase 1 next: Vercel project, Neon, Blob, Clerk.
+Phases 0–1 complete on branch `v2-rebuild`. Phase 2 next: the full object graph.
+**Read [docs/HANDOFF.md](docs/HANDOFF.md) first** — it has the live resource ids, what is and
+isn't verified, the two dashboard-only steps still outstanding, and the platform gotchas found
+in phase 1.
 
 ## Stack
 
@@ -55,6 +58,24 @@ Violating these makes the app look wrong in a way no amount of polish recovers.
   reshuffles the whole archive on every navigation.
 - Ledger / Board / Cabinet are three *surfaces*, not light/dark mode. They're selected by
   `data-surface` on `<main>`; each redefines the palette variables.
+
+## Platform facts worth not rediscovering
+
+- **Blob access level is a property of the store, not the blob.** Private stores serve from
+  `{id}.private.blob.vercel-storage.com` behind a bearer token. So originals and derivatives
+  need two stores: `capsule-originals` (private) and `capsule-media` (public).
+- **Only one Blob store per project can use the default env var.** Connecting a second needs a
+  custom prefix, which Vercel CLI 56.5.0 cannot set — dashboard only.
+- **Clerk instances default to `auth_password.required: true`**, which makes a passwordless
+  flow uncompletable in a way that looks like a broken verify step (`missing_requirements`,
+  `missingFields: ['password']`, *after* the email verifies). Disabled here; keep it that way.
+- **Serwist injects a webpack config and cannot run under Turbopack.** Silencing the error
+  with `turbopack: {}` makes the build succeed with **no service worker and no warning**.
+  See the Serwist section of [docs/HANDOFF.md](docs/HANDOFF.md) before touching the PWA.
+- **`drizzle-orm/neon-http` cannot do multi-statement transactions.** Lot allocation must use
+  `neon-serverless` (ws `Pool`) against `DATABASE_URL_UNPOOLED`.
+- **Scripts importing `src/server/**` need `NODE_OPTIONS='--conditions=react-server'`**, or
+  `import 'server-only'` throws outside Next.
 
 ## Data access — this replaces RLS
 
