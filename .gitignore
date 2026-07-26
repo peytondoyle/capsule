@@ -12,9 +12,8 @@ next-env.d.ts
 *.tsbuildinfo
 
 # Environment
-.env
-.env*.local
-.env.vercel.*
+.env*
+!.env.example
 
 # Vercel
 .vercel
