@@ -54,8 +54,16 @@ export async function deriveFromOriginal(
   // portrait phone photo lands on its side.
   let image = sharp(input, { failOn: 'none' }).rotate()
   const meta = await image.metadata()
-  const fullWidth = meta.width ?? 0
-  const fullHeight = meta.height ?? 0
+
+  // metadata().width/height deliberately ignore EXIF orientation, but .rotate()
+  // above has already applied it — so for any orientation 5–8 photo (an iPhone
+  // portrait, i.e. most of them) the stored dimensions are swapped relative to
+  // what the user framed in the corner editor. Using them would crop the wrong
+  // region, and a `left` scaled by the larger axis can exceed the rotated
+  // width and make extract() throw outright.
+  const oriented = meta.autoOrient ?? { width: meta.width, height: meta.height }
+  const fullWidth = oriented.width ?? 0
+  const fullHeight = oriented.height ?? 0
 
   if (corners?.length === 4 && fullWidth && fullHeight) {
     const xs = corners.map((c) => c.x)
