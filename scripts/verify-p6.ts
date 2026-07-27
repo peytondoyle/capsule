@@ -1,8 +1,10 @@
 /** Phase 6 proof: the last stage of the pipeline, plus retry-safety. */
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { getDb } from '../src/server/db'
 import { intakeBatches, intakeItems, objectFaces, objects } from '../src/server/db/schema'
 import { addIntakeItem, createBatch, fileIntakeItem, listPendingIntake } from '../src/server/intake'
+import { deleteObject } from '../src/server/objects'
+import { deleteBlobs } from '../src/server/blob'
 import { upsertPerson } from '../src/server/people'
 import { deriveFromOriginal } from '../src/server/derive'
 import { intakePath, originalsToken } from '../src/server/blob'
@@ -55,7 +57,12 @@ const check = (label: string, pass: boolean, detail = '') => {
 }
 
 async function main() {
-  const ownerId = process.argv[process.argv.indexOf('--owner') + 1]!
+  // `indexOf(...) + 1` lands on argv[0] — the node binary — when the flag is
+  // absent, which reaches the DB as an owner id and fails on a foreign key
+  // instead of saying what is wrong.
+  const flag = process.argv.indexOf('--owner')
+  const ownerId = flag === -1 ? 'user_seed_dev' : process.argv[flag + 1]
+  if (!ownerId) throw new Error('--owner needs a value')
   const db = getDb()
 
   let pending = await listPendingIntake(ownerId)
@@ -71,7 +78,7 @@ async function main() {
 
   const dad = await upsertPerson(ownerId, 'Dad')
   const filed = await fileIntakeItem(ownerId, item.id, {
-    title: 'Boarding pass, LIS → JFK',
+    title: 'P6 probe — boarding pass',
     kind: 'ticket_stub',
     receivedAt: '2019-11-12',
     story: 'Filed straight from the queue.',
@@ -124,6 +131,30 @@ async function main() {
     tighter.width < item2.width && tighter.height < item2.height,
     `${item2.width}×${item2.height} → ${tighter.width}×${tighter.height}`,
   )
+
+  // Everything above wrote to the same database the fixtures live in. Leaving
+  // the probe behind put a second "Boarding pass" in the archive, which shadowed
+  // the seed fixture in verify-p2 and pushed the lot counter past the fixture
+  // range — a verification script is not allowed to change what it verifies.
+  await deleteObject(ownerId, filed.objectId)
+  const mine = await db
+    .select({ id: intakeBatches.id })
+    .from(intakeBatches)
+    .where(eq(intakeBatches.ownerId, ownerId))
+  if (mine.length) {
+    const ids = mine.map((b) => b.id)
+    const leftovers = await db
+      .select({ originalUrl: intakeItems.originalUrl, cutoutUrl: intakeItems.cutoutUrl })
+      .from(intakeItems)
+      .where(inArray(intakeItems.batchId, ids))
+    await deleteBlobs({
+      originals: leftovers.map((i) => i.originalUrl),
+      media: leftovers.map((i) => i.cutoutUrl),
+    })
+    // intake_items cascades from the batch.
+    await db.delete(intakeBatches).where(inArray(intakeBatches.id, ids))
+  }
+  check('the run left nothing behind', (await listPendingIntake(ownerId)).length === 0)
 
   console.log(`\n${failures === 0 ? 'all checks passed' : `${failures} FAILED`}\n`)
   return failures

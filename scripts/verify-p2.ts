@@ -43,8 +43,18 @@ async function main() {
     .where(eq(objects.ownerId, ownerId))
     .orderBy(objects.lotNo)
   const values = lots.map((l) => l.lotNo)
-  const gapless = values.every((v, i) => v === i + 1)
-  check('lot numbers gapless from 1', gapless, `${values.length} objects, max ${values.at(-1)}`)
+  // Not "1..n": a lot number is an accession number, so deleting an object
+  // retires its number for good and the live set legitimately has holes. What
+  // the allocator actually promises is that no two objects ever share one and
+  // that they only ever go up — the concurrency check below proves the
+  // no-gaps-while-allocating half.
+  const unique = new Set(values).size === values.length
+  const ascending = values.every((v, i) => i === 0 || v > values[i - 1]!)
+  check(
+    'lot numbers are unique and monotonic',
+    unique && ascending,
+    `${values.length} objects, ${values[0]}…${values.at(-1)}`,
+  )
 
   // --- concurrency: 12 simultaneous inserts must not collide or skip -----
   // Anchored on the counter, not the object count: deleting an object retires
