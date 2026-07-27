@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 
 import { getCurrentUser } from '@/server/auth'
-import { dropOnCluster, scatterBoard, tidyBoard } from '@/server/board'
+import { clusterBoardBy, dropOnCluster, scatterBoard, tidyBoard } from '@/server/board'
 import { moveObject } from '@/server/objects'
 
 async function requireOwner() {
@@ -35,4 +35,11 @@ export async function scatterBoardAction() {
   const ownerId = await requireOwner()
   await scatterBoard(ownerId)
   revalidatePath('/board')
+}
+
+export async function clusterByAction(dimension: 'person' | 'place' | 'year' | 'kind') {
+  const ownerId = await requireOwner()
+  const result = await clusterBoardBy(ownerId, dimension)
+  revalidatePath('/board')
+  return result
 }

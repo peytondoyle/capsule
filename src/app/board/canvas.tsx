@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 
 import { Cutout, aspectOf, cutoutWidth, type CutStyle, type Silhouette } from '@/design'
 import {
+  clusterByAction,
   dropOnClusterAction,
   moveObjectAction,
   scatterBoardAction,
@@ -271,10 +272,18 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
         onFit={() => saveViewport({ x: 0, y: 0, scale: 0.62 })}
         onTidy={() => startTransition(async () => tidyBoardAction())}
         onScatter={() => startTransition(async () => scatterBoardAction())}
+        onClusterBy={(d) =>
+          startTransition(async () => {
+            await clusterByAction(d)
+            router.refresh()
+          })
+        }
       />
     </div>
   )
 }
+
+type Dimension = 'person' | 'place' | 'year' | 'kind'
 
 function Toolbar({
   total,
@@ -282,13 +291,16 @@ function Toolbar({
   onFit,
   onTidy,
   onScatter,
+  onClusterBy,
 }: {
   total: number
   scale: number
   onFit: () => void
   onTidy: () => void
   onScatter: () => void
+  onClusterBy: (dimension: Dimension) => void
 }) {
+  const [open, setOpen] = useState(false)
   return (
     <>
       <div
@@ -309,6 +321,44 @@ function Toolbar({
         <button onClick={onTidy} className="mn rounded-lg px-2.5 py-2 text-[9px] tracking-[0.08em]" style={{ color: 'var(--mute-2)' }}>
           TIDY
         </button>
+
+        <div className="relative">
+          <button
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            className="mn rounded-lg px-2.5 py-2 text-[9px] font-medium tracking-[0.08em]"
+            style={{
+              background: open ? 'color-mix(in srgb, var(--ink) 10%, transparent)' : undefined,
+            }}
+          >
+            CLUSTER BY ▾
+          </button>
+          {open ? (
+            <div
+              className="absolute top-full left-0 mt-1.5 flex w-[132px] flex-col gap-0.5 rounded-[10px] border border-hair-strong p-1.5"
+              style={{
+                background: 'color-mix(in srgb, var(--panel) 96%, transparent)',
+                backdropFilter: 'blur(12px)',
+                boxShadow: '0 10px 24px rgb(var(--shadow-ink) / 0.16)',
+              }}
+            >
+              {(['person', 'place', 'year', 'kind'] as Dimension[]).map((d) => (
+                <button
+                  key={d}
+                  onClick={() => {
+                    setOpen(false)
+                    onClusterBy(d)
+                  }}
+                  className="mn rounded-md px-2 py-1.5 text-left text-[9px] tracking-[0.08em] uppercase"
+                  style={{ color: 'var(--mute-2)' }}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
         <span className="h-5 w-px bg-hair-strong" />
         <Link href="/accession" className="mn rounded-lg bg-ink px-3 py-2 text-[9px] font-medium tracking-[0.08em] text-bg">
           + ADD

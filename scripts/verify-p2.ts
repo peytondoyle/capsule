@@ -8,7 +8,7 @@ import { and, eq, sql } from 'drizzle-orm'
 
 import { getDb } from '../src/server/db'
 import { objects } from '../src/server/db/schema'
-import { dropOnCluster, getBoard, tidyBoard } from '../src/server/board'
+import { clusterBoardBy, dropOnCluster, getBoard, tidyBoard } from '../src/server/board'
 import {
   assertOwned,
   attachTag,
@@ -226,6 +226,40 @@ async function main() {
       dropped.applied.length > 0 && (tagged.rows[0]?.n ?? 0) > 0,
       `applied ${dropped.applied.join(', ')}`)
   }
+
+  // Regression guard: a correlated subquery that referenced an unqualified
+  // column silently collapsed every object into one group, because drizzle only
+  // qualifies interpolated columns when the query has a join. Asserting a
+  // *plural* group count is what catches that class of silent-wrong-answer.
+  for (const [dimension, least] of [
+    ['person', 2],
+    ['place', 2],
+    ['year', 2],
+    ['kind', 2],
+  ] as const) {
+    const result = await clusterBoardBy(ownerId, dimension)
+    check(
+      `cluster by ${dimension} produces real groups`,
+      result.clusters >= least && result.objects === values.length,
+      `${result.clusters} groups over ${result.objects} objects`,
+    )
+  }
+
+  const clustered = await getBoard(ownerId)
+  const generated = clustered.clusters.filter((c) => c.collection.rule !== null)
+  const inside = clustered.items.filter((item) =>
+    generated.some((g) => {
+      const c = g.collection
+      return (
+        item.x >= (c.boardX ?? 0) &&
+        item.x <= (c.boardX ?? 0) + (c.boardW ?? 0) &&
+        item.y >= (c.boardY ?? 0) &&
+        item.y <= (c.boardY ?? 0) + (c.boardH ?? 0)
+      )
+    }),
+  ).length
+  check('clustering packs every object inside a rect', inside === clustered.items.length,
+    `${inside}/${clustered.items.length}`)
 
   await tidyBoard(ownerId)
   const tidy1 = await getBoard(ownerId)

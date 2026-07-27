@@ -9,6 +9,8 @@ import {
   objectFaces,
   objectPeople,
   objects,
+  people,
+  places,
 } from './db/schema'
 import { assertOwned } from './objects'
 import { attachTag } from './objects'
@@ -157,4 +159,118 @@ export async function scatterBoard(ownerId: string) {
       .where(and(eq(objects.id, row.id), eq(objects.ownerId, ownerId)))
   }
   return rows.length
+}
+
+/**
+ * CLUSTER BY: rebuild the cluster rects from a dimension, then pack each
+ * group's objects inside its own rect.
+ *
+ * Regenerating rather than merging is deliberate — clustering by person and
+ * then by year should give you the year layout, not the union of both. The
+ * previous generated clusters are replaced; hand-made ones survive because
+ * they are the only rows without a `rule`.
+ */
+export async function clusterBoardBy(ownerId: string, dimension: 'person' | 'place' | 'year' | 'kind') {
+  const db = getDb()
+
+  /**
+   * Real joins, not correlated subqueries.
+   *
+   * Drizzle renders an interpolated column unqualified when the query has no
+   * join — `${objects.id}` becomes `"id"`, which inside a subquery over
+   * `people` binds to `people.id` instead. The comparison then never matches
+   * and every row silently collapses into one group. Joining sidesteps the
+   * whole class of bug and lets Postgres do the grouping.
+   */
+  const base = db
+    .select({
+      id: objects.id,
+      label:
+        dimension === 'person'
+          ? sql<string>`coalesce(${people.name}, 'Nobody in particular')`
+          : dimension === 'place'
+            ? sql<string>`coalesce(${places.name}, 'Nowhere in particular')`
+            : dimension === 'year'
+              ? sql<string>`coalesce(to_char(${objects.receivedAt}, 'YYYY'), 'Undated')`
+              : sql<string>`coalesce(replace(${objects.kind}, '_', ' '), 'Unsorted')`,
+    })
+    .from(objects)
+    .leftJoin(
+      objectPeople,
+      and(eq(objectPeople.objectId, objects.id), eq(objectPeople.role, 'given_by')),
+    )
+    .leftJoin(people, eq(people.id, objectPeople.personId))
+    .leftJoin(places, eq(places.id, objects.placeId))
+    .where(eq(objects.ownerId, ownerId))
+    .orderBy(asc(objects.lotNo))
+
+  const rows = await base
+
+  const groups = new Map<string, string[]>()
+  for (const row of rows) {
+    const list = groups.get(row.label) ?? []
+    list.push(row.id)
+    groups.set(row.label, list)
+  }
+
+  // Only generated clusters are disposable; a cluster the owner made by hand
+  // has no rule and must never be swept away by a CLUSTER BY.
+  await db
+    .delete(collections)
+    .where(
+      and(
+        eq(collections.ownerId, ownerId),
+        eq(collections.kind, 'cluster'),
+        sql`${collections.rule} is not null`,
+      ),
+    )
+
+  const PER_ROW = 3
+  const GAP = 60
+  let index = 0
+
+  for (const [name, ids] of groups) {
+    const cols = Math.min(4, Math.max(2, Math.ceil(Math.sqrt(ids.length))))
+    const rowsIn = Math.ceil(ids.length / cols)
+    const width = cols * 170 + 40
+    const height = rowsIn * 190 + 40
+    const originX = 120 + (index % PER_ROW) * (560 + GAP)
+    const originY = 120 + Math.floor(index / PER_ROW) * (520 + GAP)
+
+    const [cluster] = await db
+      .insert(collections)
+      .values({
+        ownerId,
+        name,
+        kind: 'cluster',
+        rule: { clusterBy: dimension, label: name },
+        boardX: originX,
+        boardY: originY,
+        boardW: width,
+        boardH: height,
+        impliedTags: [],
+        sortOrder: index,
+      })
+      .returning()
+
+    if (cluster) {
+      await db.insert(collectionObjects).values(
+        ids.map((objectId, order) => ({ collectionId: cluster.id, objectId, sortOrder: order })),
+      )
+    }
+
+    for (const [i, id] of ids.entries()) {
+      await db
+        .update(objects)
+        .set({
+          boardX: originX + 24 + (i % cols) * 168,
+          boardY: originY + 24 + Math.floor(i / cols) * 188,
+          boardZ: 0,
+        })
+        .where(and(eq(objects.id, id), eq(objects.ownerId, ownerId)))
+    }
+    index++
+  }
+
+  return { clusters: groups.size, objects: rows.length }
 }

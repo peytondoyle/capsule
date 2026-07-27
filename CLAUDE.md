@@ -89,6 +89,11 @@ Violating these makes the app look wrong in a way no amount of polish recovers.
   `neon-serverless` (ws `Pool`) against `DATABASE_URL_UNPOOLED`.
 - **Scripts importing `src/server/**` need `NODE_OPTIONS='--conditions=react-server'`**, or
   `import 'server-only'` throws outside Next.
+- **Drizzle only qualifies interpolated columns when the query has a join.** In a join-less
+  query `${objects.id}` renders as bare `"id"`, so inside a correlated subquery it binds to
+  whatever inner table has an `id` — silently returning NULL for every row with no error.
+  Prefer a real `leftJoin` over a correlated subquery, and when asserting on grouped output
+  check for a *plural* group count, which is what catches this.
 - **Blob `access` on the client `upload()` must match the store the token belongs to.** A
   mismatch fails *silently*: the PUT is never issued, nothing is logged, and the UI hangs on
   "uploading" forever. Originals are `private`, derivatives `public`.
