@@ -48,10 +48,15 @@ export default async function CabinetPage({
           <span className="mn rounded-md bg-[color-mix(in_srgb,var(--ink)_9%,transparent)] px-[11px] py-1.5 text-[9px] tracking-[0.11em]">
             CABINET
           </span>
-          {['LEDGER', 'BOARD'].map((name) => (
+          {[
+            ['CATALOGUE', '/catalogue'],
+            ['PEOPLE', '/people'],
+            ['LEDGER', '/timeline'],
+            ['BOARD', '/board'],
+          ].map(([name, href]) => (
             <Link
               key={name}
-              href={name === 'LEDGER' ? '/timeline' : '/board'}
+              href={href!}
               className="mn rounded-md px-[11px] py-1.5 text-[9px] tracking-[0.11em] text-mute-2"
             >
               {name}

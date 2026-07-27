@@ -8,6 +8,7 @@ import {
   collections,
   objectFaces,
   objects,
+  places,
 } from './db/schema'
 
 type ShelfObject = {
@@ -131,4 +132,34 @@ export async function getCabinet(ownerId: string) {
       ? [{ id: 'unattributed', name: 'Unattributed', objects: unattributed, dim: true }]
       : []),
   ]
+}
+
+/**
+ * CATALOGUE: every lot as a row. This is the one screen where the mono/
+ * tabular-nums half of the type system does real work — lot numbers and dates
+ * in a column only read as a catalogue if the digits line up.
+ */
+export async function getCatalogue(ownerId: string) {
+  return getDb()
+    .select({
+      id: objects.id,
+      lotNo: objects.lotNo,
+      title: objects.title,
+      kind: objects.kind,
+      material: objects.material,
+      receivedAt: objects.receivedAt,
+      receivedPrecision: objects.receivedPrecision,
+      retention: objects.retention,
+      placeName: places.name,
+      giver: sql<string | null>`(
+        select p.name from object_people op
+        join people p on p.id = op.person_id
+        where op.object_id = ${objects.id} and op.role = 'given_by'
+        order by p.name limit 1
+      )`,
+    })
+    .from(objects)
+    .leftJoin(places, eq(places.id, objects.placeId))
+    .where(eq(objects.ownerId, ownerId))
+    .orderBy(asc(objects.lotNo))
 }
