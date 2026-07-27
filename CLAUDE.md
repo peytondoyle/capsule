@@ -16,7 +16,9 @@ Read it before touching anything structural.
 
 ## Status
 
-Phases 0–5 complete on branch `v2-rebuild`. Phase 6 next: the capture pipeline.
+Phases 0–5 complete on branch `v2-rebuild`; phase 6 (capture) mostly done and phase 7 (queue)
+started. Outstanding: the corner-drag UI, edge detection, and extraction needs an
+`ANTHROPIC_API_KEY` before it can be verified.
 
 `/design` is the design-system gallery and the phase-3 gate — every primitive, every
 surface, every state. `?surface=ledger|board|cabinet` and `?section=…` isolate one at a time.
@@ -83,6 +85,14 @@ Violating these makes the app look wrong in a way no amount of polish recovers.
   `neon-serverless` (ws `Pool`) against `DATABASE_URL_UNPOOLED`.
 - **Scripts importing `src/server/**` need `NODE_OPTIONS='--conditions=react-server'`**, or
   `import 'server-only'` throws outside Next.
+- **Blob `access` on the client `upload()` must match the store the token belongs to.** A
+  mismatch fails *silently*: the PUT is never issued, nothing is logged, and the UI hangs on
+  "uploading" forever. Originals are `private`, derivatives `public`.
+- **Derivatives are not alpha-masked.** The design system already clips every cutout with CSS,
+  so baking the silhouette would duplicate it and make the stored image wrong the moment
+  someone changes the cut style.
+- **`sharp` is a direct dep, with the override scoped to `next`.** A bare `overrides.sharp`
+  clashes with a direct dependency (`EOVERRIDE`); both must stay ≥0.35.3 for libvips 8.18.
 - **Never alias a surface colour inside Tailwind's `@theme`.** A custom property is
   substituted where it is *declared*, so `@theme { --color-bg: var(--bg) }` computes at
   `:root` and freezes every surface to the Ledger palette. The aliases are re-declared inside
