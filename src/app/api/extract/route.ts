@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 
 import { getCurrentUser } from '@/server/auth'
 import { extractFromImage, hasExtraction } from '@/server/extract'
-import { listPendingIntake, updateIntakeItem } from '@/server/intake'
+import { getIntakeItem, updateIntakeItem } from '@/server/intake'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -20,15 +20,14 @@ export async function POST(request: NextRequest) {
   const { itemId } = (await request.json()) as { itemId?: string }
   if (!itemId) return Response.json({ error: 'itemId required' }, { status: 400 })
 
-  const pending = await listPendingIntake(user.id, 500)
-  const match = pending.find((row) => row.item.id === itemId)
-  const source = match?.item.cutoutUrl
-  if (!source) {
+  const item = await getIntakeItem(user.id, itemId)
+  const source = item?.cutoutUrl
+  if (!item || !source) {
     return Response.json({ error: 'derive the cutout first' }, { status: 409 })
   }
 
   try {
-    const exif = match.item.suggestions as { date?: { value?: string } } | null
+    const exif = item.suggestions as { date?: { value?: string } } | null
     const suggestions = await extractFromImage(source, {
       exifDate: exif?.date?.value ?? null,
     })

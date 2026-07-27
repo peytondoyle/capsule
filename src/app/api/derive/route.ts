@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server'
 import { getCurrentUser } from '@/server/auth'
 import { intakePath } from '@/server/blob'
 import { deriveFromOriginal, type Corner } from '@/server/derive'
-import { listPendingIntake, updateIntakeItem } from '@/server/intake'
+import { getIntakeItem, updateIntakeItem } from '@/server/intake'
 
 // sharp is native, so this cannot run on the edge.
 export const runtime = 'nodejs'
@@ -26,18 +26,16 @@ export async function POST(request: NextRequest) {
   }
   if (!itemId) return Response.json({ error: 'itemId required' }, { status: 400 })
 
-  // listPendingIntake is already owner-scoped, so this doubles as the guard.
-  const pending = await listPendingIntake(user.id, 500)
-  const match = pending.find((row) => row.item.id === itemId)
-  if (!match?.item.originalUrl) {
+  const item = await getIntakeItem(user.id, itemId)
+  if (!item?.originalUrl) {
     return Response.json({ error: 'item not found' }, { status: 404 })
   }
 
   try {
     const derived = await deriveFromOriginal(
-      match.item.originalUrl,
+      item.originalUrl,
       { ownerId: user.id, key: intakePath(user.id, itemId, '').replace(/\/$/, '') },
-      corners ?? (match.item.corners as Corner[] | null),
+      corners ?? (item.corners as Corner[] | null),
     )
 
     await updateIntakeItem(user.id, itemId, {

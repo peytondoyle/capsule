@@ -96,8 +96,26 @@ export function Uploader() {
             contentType: file.type || undefined,
           })
 
-          await recordUploadAction(batch!, blob.url, exif ?? undefined)
+          const itemId = await recordUploadAction(batch!, blob.url, exif ?? undefined)
           patch({ status: 'done' })
+
+          // Kick the pipeline without blocking the picker: full-frame derive,
+          // then extraction (501 when no key is configured — that is fine).
+          void fetch('/api/derive', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ itemId }),
+          })
+            .then((res) =>
+              res.ok
+                ? fetch('/api/extract', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ itemId }),
+                  })
+                : null,
+            )
+            .catch(() => {})
         } catch (error) {
           patch({
             status: 'failed',

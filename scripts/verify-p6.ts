@@ -104,6 +104,27 @@ async function main() {
   const batches = await db.select().from(intakeBatches).where(eq(intakeBatches.ownerId, ownerId))
   check('the batch is recorded', batches.length > 0, `${batches.length} batch(es)`)
 
+  // Corner correction: a tighter box must yield a smaller derivative — this is
+  // what the corner editor calls through /api/derive.
+  const item2 = await seedIntake(ownerId)
+  const pend2 = await listPendingIntake(ownerId)
+  const target = pend2[0]!.item
+  const tighter = await deriveFromOriginal(
+    target.originalUrl!,
+    { ownerId, key: intakePath(ownerId, target.id, '').replace(/\/$/, '') },
+    [
+      { x: 0.25, y: 0.25 },
+      { x: 0.75, y: 0.25 },
+      { x: 0.75, y: 0.75 },
+      { x: 0.25, y: 0.75 },
+    ],
+  )
+  check(
+    'corner correction re-derives smaller',
+    tighter.width < item2.width && tighter.height < item2.height,
+    `${item2.width}×${item2.height} → ${tighter.width}×${tighter.height}`,
+  )
+
   console.log(`\n${failures === 0 ? 'all checks passed' : `${failures} FAILED`}\n`)
   return failures
 }

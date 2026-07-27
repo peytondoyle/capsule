@@ -120,7 +120,7 @@ function Card({
         </button>
       </div>
 
-      <div className="flex justify-center py-6">
+      <div className="flex flex-col items-center py-6">
         <StickerDeck
           depth={Math.min(2, Math.max(0, remaining))}
           top={{
@@ -132,6 +132,12 @@ function Card({
             label: item.cutoutUrl ? undefined : 'not cut out yet',
           }}
         />
+        <a
+          href={`/accession/${item.id}`}
+          className="mn mt-4 text-[8.5px] tracking-[0.12em] text-mute-2 underline decoration-hair-strong underline-offset-4 uppercase"
+        >
+          Adjust the cut
+        </a>
       </div>
 
       <input type="hidden" name="title" value={suggested.title?.value ?? 'Untitled'} />

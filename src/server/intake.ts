@@ -57,6 +57,17 @@ export async function addIntakeItem(
   return row!
 }
 
+/** One item, owner-checked. The routes use this rather than scanning a list. */
+export async function getIntakeItem(ownerId: string, itemId: string) {
+  const [row] = await getDb()
+    .select({ item: intakeItems })
+    .from(intakeItems)
+    .innerJoin(intakeBatches, eq(intakeBatches.id, intakeItems.batchId))
+    .where(and(eq(intakeItems.id, itemId), eq(intakeBatches.ownerId, ownerId)))
+    .limit(1)
+  return row?.item ?? null
+}
+
 export async function listBatchItems(ownerId: string, batchId: string) {
   await assertBatchOwned(ownerId, batchId)
   return getDb()
