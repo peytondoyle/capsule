@@ -158,8 +158,13 @@ export async function listUnfiled(ownerId: string, limit = 50) {
  * The Ledger's spine. Objects with an unknown date are excluded rather than
  * dropped into a fabricated month — they live in Unfiled until someone says
  * when.
+ *
+ * The limit is a runaway guard, not pagination: silently truncating an archive
+ * would quietly hide a person's oldest objects, which is the one failure this
+ * app must never have. Real pagination lands with a visible affordance or not
+ * at all.
  */
-export async function listTimeline(ownerId: string, limit = 500) {
+export async function listTimeline(ownerId: string, limit = 5000) {
   return getDb()
     .select({
       object: objects,
