@@ -128,7 +128,30 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
     startY: number
     ox: number
     oy: number
+    z: number
   } | null>(null)
+
+  /**
+   * The next stacking value: one above everything currently on the board.
+   *
+   * The local override and the value sent to the server have to be the SAME
+   * number. A constant sentinel (z: 999 locally, `Date.now() % 100000`
+   * persisted) meant the second drag tied with the first — so a card could land
+   * behind the pile it was dropped on — and it also guaranteed the override
+   * never matched what the server stored, so it could never retire.
+   */
+  function nextZ() {
+    return Math.max(0, ...Object.values(positions).map((p) => p.z)) + 1
+  }
+
+  /** Abandons the in-flight drag and returns the card to the server's truth. */
+  function cancelDrag() {
+    const active = drag.current
+    drag.current = null
+    setDragId(null)
+    setHoverCluster(null)
+    if (active) setMoved(({ [active.id]: _dropped, ...rest }) => rest)
+  }
 
   function worldPoint(clientX: number, clientY: number) {
     return {
@@ -151,16 +174,18 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
         if (el) {
           const id = el.dataset.boardId!
           const pos = positions[id]!
+          const z = nextZ()
           drag.current = {
             id,
             startX: event.clientX,
             startY: event.clientY,
             ox: pos.x,
             oy: pos.y,
+            z,
           }
           setDragId(id)
-          // Top of the pile while it travels.
-          setPositions((p) => ({ ...p, [id]: { ...p[id]!, z: 999 } }))
+          // Top of the pile while it travels, and it stays there.
+          setPositions((p) => ({ ...p, [id]: { ...p[id]!, z } }))
         } else {
           pan.current = {
             startX: event.clientX,
@@ -192,15 +217,22 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
       }}
       onPointerUp={(event) => {
         if (drag.current) {
-          const { id } = drag.current
+          const { id, z } = drag.current
           const pos = positions[id]!
+          const settled = { x: Math.round(pos.x), y: Math.round(pos.y), z }
+          // Snap the override to the integers the server will store, or the
+          // sub-pixel difference keeps it alive past the revalidate that should
+          // have retired it.
+          setPositions((p) => ({ ...p, [id]: settled }))
           const point = worldPoint(event.clientX, event.clientY)
           const target = clusterAt(point.x, point.y)
           drag.current = null
           setDragId(null)
           setHoverCluster(null)
           startTransition(async () => {
-            await moveObjectAction(id, Math.round(pos.x), Math.round(pos.y), Date.now() % 100000)
+            // The same numbers the override holds, so the next revalidate
+            // matches it and retires it instead of pinning a stale position.
+            await moveObjectAction(id, settled.x, settled.y, settled.z)
             if (target) {
               await dropOnClusterAction(id, target.id)
               router.refresh()
@@ -211,6 +243,14 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
           pan.current = null
           saveViewport(viewport)
         }
+      }}
+      onPointerCancel={() => {
+        // Dragging a cutout's <img> starts a native HTML5 image drag, which
+        // releases pointer capture and fires pointercancel with no pointerup.
+        // Without this the drag ref stays populated for the rest of the
+        // session and every later pan drags that same object instead.
+        cancelDrag()
+        pan.current = null
       }}
       onWheel={(event) => {
         // Zoom about the pointer so the spot under the cursor stays put.

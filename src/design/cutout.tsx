@@ -116,6 +116,10 @@ export function Cutout({
             <img
               src={src}
               alt={alt ?? label ?? ''}
+              // The Board drags cutouts with pointer events. A native HTML5
+              // image drag hijacks that: it releases pointer capture and fires
+              // pointercancel instead of pointerup, so the drag never ends.
+              draggable={false}
               width={faceWidth}
               height={faceHeight}
               style={{
