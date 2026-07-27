@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { IBM_Plex_Mono, Inter } from 'next/font/google'
 import { ClerkProvider } from '@clerk/nextjs'
 
+import { Pwa } from '@/components/pwa'
 import { SITE } from '@/lib/site'
 import './globals.css'
 
@@ -22,10 +23,13 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: SITE.name,
   description: SITE.description,
+  appleWebApp: { capable: true, title: SITE.name, statusBarStyle: 'black-translucent' },
+  icons: { apple: '/icons/apple-touch-icon.png' },
 }
 
 export const viewport: Viewport = {
   viewportFit: 'cover',
+  interactiveWidget: 'resizes-content',
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#fbf9f5' },
     { media: '(prefers-color-scheme: dark)', color: '#151418' },
@@ -58,6 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         >
           {children}
+          <Pwa />
         </ClerkProvider>
       </body>
     </html>

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run build:sw && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -19,7 +19,8 @@
     "db:seed": "NODE_OPTIONS='--conditions=react-server' dotenv -e .env.local -- tsx scripts/seed.ts",
     "db:check": "dotenv -e .env.local -- drizzle-kit check",
     "db:verify": "NODE_OPTIONS='--conditions=react-server' dotenv -e .env.local -- tsx scripts/verify-p2.ts",
-    "db:verify:p6": "NODE_OPTIONS='--conditions=react-server' dotenv -e .env.local -- tsx scripts/verify-p6.ts"
+    "db:verify:p6": "NODE_OPTIONS='--conditions=react-server' dotenv -e .env.local -- tsx scripts/verify-p6.ts",
+    "build:sw": "esbuild src/sw.ts --bundle --minify --format=esm --outfile=public/sw.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -31,6 +32,7 @@
     "next": "16.2.12",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "serwist": "^9.5.12",
     "sharp": "^0.35.3"
   },
   "devDependencies": {
@@ -40,6 +42,7 @@
     "@types/react-dom": "^19.2.3",
     "dotenv-cli": "^11.0.0",
     "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.28.1",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.2.12",
     "tailwindcss": "^4.3.3",

@@ -1,16 +1,17 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { upload } from '@vercel/blob/client'
 
 import { Cutout, MonoLabel, SectionLabel } from '@/design'
 import { recordUploadAction, startBatchAction } from '@/server/actions/intake'
+import { enqueueUpload, listQueued, removeQueued } from '@/lib/offline-queue'
 
 type Queued = {
   key: string
   name: string
-  status: 'reading' | 'uploading' | 'done' | 'failed'
+  status: 'reading' | 'uploading' | 'done' | 'failed' | 'queued'
   previewUrl?: string
   taken?: string
   error?: string
@@ -117,16 +118,40 @@ export function Uploader() {
             )
             .catch(() => {})
         } catch (error) {
-          patch({
-            status: 'failed',
-            error: error instanceof Error ? error.message : 'upload failed',
-          })
+          if (!navigator.onLine) {
+            // No signal is not a failure — the basement case is the whole
+            // reason the queue exists. Park the bytes; drain on next visit.
+            await enqueueUpload(file, exif?.taken)
+            patch({ status: 'queued' })
+          } else {
+            patch({
+              status: 'failed',
+              error: error instanceof Error ? error.message : 'upload failed',
+            })
+          }
         }
       }),
     )
 
     startTransition(() => router.refresh())
   }
+
+  // Drain anything parked by an offline session.
+  useEffect(() => {
+    if (!navigator.onLine) return
+    void (async () => {
+      const queued = await listQueued()
+      if (queued.length === 0) return
+      const files = queued.map(
+        (item) => new File([item.bytes], item.name, { type: item.type }),
+      )
+      const list = new DataTransfer()
+      for (const file of files) list.items.add(file)
+      await handleFiles(list.files)
+      for (const item of queued) await removeQueued(item.key)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- drain once on mount
+  }, [])
 
   const done = items.filter((i) => i.status === 'done').length
   const failed = items.filter((i) => i.status === 'failed')
@@ -182,6 +207,8 @@ export function Uploader() {
                 <div className="mn mt-3 truncate text-[8.5px] tracking-[0.06em] uppercase text-mute-2">
                   {item.status === 'failed' ? (
                     <span className="text-accent">failed</span>
+                  ) : item.status === 'queued' ? (
+                    <span className="text-accent">waiting for signal</span>
                   ) : item.status === 'done' ? (
                     (item.taken ?? 'no date in exif')
                   ) : (
