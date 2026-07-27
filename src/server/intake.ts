@@ -81,6 +81,9 @@ export async function listBatchItems(ownerId: string, batchId: string) {
     .orderBy(asc(intakeItems.createdAt))
 }
 
+/** The statuses that put an item back in the filing queue. */
+const PENDING_STATUSES = ['uploaded', 'segmented', 'extracted', 'needs_review'] as const
+
 export async function updateIntakeItem(
   ownerId: string,
   itemId: string,
@@ -88,7 +91,12 @@ export async function updateIntakeItem(
 ) {
   const db = getDb()
   const [item] = await db
-    .select({ id: intakeItems.id, batchId: intakeItems.batchId })
+    .select({
+      id: intakeItems.id,
+      batchId: intakeItems.batchId,
+      objectId: intakeItems.objectId,
+      status: intakeItems.status,
+    })
     .from(intakeItems)
     .innerJoin(intakeBatches, eq(intakeBatches.id, intakeItems.batchId))
     .where(and(eq(intakeItems.id, itemId), eq(intakeBatches.ownerId, ownerId)))
@@ -96,6 +104,20 @@ export async function updateIntakeItem(
   if (!item) throw new Error('intake item not found')
 
   const { id: _id, batchId: _batchId, ...safe } = patch
+
+  // The derive and extract jobs are kicked off unawaited from the uploader, so
+  // one can land after the user has already filed the item from /queue. Letting
+  // it write a pending status back would resurrect a filed item into
+  // listPendingIntake, where fileIntakeItem early-returns `alreadyFiled`
+  // without repairing the status — the Filer reads the head of that list, so
+  // the item becomes a head that cannot be filed and the queue jams.
+  if (
+    item.objectId &&
+    safe.status &&
+    (PENDING_STATUSES as readonly string[]).includes(safe.status)
+  ) {
+    delete safe.status
+  }
   const [row] = await db
     .update(intakeItems)
     .set({ ...safe, updatedAt: new Date() })
@@ -130,6 +152,7 @@ export async function fileIntakeItem(
     .select({
       id: intakeItems.id,
       objectId: intakeItems.objectId,
+      status: intakeItems.status,
       originalUrl: intakeItems.originalUrl,
       cutoutUrl: intakeItems.cutoutUrl,
     })
@@ -138,7 +161,18 @@ export async function fileIntakeItem(
     .where(and(eq(intakeItems.id, itemId), eq(intakeBatches.ownerId, ownerId)))
     .limit(1)
   if (!item) throw new Error('intake item not found')
-  if (item.objectId) return { objectId: item.objectId, alreadyFiled: true as const }
+  if (item.objectId) {
+    // Self-heal: if anything did drift the status back to a pending value, an
+    // attempt to file is the moment to put it right, so the item leaves the
+    // queue instead of sitting at its head forever.
+    if ((PENDING_STATUSES as readonly string[]).includes(item.status)) {
+      await db
+        .update(intakeItems)
+        .set({ status: 'filed', updatedAt: new Date() })
+        .where(eq(intakeItems.id, itemId))
+    }
+    return { objectId: item.objectId, alreadyFiled: true as const }
+  }
 
   const object = await createObject(ownerId, {
     title: input.title,
@@ -192,7 +226,7 @@ export async function listPendingIntake(ownerId: string, limit = 50) {
     .where(
       and(
         eq(intakeBatches.ownerId, ownerId),
-        inArray(intakeItems.status, ['uploaded', 'segmented', 'extracted', 'needs_review']),
+        inArray(intakeItems.status, [...PENDING_STATUSES]),
       ),
     )
     .orderBy(asc(intakeItems.createdAt))
