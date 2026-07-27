@@ -23,8 +23,7 @@ started. Outstanding: the corner-drag UI, edge detection, and extraction needs a
 `/design` is the design-system gallery and the phase-3 gate — every primitive, every
 surface, every state. `?surface=ledger|board|cabinet` and `?section=…` isolate one at a time.
 **Read [docs/HANDOFF.md](docs/HANDOFF.md) first** — it has the live resource ids, what is and
-isn't verified, the two dashboard-only steps still outstanding, and the platform gotchas found
-in phase 1.
+isn't verified, and the platform gotchas found along the way.
 
 ## Stack
 
@@ -48,7 +47,7 @@ npm run build && npm run typecheck && npm run lint
 
 Database work: `db:generate` → `db:migrate` → `db:check`. `db:seed -- --owner <clerk id>`
 fills an archive with the design doc's own fixtures; `db:verify -- --owner <id>` runs the
-21 data-layer assertions. Both need the `react-server` condition, which their npm scripts set.
+24 data-layer assertions and `db:verify:p6` the 13 capture-pipeline ones. Both need the `react-server` condition, which their npm scripts set.
 
 ## Non-negotiable design rules
 
@@ -74,7 +73,10 @@ Violating these makes the app look wrong in a way no amount of polish recovers.
   `{id}.private.blob.vercel-storage.com` behind a bearer token. So originals and derivatives
   need two stores: `capsule-originals` (private) and `capsule-media` (public).
 - **Only one Blob store per project can use the default env var.** Connecting a second needs a
-  custom prefix, which Vercel CLI 56.5.0 cannot set — dashboard only.
+  custom prefix, which Vercel CLI 56.5.0 cannot set. Use the API:
+  `POST /v1/storage/stores/{id}/connections {projectId, envVarPrefix}`. It only targets
+  Production and Preview, and `?decrypt=true` on the env API returns ciphertext —
+  `vercel env pull --environment=preview` is what actually decrypts.
 - **Clerk instances default to `auth_password.required: true`**, which makes a passwordless
   flow uncompletable in a way that looks like a broken verify step (`missing_requirements`,
   `missingFields: ['password']`, *after* the email verifies). Disabled here; keep it that way.
