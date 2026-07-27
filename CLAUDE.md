@@ -16,7 +16,7 @@ Read it before touching anything structural.
 
 ## Status
 
-Phases 0–4 complete on branch `v2-rebuild`. Phase 5 next: object detail and editing.
+Phases 0–5 complete on branch `v2-rebuild`. Phase 6 next: the capture pipeline.
 
 `/design` is the design-system gallery and the phase-3 gate — every primitive, every
 surface, every state. `?surface=ledger|board|cabinet` and `?section=…` isolate one at a time.
@@ -99,6 +99,12 @@ owner filter is a cross-tenant leak.
 - Every data function takes `ownerId` as its **first parameter**. No exceptions.
 - Never import `drizzle-orm` or `@neondatabase/serverless` outside `src/server/`.
 - `auth.protect()` guards the resource (page / Server Action / Route Handler), not the proxy.
+- **A Server Action is a public HTTP endpoint.** Re-derive the owner from the session inside
+  every action (`requireOwner()` in `src/server/actions/`); never accept `ownerId` as an
+  argument. Any mutation that takes an object id calls `assertOwned` first — a caller passing
+  an id is not evidence they own it.
+- Authed pages call `getCurrentUser()`, not `auth()` alone: it also creates the `users` row,
+  and every foreign key points at it.
 
 ## Danger zones
 

@@ -9,9 +9,12 @@ import { and, eq, sql } from 'drizzle-orm'
 import { getDb } from '../src/server/db'
 import { objects } from '../src/server/db/schema'
 import {
+  assertOwned,
+  attachTag,
   countUnfiled,
   createObject,
   deleteObject,
+  detachTag,
   getObjectByLot,
   listTimeline,
   searchObjects,
@@ -157,10 +160,44 @@ async function main() {
   check('tags carry counts', tagRows.some((t) => t.objectCount > 0), `${tagRows.length} tags`)
 
   // --- tenant isolation ---------------------------------------------------
+  // With RLS gone this is the whole boundary, so it gets permanent assertions
+  // rather than a one-off manual check.
   const otherTimeline = await listTimeline('user_does_not_exist')
   check('another owner sees nothing', otherTimeline.length === 0)
   const otherLot = await getObjectByLot('user_does_not_exist', 1)
   check('getObjectByLot is owner-scoped', otherLot === null)
+
+  const victim = await getObjectByLot(ownerId, 1)
+  if (victim) {
+    let rejected = false
+    try {
+      await assertOwned('user_does_not_exist', victim.id)
+    } catch {
+      rejected = true
+    }
+    check('assertOwned rejects a foreign object id', rejected)
+
+    let writeRejected = false
+    try {
+      await attachTag('user_does_not_exist', victim.id, 'intruder')
+    } catch {
+      writeRejected = true
+    }
+    const leaked = (await getObjectByLot(ownerId, 1))!
+    check(
+      'a mutation with the wrong owner cannot write',
+      writeRejected,
+      `object still lot ${leaked.lotNo}`,
+    )
+
+    // and the legitimate path still works
+    const tag = await attachTag(ownerId, victim.id, 'verify-probe')
+    const withTag = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from object_tags where object_id = ${victim.id}`,
+    )
+    check('attachTag works for the real owner', (withTag.rows[0]?.n ?? 0) > 0)
+    if (tag) await detachTag(ownerId, victim.id, tag.id)
+  }
 
   console.log(`\n${failures === 0 ? 'all checks passed' : `${failures} FAILED`}\n`)
   return failures

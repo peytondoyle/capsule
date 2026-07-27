@@ -22,8 +22,8 @@ export function Inspector({
 }: {
   /** A <Cutout>, lit on its own slightly different ground. */
   hero?: ReactNode
-  /** OBJ-0147 on paper, LOT 0147 in gold. */
-  lot?: string
+  /** OBJ-0147 on paper, LOT 0147 in gold. A node, so it can be a link. */
+  lot?: ReactNode
   /** Right-aligned counterpart to the lot, e.g. "PAPER · 78 × 210 MM". */
   aside?: ReactNode
   title: ReactNode

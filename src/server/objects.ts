@@ -13,6 +13,8 @@ import {
   places,
   type ObjectKind,
 } from './db/schema'
+import { upsertPerson } from './people'
+import { upsertTag } from './taxonomy'
 
 type Silhouette = (typeof objects.$inferInsert)['silhouette']
 type CutStyle = (typeof objects.$inferInsert)['cutStyle']
@@ -291,4 +293,64 @@ export async function deleteObject(ownerId: string, objectId: string) {
   await getDb()
     .delete(objects)
     .where(and(eq(objects.id, objectId), eq(objects.ownerId, ownerId)))
+}
+
+/**
+ * Confirms an object belongs to the owner before anything mutates it.
+ *
+ * Every write path calls this. With RLS gone, a stray or forged object id is
+ * the whole attack surface, and "the caller passed us an id" is not evidence of
+ * anything.
+ */
+export async function assertOwned(ownerId: string, objectId: string) {
+  const [row] = await getDb()
+    .select({ id: objects.id, lotNo: objects.lotNo })
+    .from(objects)
+    .where(and(eq(objects.id, objectId), eq(objects.ownerId, ownerId)))
+    .limit(1)
+  if (!row) throw new Error('object not found')
+  return row
+}
+
+/** Attaches a tag by name, creating it for this owner if it is new. */
+export async function attachTag(ownerId: string, objectId: string, name: string) {
+  const trimmed = name.trim()
+  if (!trimmed) return null
+
+  await assertOwned(ownerId, objectId)
+  const tag = await upsertTag(ownerId, trimmed)
+
+  await getDb()
+    .insert(objectTags)
+    .values({ objectId, tagId: tag.id })
+    .onConflictDoNothing()
+
+  return tag
+}
+
+export async function detachTag(ownerId: string, objectId: string, tagId: string) {
+  await assertOwned(ownerId, objectId)
+  await getDb()
+    .delete(objectTags)
+    .where(and(eq(objectTags.objectId, objectId), eq(objectTags.tagId, tagId)))
+}
+
+/** Sets the giver. One primary giver per object in the UI, so this replaces. */
+export async function setGiver(ownerId: string, objectId: string, personName: string | null) {
+  await assertOwned(ownerId, objectId)
+  const db = getDb()
+
+  await db
+    .delete(objectPeople)
+    .where(and(eq(objectPeople.objectId, objectId), eq(objectPeople.role, 'given_by')))
+
+  if (!personName?.trim()) return null
+
+  const person = await upsertPerson(ownerId, personName)
+  await db
+    .insert(objectPeople)
+    .values({ objectId, personId: person.id, role: 'given_by' })
+    .onConflictDoNothing()
+
+  return person
 }

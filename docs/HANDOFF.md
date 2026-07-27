@@ -251,19 +251,50 @@ is deep-linkable; no client state at all on this screen.
   controls because their absence changes the balance of the header, but search lands in phase
   10 and accession in phase 6.
 
-## Start of phase 5
+## Phase 5, as built
 
-Object detail and editing — `/o/[lot]`, phone-first, plus making the inspector editable.
+`/o/[lot]` is the doc's phone screen, and stays a single column on desktop rather than
+inventing a layout the design never specified. `?edit=1` swaps the body for a plain
+`<form action={...}>` — no client JS on the save path at all.
 
-1. `getObjectDetail(ownerId, lotNo)` already returns faces, giver, tags, place and occasion.
-2. `updateObject` exists and strips `id`/`ownerId`/`lotNo` from any patch; wrap it in Server
-   Actions and `useOptimistic` rather than reaching for a client data library.
-3. The phone view needs `<SheetPhone>` (built) plus the "28 more from Dad / 2003 — 2024"
-   footer, which `getPersonStats` already computes.
-4. `<RetentionToggle>` takes an optional `onSelect`; passing one makes it a client component,
-   so keep the boundary at that component rather than the page.
-5. Faces have no images until phase 6, so detail work should keep rendering the hatch
-   placeholder as a first-class state, not an error state.
+- **Server Actions re-derive the owner from the session.** `requireOwner()` in
+  `src/server/actions/objects.ts`, and every mutation that takes an object id calls
+  `assertOwned` first. An action is a public endpoint; a caller passing an id is not evidence
+  they own it. `db:verify` now asserts that a mutation with the wrong owner throws and writes
+  nothing — 24 checks total.
+- Only three client components on these screens: `<Faces>` (the recto/verso dots),
+  `<Tags>` and `<RetentionControl>`. Both editors use `useOptimistic`, because a tag is a
+  two-word thought and waiting on a round trip to see it appear is the difference between
+  filing things and not bothering.
+- Two rules encoded in the actions, not the UI: switching to "Only here now" **clears**
+  `retained_location` (a shelf location for an object you no longer have is a lie), and
+  clearing the date also resets `received_precision` to `unknown`, or the object claims a day
+  it does not have and silently drops out of Unfiled.
+- Shared editors live in `src/components/`, not under a route folder, since `/timeline`'s
+  inspector uses the same two.
+
+Verified signed in, with every path confirmed by querying Neon directly: tag add from both
+the phone view and the inspector, the full field form (title, story, occasion — which created
+and linked a new occasion without duplicating the dictionary, while preserving the giver,
+place and date), and the retention toggle in both directions.
+
+## Start of phase 6
+
+The capture pipeline, and the real project inside the project. Ship it in the four stages the
+plan lays out, each degrading cleanly to manual:
+
+1. **Ingest** — client `upload()` straight to Blob, EXIF via `exifr` to prefill date and
+   place. Do this first; it is the only stage that must never lose data.
+2. **Corners** — ship the manual four-corner drag *before* the detector. `<ScanFrame>` is
+   built and already has the handles; the doc says "DRAG A CORNER TO CORRECT", which means a
+   mediocre detector is still a good experience.
+3. **Derivatives** — a Node-runtime route with sharp. This is when
+   `capsule-originals` needs connecting (see *Needs you*) and when `object_faces` URLs stop
+   being null, so re-check anything that assumed the hatch placeholder.
+4. **Extraction** — Claude vision with a structured-output tool, confidence per field. EXIF
+   wins over the model on date and GPS.
+
+`intake_batches` / `intake_items` are already in the schema with the right statuses.
 
 ## Things to clean up when convenient
 

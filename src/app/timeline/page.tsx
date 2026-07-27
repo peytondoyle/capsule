@@ -3,17 +3,17 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
 import {
-  Chip,
   Cutout,
   FieldRows,
   Inspector,
-  RetentionToggle,
   TiltLayer,
   aspectOf,
   cutoutWidth,
   type CutStyle,
   type Silhouette,
 } from '@/design'
+import { RetentionControl } from '@/components/retention-control'
+import { Tags } from '@/components/tag-editor'
 import { countLine, lotLabel, receivedLabel } from '@/lib/format'
 import { getArchiveSummary, getDefaultLot, getObjectDetail } from '@/server/archive'
 import { getCurrentUser } from '@/server/auth'
@@ -115,7 +115,11 @@ function Detail({
           interactive
         />
       }
-      lot={lotLabel(detail.lotNo)}
+      lot={
+        <Link href={`/o/${detail.lotNo}`} className="underline-offset-4 hover:underline">
+          {lotLabel(detail.lotNo)}
+        </Link>
+      }
       title={detail.title}
       rows={
         <FieldRows
@@ -132,16 +136,13 @@ function Detail({
         />
       }
       story={detail.story}
-      footer={
-        <div className="flex flex-wrap gap-1.5">
-          {detail.tags.map((tag) => (
-            <Chip key={tag.id}>{tag.name}</Chip>
-          ))}
-          <Chip variant="add">+ tag</Chip>
-        </div>
-      }
+      footer={<Tags objectId={detail.id} tags={detail.tags} />}
     >
-      <RetentionToggle value={detail.retention} location={detail.retainedLocation} />
+      <RetentionControl
+        objectId={detail.id}
+        value={detail.retention}
+        location={detail.retainedLocation}
+      />
     </Inspector>
   )
 }
