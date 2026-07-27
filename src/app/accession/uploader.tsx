@@ -44,8 +44,11 @@ export function Uploader() {
   const [, startTransition] = useTransition()
   const [batchId, setBatchId] = useState<string | null>(null)
 
-  async function handleFiles(files: FileList | null) {
-    if (!files?.length) return
+  /** Returns the names that actually reached Blob, so the drain knows what is
+   *  safe to delete. */
+  async function handleFiles(files: FileList | null): Promise<Set<string>> {
+    const landed = new Set<string>()
+    if (!files?.length) return landed
 
     let batch = batchId
     if (!batch) {
@@ -63,7 +66,7 @@ export function Uploader() {
             error: error instanceof Error ? error.message : 'could not start a batch',
           },
         ])
-        return
+        return landed
       }
     }
 
@@ -98,6 +101,7 @@ export function Uploader() {
           })
 
           const itemId = await recordUploadAction(batch!, blob.url, exif ?? undefined)
+          landed.add(file.name)
           patch({ status: 'done' })
 
           // Kick the pipeline without blocking the picker: full-frame derive,
@@ -134,6 +138,7 @@ export function Uploader() {
     )
 
     startTransition(() => router.refresh())
+    return landed
   }
 
   // Drain anything parked by an offline session.
@@ -142,13 +147,20 @@ export function Uploader() {
     void (async () => {
       const queued = await listQueued()
       if (queued.length === 0) return
-      const files = queued.map(
-        (item) => new File([item.bytes], item.name, { type: item.type }),
-      )
+
       const list = new DataTransfer()
-      for (const file of files) list.items.add(file)
-      await handleFiles(list.files)
-      for (const item of queued) await removeQueued(item.key)
+      for (const item of queued) {
+        list.items.add(new File([item.bytes], item.name, { type: item.type }))
+      }
+      const landed = await handleFiles(list.files)
+
+      // Only forget bytes that actually reached Blob. IndexedDB is the sole
+      // copy of an offline-captured photograph until the upload records, so
+      // deleting on a failed drain destroys the photograph for good — and
+      // handleFiles never throws, it reports failure in component state.
+      for (const item of queued) {
+        if (landed.has(item.name)) await removeQueued(item.key)
+      }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- drain once on mount
   }, [])
