@@ -9,6 +9,7 @@ import { getCurrentUser } from '@/server/auth'
 import { getPersonStats } from '@/server/people'
 import { saveFieldsAction } from '@/server/actions/objects'
 import { RetentionControl } from '@/components/retention-control'
+import { ShareButton } from '@/components/share-button'
 import { Tags } from '@/components/tag-editor'
 import { Faces } from './faces'
 
@@ -64,12 +65,15 @@ export default async function ObjectPage({
           <span className="mn text-[9px] tracking-[0.14em] text-mute-2">
             {lotLabel(detail.lotNo)}
           </span>
-          <Link
-            href={edit ? `/o/${lotNo}` : `/o/${lotNo}?edit=1`}
-            className="mn text-[9px] tracking-[0.1em] text-mute-2"
-          >
-            {edit ? 'DONE' : 'EDIT'}
-          </Link>
+          <span className="flex items-center gap-3">
+            {edit ? null : <ShareButton objectId={detail.id} />}
+            <Link
+              href={edit ? `/o/${lotNo}` : `/o/${lotNo}?edit=1`}
+              className="mn text-[9px] tracking-[0.1em] text-mute-2"
+            >
+              {edit ? 'DONE' : 'EDIT'}
+            </Link>
+          </span>
         </nav>
 
         {edit ? (
