@@ -49,10 +49,15 @@ npm run build && npm run typecheck && npm run lint
 
 Database work: `db:generate` → `db:migrate` → `db:check`. `db:seed -- --owner <clerk id>`
 fills an archive with the design doc's own fixtures; `db:verify -- --owner <id>` runs the
-41 data-layer assertions and `db:verify:p6` the 15 capture-pipeline ones. Both need the `react-server` condition, which their npm scripts set.
+33 data-layer assertions, `db:verify:p6` the 15 capture-pipeline ones, and
+`db:verify:upload` the 8 that cover the browser's client-upload path. All need the
+`react-server` condition, which their npm scripts set.
 
 **The proof gates write.** `db:verify` allocates a dozen lots to prove the counter is
-gapless; `db:verify:p6` uploads a photograph, files it as an object and deletes it again.
+gapless; `db:verify:p6` uploads a photograph, files it as an object and deletes it again —
+only ever the probe it created itself, never an item already waiting in someone's queue,
+because a filed object's `object_faces` URLs *are* its intake row's URLs and the Blob stores
+are shared.
 `.env.local` and Production share one Neon endpoint, so both ran against the live archive
 until the `verify` branch existed. `scripts/verify-db.ts` now repoints them at
 `DATABASE_URL_VERIFY` and **refuses to run** without it (`--allow-prod` overrides). Recreate
@@ -106,6 +111,13 @@ Violating these makes the app look wrong in a way no amount of polish recovers.
 - **Blob `access` on the client `upload()` must match the store the token belongs to.** A
   mismatch fails *silently*: the PUT is never issued, nothing is logged, and the UI hangs on
   "uploading" forever. Originals are `private`, derivatives `public`.
+- **`onBeforeGenerateToken` cannot rewrite the upload pathname.** `handleUpload` passes the
+  *client's* pathname to the callback and then writes that same value into the issued token
+  (`{...tokenOptions, pathname}` — @vercel/blob 2.6.1 `client.js`). Returning a `pathname` is
+  a no-op, and it isn't in the callback's declared return type, so TS never objects. Ownership
+  has to be enforced by **refusing** a pathname outside the owner's prefix, not by correcting
+  it — see `src/lib/blob-path.ts` and the `db:verify:upload` gate, which exists because
+  `db:verify:p6` seeds through the server-side `put()` and never exercised the browser path.
 - **Derivatives are not alpha-masked.** The design system already clips every cutout with CSS,
   so baking the silhouette would duplicate it and make the stored image wrong the moment
   someone changes the cut style.
