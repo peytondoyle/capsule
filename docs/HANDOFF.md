@@ -1,10 +1,14 @@
-# Handoff — 2026-07-27
+# Handoff — 2026-07-27 (evening)
 
 Branch: **`v2-rebuild`** (not merged to `master`). Working tree committed.
 Plan: [CAPSULE-V2-PLAN.md](CAPSULE-V2-PLAN.md) · Rules: [../CLAUDE.md](../CLAUDE.md)
 
-**Phases 0–5 complete.** Phase 6 (capture) is in progress. One optional item left under
-*Needs you* — the Clerk webhook, which nothing depends on.
+**All 12 phases built; production is live** (`vercel ls capsule` for the URL — Vercel
+Authentication still fronts it). Full loop verified: sign in → upload → auto derive+extract →
+queue → file → all three surfaces → share link for a signed-out visitor. Extraction verified
+on prod at 95% per field. One optional item left under *Needs you* — the Clerk webhook,
+which nothing depends on. Before real use: reseed onto your own account, promote a custom
+domain, and decide when to switch Clerk off dev keys.
 
 Before doing UI work, reseed onto your own account so the Ledger is not empty:
 sign in once, then `npm run db:seed -- --owner <your clerk user id>`. The archive currently

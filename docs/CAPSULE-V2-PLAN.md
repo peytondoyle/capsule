@@ -573,7 +573,7 @@ Each phase ends with `npm run build && npm run typecheck` green, and its own sta
 | 9 | **Cabinet** ◐ | Shelves + shelf light, lot numbering, gold system, 344px panel, ?lot= selection, implicit Elsewhere + dimmed Unattributed shelves | ✅ screenshotted against `1c`: shelf light + bloom, gold lots, GIVEN BY/PROVENANCE, glowing retention dot. Deferred: CATALOGUE/MAP tabs, verso flip animation, dark scan chrome (accession is shared) |
 | 10 | **Index screens** ◐ | People / Places / Occasions / live search on `?q=` from both the Ledger toolbar and the Cabinet box | ✅ search verified: lot no., person, place, occasion and free text; person page shows the year-range runs. Deferred: `CATALOGUE` table view |
 | 11 | **PWA** ◐ | Manifest w/ share target + shortcuts, generated icon set, esbuild-compiled Serwist worker (option C — Turbopack stays), offline IDB upload queue, background-sync for derive/extract, app badging, apple metadata | ✅ manifest/worker/icons all serve; worker registers in prod only. Deferred: install affordance UI, iOS splash images, web push, real-device airplane test |
-| 12 | **Share, polish, ship** | `/s/[token]` public pages (PPR), reduced-motion audit, keyboard nav, focus rings in all 3 surfaces, prod deploy + domain | Prod deploy; share link opens for a signed-out visitor; axe clean |
+| 12 | **Share, polish, ship** ◐ | `/s/[token]` public pages, share button w/ navigator.share, prod deploy | ✅ share link verified signed-out (no lot/location/tags leak; bad token 404s); prod live. Deferred: custom domain, full axe/keyboard audit |
 
 ---
 

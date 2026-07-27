@@ -16,9 +16,11 @@ Read it before touching anything structural.
 
 ## Status
 
-Phases 0–6 complete on branch `v2-rebuild`; 7 (queue) and 8 (Board) built with core flows
-verified. Remaining: Board extras (CLUSTER BY, filters, phone sheet), Cabinet (P9), index
-screens (P10), PWA (P11), share pages (P12).
+**All 12 phases built** on branch `v2-rebuild`; production is live. The archive works end to
+end: sign in → photograph → cut → file → Ledger/Board/Cabinet → share. Each phase's deferred
+items are marked ◐ in the plan's phase table — the notable ones are OpenCV auto-detect,
+CLUSTER BY + the Board phone sheet, the CATALOGUE/MAP tabs, install/splash/push PWA polish,
+a custom domain, and the full accessibility audit.
 
 `/design` is the design-system gallery and the phase-3 gate — every primitive, every
 surface, every state. `?surface=ledger|board|cabinet` and `?section=…` isolate one at a time.
