@@ -71,7 +71,9 @@ export async function extractFromImage(
 
   const image = await fetch(imageUrl, { cache: 'no-store' })
   if (!image.ok) throw new Error(`could not read the cutout (${image.status})`)
-  const bytes = Buffer.from(await image.arrayBuffer()).toString('base64')
+  // bytes() rather than arrayBuffer() — see derive.ts; the same
+  // SharedArrayBuffer rejection applies here.
+  const bytes = Buffer.from(await image.bytes()).toString('base64')
   const mediaType = (image.headers.get('content-type') ?? 'image/webp') as
     | 'image/webp'
     | 'image/jpeg'
