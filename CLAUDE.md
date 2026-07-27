@@ -16,9 +16,9 @@ Read it before touching anything structural.
 
 ## Status
 
-Phases 0–5 complete on branch `v2-rebuild`; phase 6 (capture) mostly done and phase 7 (queue)
-started. Outstanding: the corner-drag UI, edge detection, and extraction needs an
-`ANTHROPIC_API_KEY` before it can be verified.
+Phases 0–6 complete on branch `v2-rebuild`; 7 (queue) and 8 (Board) built with core flows
+verified. Remaining: Board extras (CLUSTER BY, filters, phone sheet), Cabinet (P9), index
+screens (P10), PWA (P11), share pages (P12).
 
 `/design` is the design-system gallery and the phase-3 gate — every primitive, every
 surface, every state. `?surface=ledger|board|cabinet` and `?section=…` isolate one at a time.
