@@ -4,10 +4,9 @@ import { getDb } from '../src/server/db'
 import { intakeBatches, intakeItems, objectFaces, objects } from '../src/server/db/schema'
 import { addIntakeItem, createBatch, fileIntakeItem, listPendingIntake } from '../src/server/intake'
 import { deleteObject } from '../src/server/objects'
-import { deleteBlobs } from '../src/server/blob'
+import { deleteBlobs, intakePath, originalsToken } from '../src/server/blob'
 import { upsertPerson } from '../src/server/people'
 import { deriveFromOriginal } from '../src/server/derive'
-import { intakePath, originalsToken } from '../src/server/blob'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
 import { requireVerificationBranch } from './verify-db'
@@ -16,9 +15,26 @@ import { requireVerificationBranch } from './verify-db'
 requireVerificationBranch()
 
 /**
+ * Everything this run created, so cleanup can delete exactly that and nothing
+ * else.
+ *
+ * The Neon `verify` branch isolates rows, but **the Blob stores are not
+ * branched** — a del() here hits the same bytes production serves. So the sweep
+ * may never be "everything belonging to this owner": a filed object's
+ * object_faces URLs are the *same strings* the intake row holds (see
+ * fileIntakeItem), so deleting an owner's intake blobs wholesale destroys the
+ * images of objects they already filed. Track ids; delete those.
+ */
+const created = { batchIds: [] as string[], itemIds: [] as string[], objectIds: [] as string[] }
+
+/**
  * Makes its own intake item so the run is deterministic and repeatable —
  * driving it through the browser made the proof depend on click choreography
  * rather than on the pipeline.
+ *
+ * Never adopts an item that is already waiting: those are a real person's
+ * photographs sitting in /queue, and this script files and then deletes what it
+ * is given.
  */
 async function seedIntake(ownerId: string) {
   const bytes = await sharp({
@@ -28,6 +44,8 @@ async function seedIntake(ownerId: string) {
     .toBuffer()
 
   const batch = await createBatch(ownerId, 'files')
+  created.batchIds.push(batch.id)
+
   const original = await put(intakePath(ownerId, `probe-${Date.now()}`, 'original.jpg'), bytes, {
     access: 'private',
     token: originalsToken(),
@@ -37,6 +55,8 @@ async function seedIntake(ownerId: string) {
   })
 
   const item = await addIntakeItem(ownerId, batch.id, { originalUrl: original.url })
+  created.itemIds.push(item.id)
+
   const derived = await deriveFromOriginal(
     original.url,
     { ownerId, key: intakePath(ownerId, item.id, '').replace(/\/$/, '') },
@@ -51,7 +71,33 @@ async function seedIntake(ownerId: string) {
     .update(intakeItems)
     .set({ cutoutUrl: derived.cutoutUrl, status: 'segmented' })
     .where(eq(intakeItems.id, item.id))
-  return derived
+
+  return { derived, itemId: item.id, batchId: batch.id }
+}
+
+/** Deletes exactly what this run made, whether or not the run succeeded. */
+async function cleanup(ownerId: string) {
+  for (const objectId of created.objectIds) {
+    try {
+      await deleteObject(ownerId, objectId)
+    } catch {
+      // already gone
+    }
+  }
+  if (created.itemIds.length) {
+    const rows = await getDb()
+      .select({ originalUrl: intakeItems.originalUrl, cutoutUrl: intakeItems.cutoutUrl })
+      .from(intakeItems)
+      .where(inArray(intakeItems.id, created.itemIds))
+    await deleteBlobs({
+      originals: rows.map((r) => r.originalUrl),
+      media: rows.map((r) => r.cutoutUrl),
+    })
+  }
+  if (created.batchIds.length) {
+    // intake_items cascades from the batch.
+    await getDb().delete(intakeBatches).where(inArray(intakeBatches.id, created.batchIds))
+  }
 }
 
 let failures = 0
@@ -60,24 +106,41 @@ const check = (label: string, pass: boolean, detail = '') => {
   if (!pass) failures++
 }
 
-async function main() {
-  // `indexOf(...) + 1` lands on argv[0] — the node binary — when the flag is
-  // absent, which reaches the DB as an owner id and fails on a foreign key
-  // instead of saying what is wrong.
+/**
+ * `indexOf(...) + 1` lands on argv[0] — the node binary — when the flag is
+ * absent, which reaches the DB as an owner id and fails on a foreign key
+ * instead of saying what is wrong.
+ */
+function owner() {
   const flag = process.argv.indexOf('--owner')
-  const ownerId = flag === -1 ? 'user_seed_dev' : process.argv[flag + 1]
-  if (!ownerId) throw new Error('--owner needs a value')
+  if (flag === -1) return 'user_seed_dev'
+  const value = process.argv[flag + 1]
+  if (!value) throw new Error('--owner needs a value')
+  return value
+}
+
+async function main() {
+  const ownerId = owner()
   const db = getDb()
 
-  let pending = await listPendingIntake(ownerId)
-  if (pending.length === 0) {
-    const derived = await seedIntake(ownerId)
-    check('derive produced a cutout', derived.width > 0, `${derived.width}×${derived.height}, ${derived.bytes}B`)
-    pending = await listPendingIntake(ownerId)
-  }
-  check('an intake item is waiting', pending.length > 0, `${pending.length} pending`)
-  const item = pending[0]!.item
-  check('it has a private original', (item.originalUrl ?? '').includes('.private.'), item.originalUrl ?? '')
+  const before = await listPendingIntake(ownerId)
+
+  const seeded = await seedIntake(ownerId)
+  check(
+    'derive produced a cutout',
+    seeded.derived.width > 0,
+    `${seeded.derived.width}×${seeded.derived.height}, ${seeded.derived.bytes}B`,
+  )
+
+  const pending = await listPendingIntake(ownerId)
+  const mine = pending.find((row) => row.item.id === seeded.itemId)
+  check('the probe is waiting', Boolean(mine), `${pending.length} pending`)
+  const item = mine!.item
+  check(
+    'it has a private original',
+    (item.originalUrl ?? '').includes('.private.'),
+    item.originalUrl ?? '',
+  )
   check('it has a public cutout', (item.cutoutUrl ?? '').includes('.public.'), item.cutoutUrl ?? '')
 
   const dad = await upsertPerson(ownerId, 'Dad')
@@ -88,6 +151,7 @@ async function main() {
     story: 'Filed straight from the queue.',
     personIds: [dad.id],
   })
+  created.objectIds.push(filed.objectId)
   check('it became an object', !filed.alreadyFiled && Boolean(filed.objectId), `lot ${filed.lotNo}`)
 
   const [object] = await db.select().from(objects).where(eq(objects.id, filed.objectId))
@@ -95,8 +159,12 @@ async function main() {
   check('date precision set from the date', object?.receivedPrecision === 'day')
 
   const faces = await db.select().from(objectFaces).where(eq(objectFaces.objectId, filed.objectId))
-  check('a recto face carries both URLs',
-    faces.length === 1 && (faces[0]!.originalUrl ?? '').includes('.private.') && (faces[0]!.cutoutUrl ?? '').includes('.public.'))
+  check(
+    'a recto face carries both URLs',
+    faces.length === 1 &&
+      (faces[0]!.originalUrl ?? '').includes('.private.') &&
+      (faces[0]!.cutoutUrl ?? '').includes('.public.'),
+  )
 
   const [after] = await db.select().from(intakeItems).where(eq(intakeItems.id, item.id))
   check('the intake item is marked filed', after?.status === 'filed' && after?.objectId === filed.objectId)
@@ -116,13 +184,15 @@ async function main() {
   check('the batch is recorded', batches.length > 0, `${batches.length} batch(es)`)
 
   // Corner correction: a tighter box must yield a smaller derivative — this is
-  // what the corner editor calls through /api/derive.
-  const item2 = await seedIntake(ownerId)
-  const pend2 = await listPendingIntake(ownerId)
-  const target = pend2[0]!.item
+  // what the corner editor calls through /api/derive. Derive against the probe
+  // this run seeded, by id: listPendingIntake orders oldest first, so taking
+  // its head would compare a tight crop of somebody's 4032×3024 phone photo
+  // against a 640×260 probe and report a failure that is not one.
+  const second = await seedIntake(ownerId)
+  const [target] = await db.select().from(intakeItems).where(eq(intakeItems.id, second.itemId))
   const tighter = await deriveFromOriginal(
-    target.originalUrl!,
-    { ownerId, key: intakePath(ownerId, target.id, '').replace(/\/$/, '') },
+    target!.originalUrl!,
+    { ownerId, key: intakePath(ownerId, target!.id, '').replace(/\/$/, '') },
     [
       { x: 0.25, y: 0.25 },
       { x: 0.75, y: 0.25 },
@@ -132,36 +202,28 @@ async function main() {
   )
   check(
     'corner correction re-derives smaller',
-    tighter.width < item2.width && tighter.height < item2.height,
-    `${item2.width}×${item2.height} → ${tighter.width}×${tighter.height}`,
+    tighter.width < second.derived.width && tighter.height < second.derived.height,
+    `${second.derived.width}×${second.derived.height} → ${tighter.width}×${tighter.height}`,
   )
 
-  // Everything above wrote to the same database the fixtures live in. Leaving
-  // the probe behind put a second "Boarding pass" in the archive, which shadowed
-  // the seed fixture in verify-p2 and pushed the lot counter past the fixture
-  // range — a verification script is not allowed to change what it verifies.
-  await deleteObject(ownerId, filed.objectId)
-  const mine = await db
-    .select({ id: intakeBatches.id })
-    .from(intakeBatches)
-    .where(eq(intakeBatches.ownerId, ownerId))
-  if (mine.length) {
-    const ids = mine.map((b) => b.id)
-    const leftovers = await db
-      .select({ originalUrl: intakeItems.originalUrl, cutoutUrl: intakeItems.cutoutUrl })
-      .from(intakeItems)
-      .where(inArray(intakeItems.batchId, ids))
-    await deleteBlobs({
-      originals: leftovers.map((i) => i.originalUrl),
-      media: leftovers.map((i) => i.cutoutUrl),
-    })
-    // intake_items cascades from the batch.
-    await db.delete(intakeBatches).where(inArray(intakeBatches.id, ids))
-  }
-  check('the run left nothing behind', (await listPendingIntake(ownerId)).length === 0)
+  await cleanup(ownerId)
+  const restored = await listPendingIntake(ownerId)
+  check(
+    'the run left nothing behind',
+    restored.length === before.length,
+    `${before.length} pending before, ${restored.length} after`,
+  )
 
   console.log(`\n${failures === 0 ? 'all checks passed' : `${failures} FAILED`}\n`)
   return failures
 }
 
-main().then((n) => process.exit(n ? 1 : 0), (e) => { console.error(e); process.exit(1) })
+main().then(
+  (n) => process.exit(n ? 1 : 0),
+  async (e) => {
+    // A throw partway through still leaves a probe object and its blobs.
+    console.error(e)
+    await cleanup(owner()).catch(() => {})
+    process.exit(1)
+  },
+)
