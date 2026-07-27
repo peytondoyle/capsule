@@ -58,9 +58,18 @@ export default async function CabinetPage({
             </Link>
           ))}
         </nav>
-        <div className="mn ml-auto flex h-[30px] min-w-[220px] items-center gap-2 rounded-[7px] border border-hair-strong px-[13px] text-[10.5px] text-mute-3">
-          <span className="opacity-55">⌕</span>lot no., person, place
-        </div>
+        <form
+          action="/timeline"
+          className="mn ml-auto flex h-[30px] min-w-[220px] items-center gap-2 rounded-[7px] border border-hair-strong px-[13px] text-[10.5px]"
+        >
+          <span className="opacity-55">⌕</span>
+          <input
+            type="search"
+            name="q"
+            placeholder="lot no., person, place"
+            className="w-full bg-transparent outline-none placeholder:text-mute-3"
+          />
+        </form>
         <Link
           href="/accession"
           className="mn rounded-[7px] px-[13px] py-[7px] text-[9px] font-semibold tracking-[0.11em]"

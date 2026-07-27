@@ -136,7 +136,7 @@ async function main() {
   const found = await searchObjects(ownerId, 'lisbon')
   check('text search hits title or story', found.length > 0, `${found.length} rows`)
   const byNumber = await searchObjects(ownerId, 'OBJ-0001')
-  check('search resolves a lot number', byNumber.some((o) => o.lotNo === 1))
+  check('search resolves a lot number', byNumber.some((o) => o.object.lotNo === 1))
   const byPerson = await searchObjects(ownerId, 'grandma')
   check('search reaches the giver', byPerson.length > 0, `${byPerson.length} rows`)
   const byPlace = await searchObjects(ownerId, 'fillmore')

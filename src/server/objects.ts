@@ -231,8 +231,24 @@ export async function searchObjects(ownerId: string, query: string, limit = 40) 
   const asLot = Number.parseInt(trimmed.replace(/^\D+/, ''), 10)
 
   return getDb()
-    .select()
+    .select({
+      object: objects,
+      recto: {
+        id: objectFaces.id,
+        cutoutUrl: objectFaces.cutoutUrl,
+        thumbUrl: objectFaces.thumbUrl,
+        width: objectFaces.width,
+        height: objectFaces.height,
+      },
+      giver: sql<string | null>`(
+        select p.name from ${objectPeople} op
+        join ${people} p on p.id = op.person_id
+        where op.object_id = ${objects.id} and op.role = 'given_by'
+        order by p.name limit 1
+      )`,
+    })
     .from(objects)
+    .leftJoin(objectFaces, and(eq(objectFaces.objectId, objects.id), eq(objectFaces.role, 'recto')))
     .where(
       and(
         eq(objects.ownerId, ownerId),
@@ -251,10 +267,15 @@ export async function searchObjects(ownerId: string, query: string, limit = 40) 
             where ${places.id} = ${objects.placeId}
               and ${places.name} ilike ${like}
           )`,
+          sql`exists (
+            select 1 from occasions oc
+            where oc.id = ${objects.occasionId}
+              and oc.name ilike ${like}
+          )`,
         ),
       ),
     )
-    .orderBy(desc(objects.receivedAt))
+    .orderBy(sql`${objects.receivedAt} desc nulls last`)
     .limit(limit)
 }
 

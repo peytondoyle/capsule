@@ -3,7 +3,7 @@ import 'server-only'
 import { and, count, desc, eq, sql } from 'drizzle-orm'
 
 import { getDb } from './db'
-import { objectPeople, objects, people } from './db/schema'
+import { objectFaces, objectPeople, objects, people } from './db/schema'
 
 function initialsFrom(name: string) {
   return name
@@ -73,5 +73,33 @@ export async function getPersonStats(ownerId: string, personId: string) {
     .where(and(eq(people.ownerId, ownerId), eq(people.id, personId)))
     .groupBy(people.id)
 
+  return row ?? null
+}
+
+/** A person's objects, newest first, with recto faces — the /people/[id] runs. */
+export async function listObjectsByPerson(ownerId: string, personId: string) {
+  return getDb()
+    .select({
+      object: objects,
+      recto: {
+        id: objectFaces.id,
+        cutoutUrl: objectFaces.cutoutUrl,
+        width: objectFaces.width,
+        height: objectFaces.height,
+      },
+    })
+    .from(objectPeople)
+    .innerJoin(objects, and(eq(objects.id, objectPeople.objectId), eq(objects.ownerId, ownerId)))
+    .leftJoin(objectFaces, and(eq(objectFaces.objectId, objects.id), eq(objectFaces.role, 'recto')))
+    .where(and(eq(objectPeople.personId, personId), eq(objectPeople.role, 'given_by')))
+    .orderBy(sql`${objects.receivedAt} desc nulls last`, desc(objects.createdAt))
+}
+
+export async function getPerson(ownerId: string, personId: string) {
+  const [row] = await getDb()
+    .select()
+    .from(people)
+    .where(and(eq(people.ownerId, ownerId), eq(people.id, personId)))
+    .limit(1)
   return row ?? null
 }
