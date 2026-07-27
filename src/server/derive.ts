@@ -8,6 +8,19 @@ import { mediaToken, originalsToken } from './blob'
 export type Corner = { x: number; y: number }
 
 /**
+ * On Vercel, sharp hands back Buffers backed by a SharedArrayBuffer (it runs
+ * with worker threads there), and undici refuses SAB-backed views as request
+ * bodies — so putting sharp output straight into `put()` throws
+ * "ArrayBuffer: SharedArrayBuffer is not allowed" in production only. Copy into
+ * a pool-allocated plain Buffer first.
+ */
+function plain(buffer: Buffer) {
+  const copy = Buffer.allocUnsafe(buffer.length)
+  buffer.copy(copy)
+  return copy
+}
+
+/**
  * Turns an original into the derivatives the app actually renders.
  *
  * Deliberately does **not** bake an alpha silhouette. The design system already
@@ -68,8 +81,8 @@ export async function deriveFromOriginal(
   const shared = { access: 'public' as const, token, addRandomSuffix: false, allowOverwrite: true }
 
   const [cutoutBlob, thumbBlob] = await Promise.all([
-    put(`${target.key}/cutout.webp`, cutout.data, { ...shared, contentType: 'image/webp' }),
-    put(`${target.key}/t640.webp`, thumb, { ...shared, contentType: 'image/webp' }),
+    put(`${target.key}/cutout.webp`, plain(cutout.data), { ...shared, contentType: 'image/webp' }),
+    put(`${target.key}/t640.webp`, plain(thumb), { ...shared, contentType: 'image/webp' }),
   ])
 
   return {
