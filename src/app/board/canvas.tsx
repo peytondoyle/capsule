@@ -70,9 +70,47 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
     }
     return { x: 0, y: 0, scale: 0.62 }
   })
-  const [positions, setPositions] = useState(() =>
-    Object.fromEntries(items.map((item) => [item.id, { x: item.x, y: item.y, z: item.z }])),
+  /**
+   * Drag overrides, not a copy of the board.
+   *
+   * The server's coordinates are the truth; this only holds the one card
+   * currently under the finger, so it tracks the pointer instead of waiting on
+   * a round trip. Seeding state from props once instead meant TIDY, SCATTER and
+   * CLUSTER BY all appeared to do nothing — their new coordinates arrived in
+   * props that state ignored — and a newly accessioned object had no entry at
+   * all, which threw on render.
+   *
+   * Each override remembers the server value it was taken against, so when a
+   * revalidate delivers different coordinates the override is simply no longer
+   * current and drops out. No effect, no reconciliation pass.
+   */
+  type Point = { x: number; y: number; z: number }
+  const [moved, setMoved] = useState<Record<string, { base: Point; pos: Point }>>({})
+  const positions: Record<string, Point> = Object.fromEntries(
+    items.map((item) => {
+      const server = { x: item.x, y: item.y, z: item.z }
+      const override = moved[item.id]
+      const current =
+        override &&
+        override.base.x === server.x &&
+        override.base.y === server.y &&
+        override.base.z === server.z
+      return [item.id, current ? override.pos : server]
+    }),
   )
+  const setPositions = (update: (current: Record<string, Point>) => Record<string, Point>) =>
+    setMoved(() => {
+      const next = update(positions)
+      const bases = new Map(items.map((item) => [item.id, { x: item.x, y: item.y, z: item.z }]))
+      return Object.fromEntries(
+        Object.entries(next).flatMap(([id, pos]) => {
+          const base = bases.get(id)
+          if (!base) return []
+          const same = base.x === pos.x && base.y === pos.y && base.z === pos.z
+          return same ? [] : [[id, { base, pos }] as const]
+        }),
+      )
+    })
   const [dragId, setDragId] = useState<string | null>(null)
   const [hoverCluster, setHoverCluster] = useState<string | null>(null)
 
