@@ -101,6 +101,15 @@ export function assertOwnedOriginalUrl(ownerId: string, url: string) {
     throw new Error('original url is not on the originals store')
   }
 
+  // `..` is normalised away by the URL parser before this check and before
+  // fetch, so it cannot escape the prefix — but `%2f` is not. `..%2f..%2f`
+  // leaves `pathname` looking prefixed while `href` still carries the encoded
+  // separators to whatever decodes them downstream. Nothing this app writes has
+  // a percent in its key (see safeUploadName), so refuse them outright.
+  if (parsed.pathname.includes('%')) {
+    throw new Error('original url has an encoded path')
+  }
+
   // `intake/{ownerId}/…` is what /api/blob/upload and the share target write.
   const prefix = `/intake/${ownerId}/`
   if (!parsed.pathname.startsWith(prefix)) {

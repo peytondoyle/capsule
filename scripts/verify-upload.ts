@@ -112,6 +112,35 @@ async function main() {
   }
   check('and would reject it for anyone else', rejected)
 
+  // `..` is normalised out before the prefix check; `%2f` is not, and would
+  // leave the pathname looking prefixed while href still carried the escape.
+  const storeHost = `${storeId}.private.blob.vercel-storage.com`
+  for (const [label, bad] of [
+    ['a percent-encoded traversal is rejected', `intake/${OWNER}/..%2f..%2fintake%2f${OTHER}%2fx.jpg`],
+    ['a plain traversal is rejected', `intake/${OWNER}/../${OTHER}/x.jpg`],
+    ['the public store is rejected', null],
+  ] as const) {
+    const candidate =
+      bad === null
+        ? `https://${storeId}.public.blob.vercel-storage.com/intake/${OWNER}/x.jpg`
+        : `https://${storeHost}/${bad}`
+    let refused = false
+    try {
+      assertOwnedOriginalUrl(OWNER, candidate)
+    } catch {
+      refused = true
+    }
+    check(label, refused)
+  }
+
+  let foreignHost = false
+  try {
+    assertOwnedOriginalUrl(OWNER, `https://${storeHost}@evil.example/intake/${OWNER}/x.jpg`)
+  } catch {
+    foreignHost = true
+  }
+  check('a userinfo-smuggled host is rejected', foreignHost)
+
   console.log(`\n${failures === 0 ? 'all checks passed' : `${failures} FAILED`}\n`)
   return failures
 }
