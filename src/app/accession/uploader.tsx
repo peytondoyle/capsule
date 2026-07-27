@@ -63,6 +63,14 @@ export function Uploader({ ownerId }: { ownerId: string }) {
     const landed = new Set<number>()
     if (!files?.length) return landed
 
+    // Snapshot before the first await. `files` is the input's *live* FileList,
+    // and the onChange handler clears `event.target.value` the moment this
+    // function yields — which it does on `startBatchAction` for the very first
+    // pick of a session. Reading it afterwards found an empty list, so the
+    // first "+ ADD PHOTOGRAPHS" of every session silently uploaded nothing and
+    // the second one worked.
+    const picked = Array.from(files)
+
     let batch = batchId
     if (!batch) {
       try {
@@ -83,7 +91,7 @@ export function Uploader({ ownerId }: { ownerId: string }) {
       }
     }
 
-    const queued: Queued[] = Array.from(files).map((file, i) => ({
+    const queued: Queued[] = picked.map((file, i) => ({
       key: `${Date.now()}-${i}-${file.name}`,
       name: file.name,
       status: 'reading',
@@ -91,7 +99,7 @@ export function Uploader({ ownerId }: { ownerId: string }) {
     setItems((current) => [...current, ...queued])
 
     await Promise.all(
-      Array.from(files).map(async (file, i) => {
+      picked.map(async (file, i) => {
         const key = queued[i]!.key
         const patch = (next: Partial<Queued>) =>
           setItems((current) =>
