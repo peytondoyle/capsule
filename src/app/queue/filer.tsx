@@ -30,8 +30,11 @@ export function Filer({
   people: string[]
   places: string[]
 }) {
-  const [index, setIndex] = useState(0)
-  const item = items[index]
+  // Always the head of the list. Filing or skipping revalidates /queue and the
+  // handled item drops out of listPendingIntake, so the array shortening *is*
+  // the advance — incrementing an index on top of that skipped every other
+  // item and ended the queue early.
+  const item = items[0]
 
   if (!item) {
     return (
@@ -55,9 +58,7 @@ export function Filer({
       item={item}
       people={people}
       places={places}
-      position={index + 1}
-      total={items.length}
-      onDone={() => setIndex((i) => i + 1)}
+      remaining={items.length}
     />
   )
 }
@@ -66,16 +67,12 @@ function Card({
   item,
   people,
   places,
-  position,
-  total,
-  onDone,
+  remaining,
 }: {
   item: Item
   people: string[]
   places: string[]
-  position: number
-  total: number
-  onDone: () => void
+  remaining: number
 }) {
   const router = useRouter()
   const [busy, startTransition] = useTransition()
@@ -84,12 +81,10 @@ function Card({
   const [namingPerson, setNamingPerson] = useState(false)
 
   const suggested = item.suggestions ?? {}
-  const remaining = total - position
 
   const run = (fn: () => Promise<unknown>) =>
     startTransition(async () => {
       await fn()
-      onDone()
       router.refresh()
     })
 
@@ -108,7 +103,7 @@ function Card({
           Done
         </a>
         <span className="mn text-[9px] tracking-[0.14em] text-mute-3">
-          {position} OF {total} UNFILED
+          {remaining} UNFILED
         </span>
         <button
           type="button"
@@ -122,7 +117,7 @@ function Card({
 
       <div className="flex flex-col items-center py-6">
         <StickerDeck
-          depth={Math.min(2, Math.max(0, remaining))}
+          depth={Math.min(2, Math.max(0, remaining - 1))}
           top={{
             width: 200,
             silhouette: 'card',
@@ -249,7 +244,7 @@ function Card({
           disabled={busy}
           className="h-11 flex-1 rounded-[12px] bg-ink text-[14px] font-medium text-bg disabled:opacity-45"
         >
-          {busy ? 'Filing…' : remaining > 0 ? `File it · ${remaining} left` : 'File it'}
+          {busy ? 'Filing…' : remaining > 1 ? `File it · ${remaining - 1} left` : 'File it'}
         </button>
       </div>
     </form>
