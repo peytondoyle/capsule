@@ -62,3 +62,50 @@ export function extensionOf(filename: string, fallback = 'bin') {
   const match = /\.([a-z0-9]+)$/i.exec(filename)
   return (match?.[1] ?? fallback).toLowerCase()
 }
+
+/**
+ * The host a store's blobs must live on, derived from its own token.
+ *
+ * Tokens are `vercel_blob_rw_<STOREID>_<secret>`, and a store serves from
+ * `<storeid>.private|public.blob.vercel-storage.com`. Deriving it means the
+ * check cannot drift from whichever store is actually configured.
+ */
+function hostForToken(token: string, access: 'private' | 'public') {
+  const storeId = token.split('_')[3]
+  if (!storeId) throw new Error('malformed blob token')
+  return `${storeId.toLowerCase()}.${access}.blob.vercel-storage.com`
+}
+
+/**
+ * Asserts a URL really is this owner's original before anything attaches a
+ * bearer token to it.
+ *
+ * Without this the stored URL is client-controlled: /api/blob/upload rebuilds
+ * the pathname from the session, but the client reports the resulting URL
+ * afterwards and can simply substitute another one. Any sink that then fetches
+ * it with `Bearer originalsToken()` would hand a store-wide read/write token —
+ * every user's private photographs — to an arbitrary host, and stream the
+ * response back as a bonus. Both the source (addIntakeItem) and the sinks
+ * (deriveFromOriginal, /api/original) call this.
+ */
+export function assertOwnedOriginalUrl(ownerId: string, url: string) {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error('original url is not a url')
+  }
+
+  const expectedHost = hostForToken(originalsToken(), 'private')
+  if (parsed.protocol !== 'https:' || parsed.host !== expectedHost) {
+    throw new Error('original url is not on the originals store')
+  }
+
+  // `intake/{ownerId}/…` is what /api/blob/upload and the share target write.
+  const prefix = `/intake/${ownerId}/`
+  if (!parsed.pathname.startsWith(prefix)) {
+    throw new Error('original url does not belong to this owner')
+  }
+
+  return url
+}

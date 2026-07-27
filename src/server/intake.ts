@@ -5,6 +5,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm'
 import { getDb } from './db'
 import { intakeBatches, intakeItems, objectFaces } from './db/schema'
 import { createObject } from './objects'
+import { assertOwnedOriginalUrl } from './blob'
 import { silhouetteForKind } from '@/design/silhouettes'
 
 export type IntakeSuggestions = Partial<
@@ -43,6 +44,9 @@ export async function addIntakeItem(
   input: { originalUrl: string; exif?: unknown; suggestions?: IntakeSuggestions },
 ) {
   await assertBatchOwned(ownerId, batchId)
+  // The client reports this URL after uploading, so it is untrusted input.
+  assertOwnedOriginalUrl(ownerId, input.originalUrl)
+
   const [row] = await getDb()
     .insert(intakeItems)
     .values({

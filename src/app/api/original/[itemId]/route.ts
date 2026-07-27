@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 
 import { getCurrentUser } from '@/server/auth'
-import { originalsToken } from '@/server/blob'
+import { assertOwnedOriginalUrl, originalsToken } from '@/server/blob'
 import { getIntakeItem } from '@/server/intake'
 
 export const runtime = 'nodejs'
@@ -23,6 +23,13 @@ export async function GET(
   const { itemId } = await params
   const item = await getIntakeItem(user.id, itemId)
   if (!item?.originalUrl) return new Response('not found', { status: 404 })
+
+  // Re-prove ownership of the URL itself, not just of the row holding it.
+  try {
+    assertOwnedOriginalUrl(user.id, item.originalUrl)
+  } catch {
+    return new Response('not found', { status: 404 })
+  }
 
   const upstream = await fetch(item.originalUrl, {
     headers: { authorization: `Bearer ${originalsToken()}` },

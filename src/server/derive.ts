@@ -3,7 +3,7 @@ import 'server-only'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
 
-import { mediaToken, originalsToken } from './blob'
+import { assertOwnedOriginalUrl, mediaToken, originalsToken } from './blob'
 
 export type Corner = { x: number; y: number }
 
@@ -35,6 +35,10 @@ export async function deriveFromOriginal(
   target: { ownerId: string; key: string },
   corners?: Corner[] | null,
 ) {
+  // Defence in depth: never attach the store-wide token to a URL we have not
+  // just re-proved belongs to this owner, even though intake validates on write.
+  assertOwnedOriginalUrl(target.ownerId, originalUrl)
+
   const response = await fetch(originalUrl, {
     headers: { authorization: `Bearer ${originalsToken()}` },
     cache: 'no-store',
