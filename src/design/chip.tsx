@@ -32,6 +32,12 @@ export function Chip({
 
   return (
     <Tag
+      // A <button> with no type is type="submit". Every chip in the filing
+      // queue sits inside a <form>, so without this, tapping a suggested
+      // person or place files the object instead of choosing the suggestion.
+      // `type` is not in HTMLAttributes<HTMLElement>, so no call site can pass
+      // it — it has to be set here.
+      {...(Tag === 'button' ? { type: 'button' as const } : null)}
       className={['mn rounded-full tracking-[0.06em] uppercase', sizing, look, className]
         .filter(Boolean)
         .join(' ')}
