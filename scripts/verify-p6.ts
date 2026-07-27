@@ -10,6 +10,10 @@ import { deriveFromOriginal } from '../src/server/derive'
 import { intakePath, originalsToken } from '../src/server/blob'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
+import { requireVerificationBranch } from './verify-db'
+
+// Must happen before the first getDb(); both clients read process.env lazily.
+requireVerificationBranch()
 
 /**
  * Makes its own intake item so the run is deterministic and repeatable —

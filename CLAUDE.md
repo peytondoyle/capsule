@@ -49,7 +49,16 @@ npm run build && npm run typecheck && npm run lint
 
 Database work: `db:generate` → `db:migrate` → `db:check`. `db:seed -- --owner <clerk id>`
 fills an archive with the design doc's own fixtures; `db:verify -- --owner <id>` runs the
-24 data-layer assertions and `db:verify:p6` the 13 capture-pipeline ones. Both need the `react-server` condition, which their npm scripts set.
+41 data-layer assertions and `db:verify:p6` the 15 capture-pipeline ones. Both need the `react-server` condition, which their npm scripts set.
+
+**The proof gates write.** `db:verify` allocates a dozen lots to prove the counter is
+gapless; `db:verify:p6` uploads a photograph, files it as an object and deletes it again.
+`.env.local` and Production share one Neon endpoint, so both ran against the live archive
+until the `verify` branch existed. `scripts/verify-db.ts` now repoints them at
+`DATABASE_URL_VERIFY` and **refuses to run** without it (`--allow-prod` overrides). Recreate
+the branch with `neonctl branches create --project-id $NEON_PROJECT_ID --name verify` and put
+its pooled and direct URLs in `.env.local`. Blobs are *not* branched — p6 still writes to the
+real stores under `intake/<owner>/probe-*` and cleans up after itself.
 
 ## Non-negotiable design rules
 

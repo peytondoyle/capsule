@@ -22,6 +22,10 @@ import {
 } from '../src/server/objects'
 import { getPersonStats, listPeopleWithCounts } from '../src/server/people'
 import { listPlacesWithCounts, listTagsWithCounts } from '../src/server/taxonomy'
+import { requireVerificationBranch } from './verify-db'
+
+// Must happen before the first getDb(); both clients read process.env lazily.
+requireVerificationBranch()
 
 let failures = 0
 function check(label: string, pass: boolean, detail = '') {
