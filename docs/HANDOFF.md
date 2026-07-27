@@ -1,10 +1,10 @@
-# Handoff — 2026-07-26
+# Handoff — 2026-07-27
 
 Branch: **`v2-rebuild`** (not merged to `master`). Working tree committed.
 Plan: [CAPSULE-V2-PLAN.md](CAPSULE-V2-PLAN.md) · Rules: [../CLAUDE.md](../CLAUDE.md)
 
-**Phases 0–2 complete**, except two steps only you can do (both under *Needs you* below;
-neither blocks phase 3). Phase 3 is the design system.
+**Phases 0–5 complete.** Phase 6 (capture) is in progress. One optional item left under
+*Needs you* — the Clerk webhook, which nothing depends on.
 
 Before doing UI work, reseed onto your own account so the Ledger is not empty:
 sign in once, then `npm run db:seed -- --owner <your clerk user id>`. The archive currently
@@ -19,10 +19,10 @@ sits on a synthetic `user_seed_dev` row, which no signed-in session will ever ma
 | Repo | Single Next 16 app at root. `apps/`, `supabase/` deleted (recoverable at `4deef1e`). |
 | Vercel | project `capsule` · `prj_6sLVlwcBGVtNtwXZjCL1C3kjBlTM` · team `peyton-doyle` |
 | Neon | `capsule-db` · project `purple-river-19152863` · Postgres 17.10 · `us-east-1` / iad1 · free plan |
-| Blob | `capsule-media` (public) `store_tCVSYcNtL8WVtWGV` · `capsule-originals` (private) `store_TJ3jyzfgZpJQro01` ← **not connected**, see *Needs you* |
+| Blob | `capsule-media` (public) `store_tCVSYcNtL8WVtWGV` · `capsule-originals` (private) `store_TJ3jyzfgZpJQro01` — both connected, all 3 envs |
 | Clerk | app `Capsule` · `app_3H2m8Htunq84mjsLvOiAEnixExd` · dev instance `ins_3H2m8FLMWs9QFXpe7UfnbmtK57I` · `unified-polecat-6.clerk.accounts.dev` |
 | Preview | https://capsule-mg2kfhg39-peyton-doyle.vercel.app (Vercel Authentication is on, so a plain `curl` gets 302/401 — that is protection, not a bug) |
-| DB tables | `users`, `owner_counters`, `drizzle.__drizzle_migrations`. One migration: `drizzle/0000_cute_jigsaw.sql`. |
+| DB tables | 16 tables + 11 enums + pg_trgm. Migrations `0000`–`0002`. `npm run db:verify` runs 24 assertions. |
 
 ### Verified, with output
 
@@ -58,7 +58,7 @@ npm run build      exit=0      npm run typecheck  exit=0      npm run lint  exit
 
 ## Needs you
 
-**1. ~~Connect `capsule-originals`~~ — done.** Recorded because the CLI cannot do it and the
+**1. ~~Connect `capsule-originals`~~ — done, via the API.** Recorded because the CLI cannot do it and the
 next second-store will hit the same wall:
 
 ```bash
