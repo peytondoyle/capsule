@@ -3,8 +3,16 @@
   "configurations": [
     {
       "name": "capsule-web",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "dotenv",
+        "-e",
+        ".env.local",
+        "--",
+        "npm",
+        "run",
+        "dev:verify"
+      ],
       "port": 3000
     }
   ]
