@@ -16,7 +16,7 @@ Read it before touching anything structural.
 
 ## Status
 
-Phases 0–3 complete on branch `v2-rebuild`. Phase 4 next: the Ledger.
+Phases 0–4 complete on branch `v2-rebuild`. Phase 5 next: object detail and editing.
 
 `/design` is the design-system gallery and the phase-3 gate — every primitive, every
 surface, every state. `?surface=ledger|board|cabinet` and `?section=…` isolate one at a time.

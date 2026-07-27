@@ -171,6 +171,17 @@ export async function listTimeline(ownerId: string, limit = 500) {
         width: objectFaces.width,
         height: objectFaces.height,
       },
+      // The caption under every cutout reads "NINA · 09 APR", so the giver has
+      // to come back with the row. A correlated subquery rather than a join,
+      // which would multiply rows for objects with more than one person.
+      giver: sql<string | null>`(
+        select p.name
+        from ${objectPeople} op
+        join ${people} p on p.id = op.person_id
+        where op.object_id = ${objects.id} and op.role = 'given_by'
+        order by p.name
+        limit 1
+      )`,
     })
     .from(objects)
     .leftJoin(

@@ -229,21 +229,41 @@ shipped pages now use tokens (`bg-bg`, `text-ink`, `border-hair`, `text-mute-*`)
 remaining literal hex is `layout.tsx`'s `theme-color` meta, which browsers cannot resolve from
 a CSS variable, and Clerk's `appearance` object.
 
-## Start of phase 4
+## Phase 4, as built
 
-The Ledger — `/timeline`, and the first screen made of real data.
+`/timeline` — rail, toolbar, year/month runs and the permanent inspector, all server
+components. Selection lives in `?lot=`, so the inspector is server-rendered and every object
+is deep-linkable; no client state at all on this screen.
 
-1. `listTimeline(ownerId)` already returns objects newest-first with their recto face joined.
-   Group by year then month in the server component; `receivedPrecision` decides whether an
-   object belongs to a month at all.
-2. The 198px left rail: `listPeopleWithCounts` for GIVEN BY, `countUnfiled` for the rust
-   number, `activity` for "LAST ADDED / 2 DAYS AGO".
-3. Cutout widths should vary from each face's real aspect ratio — the seed already sets
-   `object_faces.width/height` per kind, which is what makes a row look hand-placed rather
-   than gridded.
-4. `<Inspector>` is built and takes `hero` / `lot` / `rows` / `story` / `footer` slots. The
-   design calls for it to be permanently present, not a drawer.
-5. Reseed onto your own account first, or the page is empty (see the top of this doc).
+- **Authed pages call `getCurrentUser()`, never `auth()` alone.** It also creates the `users`
+  row. This surfaced for real: after signing in, the client-side push to `/` did not trigger a
+  server render, so no row existed and seeding FK-failed. Any page that skips this renders an
+  empty archive and then fails on the first object added.
+- **`NULLS LAST` on the default-lot query.** Postgres sorts nulls *first* on `DESC`, so
+  "newest received" handed back an undated, unfiled object and the Ledger opened on a row of
+  em-dashes every time.
+- Cutout widths come from each face's real aspect ratio (`src/design/sizing.ts`), which is
+  what makes a run look hand-placed rather than gridded.
+- The seed now clusters filler into a handful of months instead of smearing one per month
+  across a decade. The Ledger is built around *runs*; one object per month reads as a list and
+  the design falls apart. Worth remembering when generating any future fixture data.
+- Not wired yet, deliberately: search, the NEWEST sort, and `+ ADD OBJECT` render as real
+  controls because their absence changes the balance of the header, but search lands in phase
+  10 and accession in phase 6.
+
+## Start of phase 5
+
+Object detail and editing — `/o/[lot]`, phone-first, plus making the inspector editable.
+
+1. `getObjectDetail(ownerId, lotNo)` already returns faces, giver, tags, place and occasion.
+2. `updateObject` exists and strips `id`/`ownerId`/`lotNo` from any patch; wrap it in Server
+   Actions and `useOptimistic` rather than reaching for a client data library.
+3. The phone view needs `<SheetPhone>` (built) plus the "28 more from Dad / 2003 — 2024"
+   footer, which `getPersonStats` already computes.
+4. `<RetentionToggle>` takes an optional `onSelect`; passing one makes it a client component,
+   so keep the boundary at that component rather than the page.
+5. Faces have no images until phase 6, so detail work should keep rendering the hatch
+   placeholder as a first-class state, not an error state.
 
 ## Things to clean up when convenient
 

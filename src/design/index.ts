@@ -1,4 +1,5 @@
 export { Cutout, type CutoutProps, type CutoutState } from './cutout'
+export { aspectOf, cutoutWidth } from './sizing'
 export { TiltLayer } from './tilt-layer'
 export {
   CUT_STYLES,

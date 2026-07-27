@@ -36,7 +36,9 @@ export function Inspector({
 }) {
   return (
     <aside
-      className="flex shrink-0 flex-col border-l border-hair bg-panel"
+      // Scrolls independently of the stream: a long story plus a full tag row
+      // outruns the viewport, and the panel is permanent rather than a drawer.
+      className="flex shrink-0 flex-col overflow-y-auto border-l border-hair bg-panel"
       style={{ width }}
     >
       {hero ? (

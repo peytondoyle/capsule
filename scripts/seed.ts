@@ -320,10 +320,23 @@ async function main() {
   const kinds = Object.keys(KIND_SHAPE) as ObjectKind[]
   const unfiledCount = 7
 
+  // Objects arrive in bursts — a trip, a birthday, a clear-out — so filler
+  // lands in a handful of months rather than smeared one-per-month across a
+  // decade. The Ledger is built around *runs* of cutouts; a timeline with a
+  // single object per month reads as a list and the design falls apart.
+  const CLUSTERS: Array<[number, number]> = [
+    [2019, 11], // Lisbon, with the boarding pass and the matchbook
+    [2022, 4], // the fern, the polaroid, the pin, the Marfa postcard
+    [2023, 6], // the Fillmore
+    [2021, 8],
+    [2018, 12],
+    [2016, 3],
+    [2024, 10],
+  ]
+
   for (const [i, title] of FILLER.entries()) {
     const unfiled = i >= FILLER.length - unfiledCount
-    const year = 2016 + Math.floor(random() * 9)
-    const month = 1 + Math.floor(random() * 12)
+    const [year, month] = CLUSTERS[Math.floor(random() * CLUSTERS.length)]!
     const day = 1 + Math.floor(random() * 28)
 
     await file({
