@@ -315,7 +315,29 @@ export async function moveObject(
     .where(and(eq(objects.id, objectId), eq(objects.ownerId, ownerId)))
 }
 
+/**
+ * Deletes an object and the bytes behind it.
+ *
+ * The DB cascade removes object_faces, but a blob has no foreign key — without
+ * this the originals and derivatives sit in both stores forever, billed and
+ * unreachable. Blob deletes happen first and failures are swallowed: a leaked
+ * blob is recoverable by a sweep, whereas refusing to delete the row would
+ * leave the owner unable to remove their own object.
+ */
 export async function deleteObject(ownerId: string, objectId: string) {
+  await assertOwned(ownerId, objectId)
+
+  const faces = await getDb()
+    .select({ originalUrl: objectFaces.originalUrl, cutoutUrl: objectFaces.cutoutUrl, thumbUrl: objectFaces.thumbUrl, maskUrl: objectFaces.maskUrl })
+    .from(objectFaces)
+    .where(eq(objectFaces.objectId, objectId))
+
+  const { deleteBlobs } = await import('./blob')
+  await deleteBlobs({
+    originals: faces.map((f) => f.originalUrl),
+    media: faces.flatMap((f) => [f.cutoutUrl, f.thumbUrl, f.maskUrl]),
+  })
+
   await getDb()
     .delete(objects)
     .where(and(eq(objects.id, objectId), eq(objects.ownerId, ownerId)))

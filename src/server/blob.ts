@@ -109,3 +109,37 @@ export function assertOwnedOriginalUrl(ownerId: string, url: string) {
 
   return url
 }
+
+/**
+ * Best-effort removal from both stores.
+ *
+ * Never throws: the caller is usually mid-delete, and a blob that outlives its
+ * row is a billing nuisance a sweep can fix, while a throw here would strand
+ * the row and leave someone unable to delete their own object.
+ */
+export async function deleteBlobs(urls: {
+  originals?: (string | null)[]
+  media?: (string | null)[]
+}) {
+  const { del } = await import('@vercel/blob')
+
+  const jobs: Array<Promise<unknown>> = []
+  const push = (list: (string | null)[] | undefined, token: string) => {
+    for (const url of list ?? []) {
+      if (url) jobs.push(del(url, { token }).catch(() => undefined))
+    }
+  }
+
+  try {
+    if (urls.originals?.some(Boolean)) push(urls.originals, originalsToken())
+  } catch {
+    // originals store not configured — nothing to clean there
+  }
+  try {
+    if (urls.media?.some(Boolean)) push(urls.media, mediaToken())
+  } catch {
+    // media store not configured
+  }
+
+  await Promise.all(jobs)
+}
