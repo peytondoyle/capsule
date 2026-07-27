@@ -8,6 +8,7 @@ import { and, eq, sql } from 'drizzle-orm'
 
 import { getDb } from '../src/server/db'
 import { objects } from '../src/server/db/schema'
+import { dropOnCluster, getBoard, tidyBoard } from '../src/server/board'
 import {
   assertOwned,
   attachTag,
@@ -198,6 +199,40 @@ async function main() {
     check('attachTag works for the real owner', (withTag.rows[0]?.n ?? 0) > 0)
     if (tag) await detachTag(ownerId, victim.id, tag.id)
   }
+
+  // --- board ---------------------------------------------------------------
+  const board = await getBoard(ownerId)
+  check('board returns every object with a position',
+    board.items.length > 0 && board.items.every((i) => Number.isFinite(i.x) && Number.isFinite(i.y)),
+    `${board.items.length} items, ${board.clusters.length} clusters`)
+
+  const probe = board.items[0]!
+  const { moveObject } = await import('../src/server/objects')
+  await moveObject(ownerId, probe.object.id, { x: 424, y: 242, z: 7 })
+  const after = await getBoard(ownerId)
+  const moved = after.items.find((i) => i.object.id === probe.object.id)!
+  check('drag position persists', moved.x === 424 && moved.y === 242 && moved.z === 7)
+
+  const cluster = after.clusters.find((c) => (c.collection.impliedTags as string[]).length > 0)
+  if (cluster) {
+    const dropped = await dropOnCluster(ownerId, probe.object.id, cluster.collection.id)
+    const tagged = await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from object_tags ot
+      join tags t on t.id = ot.tag_id
+      where ot.object_id = ${probe.object.id}
+        and t.name = ${(cluster.collection.impliedTags as string[])[0]!}
+    `)
+    check('drop-to-cluster applies the implied tags',
+      dropped.applied.length > 0 && (tagged.rows[0]?.n ?? 0) > 0,
+      `applied ${dropped.applied.join(', ')}`)
+  }
+
+  await tidyBoard(ownerId)
+  const tidy1 = await getBoard(ownerId)
+  await tidyBoard(ownerId)
+  const tidy2 = await getBoard(ownerId)
+  check('tidy is idempotent',
+    JSON.stringify(tidy1.items.map((i) => [i.x, i.y])) === JSON.stringify(tidy2.items.map((i) => [i.x, i.y])))
 
   console.log(`\n${failures === 0 ? 'all checks passed' : `${failures} FAILED`}\n`)
   return failures

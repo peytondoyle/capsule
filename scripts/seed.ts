@@ -351,34 +351,54 @@ async function main() {
     })
   }
 
-  // Shelves for the Cabinet, clusters for the Board — same table, different kind.
-  const shelves = [
-    { name: 'Lisbon, November 2019', match: (t: string) => /lisbon|boarding|pensão|sintra/i.test(t) },
-    { name: 'From Nina', match: (t: string) => /fern|kitchen|sand dollar|key to the old flat/i.test(t) },
-    { name: 'Oddments', match: (t: string) => /button|cap|coin|charm|shell/i.test(t) },
+  // The same three groups exist twice, deliberately: as Cabinet shelves and as
+  // Board clusters. The doc draws both — SHELF I "Lisbon, November 2019" and
+  // the board's "LISBON · NOV 2019" rect are the same idea on different
+  // surfaces — and kind is a per-row property.
+  const groups = [
+    {
+      name: 'Lisbon, November 2019',
+      match: (t: string) => /lisbon|boarding|pensão|sintra/i.test(t),
+      impliedTags: ['Portugal'],
+    },
+    {
+      name: 'From Nina',
+      match: (t: string) => /fern|kitchen|sand dollar|key to the old flat/i.test(t),
+      impliedTags: ['Nina'],
+    },
+    {
+      name: 'Oddments',
+      match: (t: string) => /button|cap|coin|charm|shell/i.test(t),
+      impliedTags: [],
+    },
   ]
 
-  for (const [i, shelf] of shelves.entries()) {
-    const [row] = await db
-      .insert(collections)
-      .values({
-        ownerId,
-        name: shelf.name,
-        kind: i === 2 ? 'cluster' : 'shelf',
-        sortOrder: i,
-        boardX: 100 + i * 340,
-        boardY: 90 + (i % 2) * 60,
-        boardW: 320,
-        boardH: 260,
-        impliedTags: i === 0 ? ['Portugal'] : [],
-      })
-      .returning()
-
-    const members = created.filter((o) => shelf.match(o.title))
-    if (members.length && row) {
-      await db.insert(collectionObjects).values(
-        members.map((o, order) => ({ collectionId: row.id, objectId: o.id, sortOrder: order })),
-      )
+  for (const [i, group] of groups.entries()) {
+    const members = created.filter((o) => group.match(o.title))
+    for (const kind of ['shelf', 'cluster'] as const) {
+      const [row] = await db
+        .insert(collections)
+        .values({
+          ownerId,
+          name: group.name,
+          kind,
+          sortOrder: i,
+          ...(kind === 'cluster'
+            ? {
+                boardX: 100 + i * 340,
+                boardY: 90 + (i % 2) * 60,
+                boardW: 320,
+                boardH: 260,
+                impliedTags: group.impliedTags,
+              }
+            : {}),
+        })
+        .returning()
+      if (members.length && row) {
+        await db.insert(collectionObjects).values(
+          members.map((o, order) => ({ collectionId: row.id, objectId: o.id, sortOrder: order })),
+        )
+      }
     }
   }
 
