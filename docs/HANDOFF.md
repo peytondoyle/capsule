@@ -58,16 +58,23 @@ npm run build      exit=0      npm run typecheck  exit=0      npm run lint  exit
 
 ## Needs you
 
-**1. Connect `capsule-originals` to the project.** Vercel CLI 56.5.0 cannot do this: the
-second Blob store on a project needs a custom env-var prefix, and only the dashboard offers
-that field. `vercel blob create-store` has no `--prefix`, and OIDC will not authorize a store
-that is not connected.
+**1. ~~Connect `capsule-originals`~~ — done.** Recorded because the CLI cannot do it and the
+next second-store will hit the same wall:
 
-> Dashboard → Storage → `capsule-originals` → Connect to Project → `capsule` → set the env-var
-> prefix to `BLOB_ORIGINALS_`, all three environments. Then `vercel env pull .env.local`.
+```bash
+# the connection endpoint `vercel blob` does not expose
+curl -X POST -H "Authorization: Bearer $VERCEL_TOKEN" -H 'content-type: application/json' \
+  -d '{"projectId":"prj_…","envVarPrefix":"BLOB_ORIGINALS"}' \
+  "https://api.vercel.com/v1/storage/stores/store_…/connections?teamId=team_…"
+```
 
-Not needed until phase 6 (capture pipeline). Until then only the public `capsule-media` store
-is wired, under the default `BLOB_READ_WRITE_TOKEN`.
+It targets Production and Preview only, so Development needs a manual mirror — and note that
+`GET /v9/projects/{id}/env?decrypt=true` returns **ciphertext**, not the token. Use
+`vercel env pull <file> --environment=preview`, which decrypts server-side, then
+`vercel env add … development`.
+
+Verified: `put` lands on `…private.blob.vercel-storage.com`, an anonymous fetch of that URL
+returns **403**, and `del` cleans up.
 
 **2. Register the Clerk webhook endpoint.** The Svix app exists; endpoint CRUD is not in
 Clerk's Backend API, so this is a dashboard step. Get a fresh one-time dashboard link with:
