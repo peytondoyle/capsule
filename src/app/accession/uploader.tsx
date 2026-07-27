@@ -7,6 +7,7 @@ import { upload } from '@vercel/blob/client'
 import { Cutout, MonoLabel, SectionLabel } from '@/design'
 import { recordUploadAction, startBatchAction } from '@/server/actions/intake'
 import { enqueueUpload, listQueued, removeQueued } from '@/lib/offline-queue'
+import { clientIntakePath } from '@/lib/blob-path'
 
 type Queued = {
   key: string
@@ -37,17 +38,29 @@ async function readExif(file: File) {
   }
 }
 
-export function Uploader() {
+export function Uploader({ ownerId }: { ownerId: string }) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [items, setItems] = useState<Queued[]>([])
   const [, startTransition] = useTransition()
   const [batchId, setBatchId] = useState<string | null>(null)
 
-  /** Returns the names that actually reached Blob, so the drain knows what is
-   *  safe to delete. */
-  async function handleFiles(files: FileList | null): Promise<Set<string>> {
-    const landed = new Set<string>()
+  /**
+   * Uploads a picker's worth of files and reports, **by index**, which of them
+   * actually reached Blob.
+   *
+   * By index and not by name: the drain deletes the only copy of an offline
+   * capture on the strength of this answer, and names are not unique. An iOS
+   * camera capture through the picker is called `image.jpg` every single time,
+   * so a name-keyed answer lets one success authorise deleting a different
+   * photograph that failed.
+   */
+  async function handleFiles(
+    files: FileList | null,
+    /** These bytes already have an IndexedDB row; do not park a second one. */
+    fromQueue = false,
+  ): Promise<Set<number>> {
+    const landed = new Set<number>()
     if (!files?.length) return landed
 
     let batch = batchId
@@ -94,14 +107,18 @@ export function Uploader() {
           // Must match the store the token belongs to. capsule-originals is
           // private, and a mismatch fails silently — the PUT is simply never
           // issued and the item sits on "uploading" forever.
-          const blob = await upload(file.name, file, {
+          // The path is the client's to propose and the route's to refuse:
+          // @vercel/blob puts the *client's* pathname into the issued token and
+          // discards whatever onBeforeGenerateToken returns, so asking for the
+          // wrong prefix here does not get quietly corrected — it 400s.
+          const blob = await upload(clientIntakePath(ownerId, file.name), file, {
             access: 'private',
             handleUploadUrl: '/api/blob/upload',
             contentType: file.type || undefined,
           })
 
           const itemId = await recordUploadAction(batch!, blob.url, exif ?? undefined)
-          landed.add(file.name)
+          landed.add(i)
           patch({ status: 'done' })
 
           // Kick the pipeline without blocking the picker: full-frame derive,
@@ -125,7 +142,10 @@ export function Uploader() {
           if (!navigator.onLine) {
             // No signal is not a failure — the basement case is the whole
             // reason the queue exists. Park the bytes; drain on next visit.
-            await enqueueUpload(file, exif?.taken)
+            // Unless they are already parked: a drain that loses connectivity
+            // mid-flight would otherwise write a second row for the same photo
+            // under a fresh key, and both would upload on the next visit.
+            if (!fromQueue) await enqueueUpload(file, exif?.taken)
             patch({ status: 'queued' })
           } else {
             patch({
@@ -141,9 +161,14 @@ export function Uploader() {
     return landed
   }
 
-  // Drain anything parked by an offline session.
+  // Drain anything parked by an offline session. Runs once per mount, and the
+  // ref survives StrictMode's deliberate double-invoke — without it both passes
+  // read the same rows before either deletes any, and every parked photograph
+  // uploads twice under two batches.
+  const drained = useRef(false)
   useEffect(() => {
-    if (!navigator.onLine) return
+    if (drained.current || !navigator.onLine) return
+    drained.current = true
     void (async () => {
       const queued = await listQueued()
       if (queued.length === 0) return
@@ -152,14 +177,14 @@ export function Uploader() {
       for (const item of queued) {
         list.items.add(new File([item.bytes], item.name, { type: item.type }))
       }
-      const landed = await handleFiles(list.files)
+      const landed = await handleFiles(list.files, true)
 
-      // Only forget bytes that actually reached Blob. IndexedDB is the sole
-      // copy of an offline-captured photograph until the upload records, so
-      // deleting on a failed drain destroys the photograph for good — and
-      // handleFiles never throws, it reports failure in component state.
-      for (const item of queued) {
-        if (landed.has(item.name)) await removeQueued(item.key)
+      // Only forget bytes that actually reached Blob, matched by position
+      // rather than by name — IndexedDB is the sole copy of an offline capture
+      // until the upload records, handleFiles never throws (it reports failure
+      // in component state), and every iOS camera capture is called image.jpg.
+      for (const [i, item] of queued.entries()) {
+        if (landed.has(i)) await removeQueued(item.key)
       }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- drain once on mount

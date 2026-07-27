@@ -1,6 +1,7 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
 import type { NextRequest } from 'next/server'
 
+import { clientIntakePath } from '@/lib/blob-path'
 import { getCurrentUser } from '@/server/auth'
 import { hasOriginalsStore, originalsToken } from '@/server/blob'
 
@@ -13,9 +14,13 @@ export const runtime = 'nodejs'
  * 4.5 MB and a HEIC burst from an iPhone blows straight through it. The client
  * asks here for a short-lived token, then PUTs directly to Blob.
  *
- * Ownership is decided here and only here — the pathname is rebuilt from the
- * session rather than trusted from the client, so a caller cannot write into
- * someone else's prefix.
+ * Ownership is decided here and only here. It is enforced by *refusing* rather
+ * than rewriting: `handleUpload` hands `onBeforeGenerateToken` the client's own
+ * pathname and then writes that same value into the issued token
+ * (`{...tokenOptions, pathname}`, @vercel/blob 2.6.1 client.js), so a pathname
+ * returned from this callback is silently dropped — and `pathname` is not even
+ * in the callback's declared return type, so TypeScript never says so. The only
+ * real control is which pathnames get a token at all.
  */
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser()
@@ -36,8 +41,13 @@ export async function POST(request: NextRequest) {
       request,
       token: originalsToken(),
       onBeforeGenerateToken: async (pathname) => {
-        // Whatever the client asked for, it lands under this owner's prefix.
-        const safe = pathname.split('/').pop() ?? 'original'
+        // Throwing is the enforcement. The token is scoped to this exact
+        // pathname, so refusing here is what keeps a caller out of another
+        // owner's prefix — and out of the store root, which is where every
+        // upload landed while this code believed it was rewriting the path.
+        if (pathname !== clientIntakePath(user.id, pathname)) {
+          throw new Error('upload path is not this owner’s intake prefix')
+        }
         return {
           allowedContentTypes: [
             'image/jpeg',
@@ -48,7 +58,6 @@ export async function POST(request: NextRequest) {
             'image/avif',
           ],
           addRandomSuffix: true,
-          pathname: `intake/${user.id}/${safe}`,
           tokenPayload: JSON.stringify({ ownerId: user.id }),
         }
       },

@@ -20,7 +20,8 @@
     "db:check": "dotenv -e .env.local -- drizzle-kit check",
     "db:verify": "NODE_OPTIONS='--conditions=react-server' dotenv -e .env.local -- tsx scripts/verify-p2.ts",
     "db:verify:p6": "NODE_OPTIONS='--conditions=react-server' dotenv -e .env.local -- tsx scripts/verify-p6.ts",
-    "build:sw": "esbuild src/sw.ts --bundle --minify --format=esm --outfile=public/sw.js"
+    "build:sw": "esbuild src/sw.ts --bundle --minify --format=esm --outfile=public/sw.js",
+    "db:verify:upload": "NODE_OPTIONS='--conditions=react-server' dotenv -e .env.local -- tsx scripts/verify-upload.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

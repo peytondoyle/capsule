@@ -38,7 +38,7 @@ export default async function AccessionPage() {
 
           <div className="mt-8">
             {ready ? (
-              <Uploader />
+              <Uploader ownerId={user.id} />
             ) : (
               <p className="mn rounded-[11px] border border-dashed border-hair-strong p-4 text-[9.5px] leading-relaxed tracking-[0.06em] text-accent">
                 THE PRIVATE ORIGINALS STORE IS NOT CONNECTED, SO UPLOADS ARE DISABLED. SEE
