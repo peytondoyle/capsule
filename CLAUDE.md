@@ -16,7 +16,7 @@ Read it before touching anything structural.
 
 ## Status
 
-**All 12 phases built** on branch `v2-rebuild`; production is live. The archive works end to
+**All 12 phases built** and merged to `master`; production is live. The archive works end to
 end: sign in → photograph → cut → file → Ledger/Board/Cabinet → share. Each phase's deferred
 items are marked ◐ in the plan's phase table — the notable ones are OpenCV auto-detect,
 CLUSTER BY + the Board phone sheet, the CATALOGUE/MAP tabs, install/splash/push PWA polish,

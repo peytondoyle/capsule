@@ -8,8 +8,7 @@ platform traps in [../CLAUDE.md](../CLAUDE.md). This is state and traps only.
 
 | | |
 |---|---|
-| Branch | `v2-rebuild` @ `111fe69`, tree clean |
-| **Pushed** | **No.** `origin` has only `master` @ `31a2c2b`. Every commit below exists on this machine only |
+| Branch | `master` @ `17e0f67`, tree clean, pushed. `v2-rebuild` points at the same commit |
 | Production | `capsule-omega-ruby.vercel.app` → deployment `capsule-8gke1e0kp`, running `111fe69` |
 | Gates | `build` `typecheck` `lint` `db:check` all 0; `db:verify` 33 ok, `db:verify:p6` 15 ok, `db:verify:upload` 12 ok |
 | Prod archive | 1 user, 40 objects (lots 1–139), 5 people, 1 share, 0 intake batches |
@@ -17,9 +16,6 @@ platform traps in [../CLAUDE.md](../CLAUDE.md). This is state and traps only.
 | Vercel | project `capsule` · `prj_6sLVlwcBGVtNtwXZjCL1C3kjBlTM` · team `peyton-doyle` |
 | Blob | `capsule-media` (public) `store_tCVSYcNtL8WVtWGV` · `capsule-originals` (private) `store_TJ3jyzfgZpJQro01` |
 | Clerk | app `app_3H2m8Htunq84mjsLvOiAEnixExd` · **development instance** `unified-polecat-6.clerk.accounts.dev` |
-
-**The first row that matters is the second one.** Nothing is pushed. If this machine dies, the whole
-session is gone.
 
 ## What changed
 
@@ -64,13 +60,12 @@ at all. That gap is what let a dead capture flow ship.
 
 ## Open items — only you can do these
 
-1. **Push.** `git push -u origin v2-rebuild`. Nothing is backed up.
-2. **Clerk is a development instance in production.** The key served at `/sign-in` is `pk_test_…`.
+1. **Clerk is a development instance in production.** The key served at `/sign-in` is `pk_test_…`.
    Dev instances have hard usage limits, issue ~60-second tokens, and authenticate through Clerk's
    shared `accounts.dev` domain. A production instance requires a custom domain and DNS records —
    which is why this is blocked on you choosing a domain. Until then the app is not fit for anyone
    but you.
-3. **Decide whether sign-up stays open.** It is public, and `/api/extract` bills Anthropic per call
+2. **Decide whether sign-up stays open.** It is public, and `/api/extract` bills Anthropic per call
    with no rate limit (below).
 
 ## Deliberate limitations — do not "fix" these
@@ -226,7 +221,7 @@ was in session scratch and is gone; what follows is the durable record.
 ## Working notes
 
 - **Deploy is manual.** `npx vercel --prod --yes` from the repo root. There is no git-push-to-deploy
-  wired up, and since nothing is pushed, GitHub is not the source of what is live.
+  wired up, so a green `master` on GitHub says nothing about what production is serving.
 - **The gates write.** They are not read-only checks; they allocate lots, upload a photograph, file
   it and delete it. They are safe only because they now target the `verify` branch and track what
   they create. If `DATABASE_URL_VERIFY` is missing they refuse to run — do not reach for
