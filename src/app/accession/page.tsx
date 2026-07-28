@@ -20,7 +20,7 @@ export default async function AccessionPage() {
     <div data-surface="ledger" className="min-h-dvh bg-bg text-ink">
       <div className="mx-auto flex min-h-dvh max-w-[560px] flex-col px-6">
         <nav className="flex h-11 shrink-0 items-center justify-between">
-          <Link href="/timeline" aria-label="Back" className="text-[15px] text-mute-2">
+          <Link href="/timeline" aria-label="Back" className="-ml-1.5 flex size-6 items-center justify-center text-[15px] text-mute-2">
             ‹
           </Link>
           <span className="mn text-[9px] tracking-[0.16em] text-mute-2">ACCESSION</span>

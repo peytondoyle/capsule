@@ -82,11 +82,16 @@ function Card({
 
   const suggested = item.suggestions ?? {}
 
-  const run = (fn: () => Promise<unknown>) =>
+  // Guards the double submit that `disabled` used to guard. The buttons are now
+  // only aria-disabled, so they stay focusable and stay put — see the submit
+  // button below for why that matters.
+  const run = (fn: () => Promise<unknown>) => {
+    if (busy) return
     startTransition(async () => {
       await fn()
       router.refresh()
     })
+  }
 
   const placeOptions = [
     ...new Set([suggested.place?.value, ...places].filter(Boolean)),
@@ -98,6 +103,12 @@ function Card({
       action={(formData) => run(() => fileItemAction(item.id, formData))}
       className="flex min-h-0 flex-1 flex-col"
     >
+      {/* The card is remounted by key on every file, so this re-announces the
+          new count without the user having to go looking for it. */}
+      <p aria-live="polite" className="sr-only">
+        {remaining} {remaining === 1 ? 'object' : 'objects'} left to file
+      </p>
+
       <div className="flex items-center justify-between">
         <a href="/timeline" className="text-[13px] text-mute-2">
           Done
@@ -108,8 +119,8 @@ function Card({
         <button
           type="button"
           onClick={() => run(() => skipItemsAction([item.id]))}
-          disabled={busy}
-          className="text-[13px] text-mute-2"
+          aria-disabled={busy}
+          className="text-[13px] text-mute-2 aria-disabled:opacity-45"
         >
           Skip
         </button>
@@ -144,13 +155,18 @@ function Card({
 
       <SectionLabel className="mb-2.5">Tap what&rsquo;s true. The rest can wait.</SectionLabel>
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div
+        role="group"
+        aria-label="Who gave it to you"
+        className="flex flex-wrap items-center gap-1.5"
+      >
         {people.map((name) => (
           <Chip
             key={name}
             as="button"
             size="md"
             variant={chosen.person === name ? 'solid' : 'quiet'}
+            aria-pressed={chosen.person === name}
             onClick={() =>
               setChosen((c) => ({ ...c, person: c.person === name ? undefined : name }))
             }
@@ -180,13 +196,14 @@ function Card({
       {placeOptions.length || dateOptions.length ? (
         <>
           <div className="my-4 h-px bg-hair" />
-          <div className="flex flex-wrap gap-1.5">
+          <div role="group" aria-label="Where it came from, and when" className="flex flex-wrap gap-1.5">
             {placeOptions.map((name) => (
               <Chip
                 key={name}
                 as="button"
                 size="md"
                 variant={chosen.place === name ? 'solid' : 'quiet'}
+                aria-pressed={chosen.place === name}
                 onClick={() =>
                   setChosen((c) => ({ ...c, place: c.place === name ? undefined : name }))
                 }
@@ -205,6 +222,7 @@ function Card({
                 as="button"
                 size="md"
                 variant={chosen.date === value ? 'solid' : 'quiet'}
+                aria-pressed={chosen.date === value}
                 onClick={() =>
                   setChosen((c) => ({ ...c, date: c.date === value ? undefined : value }))
                 }
@@ -241,8 +259,13 @@ function Card({
         </a>
         <button
           type="submit"
-          disabled={busy}
-          className="h-11 flex-1 rounded-[12px] bg-ink text-[14px] font-medium text-bg disabled:opacity-45"
+          /* aria-disabled, not disabled: a disabled button loses focus to
+             <body> the instant it is disabled, and the card remounts by key
+             behind it, so filing from the keyboard dropped you at the top of
+             the document for every object. `run` early-returns while busy, so
+             the double submit is still guarded. */
+          aria-disabled={busy}
+          className="h-11 flex-1 rounded-[12px] bg-ink text-[14px] font-medium text-bg aria-disabled:opacity-45"
         >
           {busy ? 'Filing…' : remaining > 1 ? `File it · ${remaining - 1} left` : 'File it'}
         </button>

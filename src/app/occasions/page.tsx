@@ -17,9 +17,14 @@ export default async function OccasionsPage() {
 
   return (
     <div data-surface="ledger" className="min-h-dvh bg-bg text-ink">
+      <h1 className="sr-only">Occasions</h1>
       <div className="mx-auto max-w-[560px] px-6 pt-10 pb-16">
         <nav className="mb-8 flex items-baseline justify-between">
-          <Link href="/timeline" className="text-[15px] text-mute-2">
+          <Link
+            href="/timeline"
+            aria-label="Back to the timeline"
+            className="-ml-1.5 flex size-6 items-center justify-center text-[15px] text-mute-2"
+          >
             ‹
           </Link>
           <span className="mn text-[9px] tracking-[0.16em] text-mute-2">OCCASIONS</span>

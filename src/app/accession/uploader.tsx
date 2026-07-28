@@ -227,6 +227,16 @@ export function Uploader({ ownerId }: { ownerId: string }) {
         </button>
       </div>
 
+      {/* Upload progress and failures were both inserted into the DOM silently.
+          The visible count is the same string, so this only says it out loud. */}
+      <p aria-live="polite" className="sr-only">
+        {items.length > 0
+          ? `${done} of ${items.length} uploaded${
+              failed.length ? `, ${failed.length} failed` : ''
+            }`
+          : ''}
+      </p>
+
       {items.length > 0 ? (
         <div className="mt-8">
           <div className="flex items-baseline justify-between">

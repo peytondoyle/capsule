@@ -27,7 +27,11 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
       <TiltLayer />
       <div className="mx-auto max-w-[760px] px-6 pt-10 pb-16">
         <nav className="mb-10 flex items-center justify-between">
-          <Link href="/people" className="text-[15px] text-mute-2">
+          <Link
+            href="/people"
+            aria-label="Back to people"
+            className="-ml-1.5 flex size-6 items-center justify-center text-[15px] text-mute-2"
+          >
             ‹
           </Link>
           <span className="mn text-[9px] tracking-[0.16em] text-mute-2">GIVEN BY</span>

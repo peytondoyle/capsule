@@ -172,7 +172,7 @@ export default function SignInPage() {
         </div>
 
         <div className="mt-9 text-center">
-          <div className="mn text-[10.5px] font-semibold tracking-[0.22em]">CAPSULE</div>
+          <h1 className="mn text-[10.5px] font-semibold tracking-[0.22em]">CAPSULE</h1>
           <p className="mx-auto mt-3 max-w-[27ch] text-pretty text-[13px] leading-relaxed text-mute-1">
             {step === 'identify'
               ? 'An archive of the objects people gave you. No password — we send a code.'
@@ -207,7 +207,7 @@ export default function SignInPage() {
               />
 
               {error ? (
-                <p className="mn mt-3 text-[9.5px] leading-relaxed tracking-[0.06em] text-accent">
+                <p role="alert" className="mn mt-3 text-[9.5px] leading-relaxed tracking-[0.06em] text-accent">
                   {error.toUpperCase()}
                 </p>
               ) : null}
@@ -263,7 +263,7 @@ export default function SignInPage() {
             </p>
 
             {error ? (
-              <p className="mn mt-3 text-[9.5px] leading-relaxed tracking-[0.06em] text-accent">
+              <p role="alert" className="mn mt-3 text-[9.5px] leading-relaxed tracking-[0.06em] text-accent">
                 {error.toUpperCase()}
               </p>
             ) : null}

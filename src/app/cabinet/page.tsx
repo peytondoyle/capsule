@@ -39,6 +39,7 @@ export default async function CabinetPage({
 
   return (
     <div data-surface="cabinet" className="flex h-dvh flex-col overflow-hidden bg-bg text-ink">
+      <h1 className="sr-only">Cabinet</h1>
       <TiltLayer />
 
       <header className="flex h-14 shrink-0 items-center gap-[18px] border-b border-hair px-[26px]">

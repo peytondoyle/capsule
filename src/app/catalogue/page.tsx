@@ -23,6 +23,7 @@ export default async function CataloguePage() {
 
   return (
     <div data-surface="cabinet" className="flex h-dvh flex-col overflow-hidden bg-bg text-ink">
+      <h1 className="sr-only">Catalogue</h1>
       <header className="flex h-14 shrink-0 items-center gap-[18px] border-b border-hair px-[26px]">
         <span className="mn text-[10.5px] font-semibold tracking-[0.24em]">CAPSULE</span>
         <span className="h-[18px] w-px bg-hair-strong" />
@@ -52,17 +53,27 @@ export default async function CataloguePage() {
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-hair-strong">
-              {['Lot', 'Object', 'Given by', 'Accessioned', 'Provenance', 'Material', ''].map(
-                (label, i) => (
-                  <th
-                    key={label || i}
-                    scope="col"
-                    className="mn pb-2.5 text-[8.5px] font-normal tracking-[0.14em] uppercase text-mute-3"
-                  >
-                    {label}
-                  </th>
-                ),
-              )}
+              {(
+                [
+                  ['Lot', false],
+                  ['Object', false],
+                  ['Given by', false],
+                  ['Accessioned', false],
+                  ['Provenance', false],
+                  ['Material', false],
+                  // The retention column had no header at all. It gets a real
+                  // one, hidden — the design has no room for a seventh label.
+                  ['Kept', true],
+                ] as const
+              ).map(([label, hidden]) => (
+                <th
+                  key={label}
+                  scope="col"
+                  className="mn pb-2.5 text-[8.5px] font-normal tracking-[0.14em] uppercase text-mute-3"
+                >
+                  <span className={hidden ? 'sr-only' : undefined}>{label}</span>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -85,10 +96,14 @@ export default async function CataloguePage() {
                   {row.material ?? row.kind?.replace('_', ' ') ?? em()}
                 </td>
                 <td className="py-2.5">
+                  {/* ARIA prohibits a name on a bare span, so the dot was
+                      conveying kept-vs-not by colour alone. The dot is now
+                      decoration and the state is real text. */}
+                  <span className="sr-only">
+                    {row.retention === 'retained' ? 'Kept' : 'Digital only'}
+                  </span>
                   <span
-                    aria-label={
-                      row.retention === 'retained' ? 'Physical object retained' : 'Digital only'
-                    }
+                    aria-hidden
                     className="block size-[6px] rounded-full"
                     style={{
                       background:

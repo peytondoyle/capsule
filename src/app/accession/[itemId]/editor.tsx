@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation'
 
 type Corner = { x: number; y: number }
 
+/** DEFAULT is ordered top-left, top-right, bottom-right, bottom-left. */
+const CORNER_NAMES = ['Top left', 'Top right', 'Bottom right', 'Bottom left'] as const
+
 const DEFAULT: Corner[] = [
   { x: 0.06, y: 0.06 },
   { x: 0.94, y: 0.06 },
@@ -90,7 +93,7 @@ export function CornerEditor({
             original; next/image cannot optimise an authenticated stream */}
         <img
           src={`/api/original/${itemId}`}
-          alt=""
+          alt="The photograph you are cutting out"
           className="block w-full select-none"
           draggable={false}
         />
@@ -105,11 +108,42 @@ export function CornerEditor({
           <button
             key={i}
             type="button"
-            aria-label={`Corner ${i + 1}`}
+            aria-label={`${CORNER_NAMES[i] ?? `Corner ${i + 1}`} corner, ${Math.round(
+              corner.x * 100,
+            )}% across, ${Math.round(corner.y * 100)}% down. Arrow keys to move.`}
             onPointerDown={(event) => {
               event.preventDefault()
               ;(event.target as HTMLElement).setPointerCapture(event.pointerId)
               setDragging(i)
+            }}
+            // The handles were focusable and announced but inert — the only way
+            // to correct a cut was to drag it.
+            onKeyDown={(event) => {
+              const step = (event.shiftKey ? 0.05 : 0.01) * (event.altKey ? 0.2 : 1)
+              const delta =
+                event.key === 'ArrowLeft'
+                  ? { x: -step, y: 0 }
+                  : event.key === 'ArrowRight'
+                    ? { x: step, y: 0 }
+                    : event.key === 'ArrowUp'
+                      ? { x: 0, y: -step }
+                      : event.key === 'ArrowDown'
+                        ? { x: 0, y: step }
+                        : null
+              if (!delta) return
+              event.preventDefault()
+              setCorners((current) =>
+                current.map((c, j) =>
+                  j === i
+                    ? {
+                        // Same clamp the pointer path uses, so the two cannot
+                        // disagree about where the edge of the photograph is.
+                        x: Math.min(1, Math.max(0, c.x + delta.x)),
+                        y: Math.min(1, Math.max(0, c.y + delta.y)),
+                      }
+                    : c,
+                ),
+              )
             }}
             className="absolute z-10 size-[22px] -translate-x-1/2 -translate-y-1/2 touch-none"
             style={{ left: `${corner.x * 100}%`, top: `${corner.y * 100}%` }}
@@ -121,6 +155,10 @@ export function CornerEditor({
 
       <p className="mn mt-5 text-center text-[9px] leading-[1.7] tracking-[0.12em] text-mute-2 uppercase">
         Drag a corner to correct
+      </p>
+      <p aria-live="polite" className="sr-only">
+        Cut {Math.round((Math.max(...xs) - Math.min(...xs)) * 100)}% wide by{' '}
+        {Math.round((Math.max(...ys) - Math.min(...ys)) * 100)}% tall
       </p>
 
       <div className="mt-6 flex gap-2">
