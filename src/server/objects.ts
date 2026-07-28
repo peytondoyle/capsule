@@ -164,7 +164,19 @@ export async function listUnfiled(ownerId: string, limit = 50) {
  * app must never have. Real pagination lands with a visible affordance or not
  * at all.
  */
-export async function listTimeline(ownerId: string, limit = 5000) {
+export type TimelineSort = 'newest' | 'oldest'
+
+export async function listTimeline(
+  ownerId: string,
+  { sort = 'newest', limit = 5000 }: { sort?: TimelineSort; limit?: number } = {},
+) {
+  // Ordered on received_at, not created_at: the Ledger's spine is when the
+  // object was *given*, not when it was photographed. createdAt only breaks
+  // ties, and follows the same direction so a run of same-day objects does not
+  // reverse relative to its own year heading.
+  const direction = sort === 'oldest' ? asc : desc
+
+
   return getDb()
     .select({
       object: objects,
@@ -201,7 +213,7 @@ export async function listTimeline(ownerId: string, limit = 5000) {
         sql`${objects.receivedPrecision} <> 'unknown'`,
       ),
     )
-    .orderBy(desc(objects.receivedAt), desc(objects.createdAt))
+    .orderBy(direction(objects.receivedAt), direction(objects.createdAt))
     .limit(limit)
 }
 

@@ -19,7 +19,7 @@ import { Tags } from '@/components/tag-editor'
 import { countLine, lotLabel, receivedLabel } from '@/lib/format'
 import { getArchiveSummary, getDefaultLot, getObjectDetail } from '@/server/archive'
 import { getCurrentUser } from '@/server/auth'
-import { listTimeline, searchObjects } from '@/server/objects'
+import { listTimeline, searchObjects, type TimelineSort } from '@/server/objects'
 import { listPeopleWithCounts } from '@/server/people'
 import { Rail } from './rail'
 import { Stream } from './stream'
@@ -29,7 +29,7 @@ export const metadata: Metadata = { title: 'Timeline — Capsule' }
 export default async function TimelinePage({
   searchParams,
 }: {
-  searchParams: Promise<{ lot?: string; q?: string; edit?: string }>
+  searchParams: Promise<{ lot?: string; q?: string; edit?: string; sort?: string }>
 }) {
   // getCurrentUser, not auth(): it also creates the users row on first sight.
   // Every foreign key points at users.id, so an authed page that skips this
@@ -38,15 +38,16 @@ export default async function TimelinePage({
   if (!user) redirect('/sign-in')
   const userId = user.id
 
-  const { lot, q, edit } = await searchParams
+  const { lot, q, edit, sort } = await searchParams
   const requested = Number.parseInt(lot ?? '', 10)
   const query = q?.trim() || null
   const editing = edit === '1'
+  const order: TimelineSort = sort === 'oldest' ? 'oldest' : 'newest'
 
   const [summary, people, rows] = await Promise.all([
     getArchiveSummary(userId),
     listPeopleWithCounts(userId),
-    query ? searchObjects(userId, query) : listTimeline(userId),
+    query ? searchObjects(userId, query) : listTimeline(userId, { sort: order }),
   ])
 
   const activeLot = Number.isNaN(requested) ? await getDefaultLot(userId) : requested
@@ -58,7 +59,13 @@ export default async function TimelinePage({
       <Rail summary={summary} people={people} />
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <Toolbar total={summary.objects} query={query} />
+        <h1 className="sr-only">Timeline</h1>
+        <Toolbar
+          total={summary.objects}
+          query={query}
+          sort={order}
+          activeLot={detail?.lotNo ?? null}
+        />
         <div className="min-h-0 flex-1 overflow-y-auto">
           {query ? (
             <SearchResults rows={rows} query={query} activeLot={detail?.lotNo ?? null} />
@@ -79,7 +86,27 @@ export default async function TimelinePage({
   )
 }
 
-function Toolbar({ total, query }: { total: number; query: string | null }) {
+function Toolbar({
+  total,
+  query,
+  sort,
+  activeLot,
+}: {
+  total: number
+  query: string | null
+  sort: TimelineSort
+  activeLot: number | null
+}) {
+  const flipped = sort === 'newest' ? 'oldest' : 'newest'
+  // Keeps the selection across a re-sort — the object is still there, just at a
+  // different point in the run, and losing the inspector on every sort is worse
+  // than a slightly longer URL.
+  const sortHref = `/timeline?${new URLSearchParams({
+    ...(activeLot !== null ? { lot: String(activeLot) } : {}),
+    ...(query ? { q: query } : {}),
+    ...(flipped === 'oldest' ? { sort: 'oldest' } : {}),
+  })}`
+
   return (
     <div className="flex h-14 shrink-0 items-center gap-3.5 border-b border-hair px-6">
       <form action="/timeline" className="mn flex h-[30px] max-w-[330px] flex-1 items-center gap-2 rounded-[7px] border border-hair-strong bg-paper px-3 text-[10.5px]">
@@ -96,9 +123,13 @@ function Toolbar({ total, query }: { total: number; query: string | null }) {
       </form>
 
       <div className="ml-auto flex gap-1.5">
-        <span className="mn rounded-md border border-hair-strong px-[11px] py-1.5 text-[9px] tracking-[0.08em] text-mute-1">
-          NEWEST
-        </span>
+        <Link
+          href={sortHref}
+          aria-label={`Sorted ${sort === 'newest' ? 'newest' : 'oldest'} first. Show ${flipped} first.`}
+          className="mn rounded-md border border-hair-strong px-[11px] py-1.5 text-[9px] tracking-[0.08em] text-mute-1 hover:text-ink"
+        >
+          {sort === 'newest' ? 'NEWEST' : 'OLDEST'}
+        </Link>
         <Link
           href="/accession"
           className="mn rounded-md bg-ink px-[11px] py-1.5 text-[9px] font-medium tracking-[0.08em] text-bg"
