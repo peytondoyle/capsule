@@ -54,12 +54,15 @@ export default async function ObjectPage({
     <div data-surface="ledger" className="min-h-dvh bg-bg text-ink">
       <TiltLayer />
 
-      {/* The object view is the phone screen in the doc; on a wide window it
-          stays a single column rather than inventing a desktop layout that the
-          design never specified. */}
-      <div className="mx-auto flex min-h-dvh max-w-[430px] flex-col">
+      {/* The object view is the phone screen in the doc. Below lg it is exactly
+          that, unchanged. Above it, a 430px column stranded in the middle of a
+          desktop window is not "faithful to the mockup", it is just small — so
+          the run opens into the hero-beside-fields anatomy the Ledger inspector
+          and the Cabinet panel already use. That is the design's own desktop
+          idiom, not a new one. */}
+      <div className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col lg:max-w-[960px]">
         <nav className="flex h-11 shrink-0 items-center justify-between border-b border-hair px-4">
-          <Link href="/timeline" aria-label="Back to timeline" className="text-[15px] text-mute-2">
+          <Link href="/timeline" aria-label="Back to timeline" className="-ml-1.5 flex size-6 items-center justify-center text-[15px] text-mute-2">
             ‹
           </Link>
           <span className="mn text-[9px] tracking-[0.14em] text-mute-2">
@@ -80,6 +83,7 @@ export default async function ObjectPage({
           <EditForm detail={detail} giverName={giver?.name ?? ''} lotNo={lotNo} />
         ) : (
           <>
+            <div className="lg:grid lg:grid-cols-[minmax(0,430px)_minmax(0,1fr)] lg:items-start lg:gap-14 lg:px-8 lg:pt-10">
             <Faces
               faces={detail.faces.map((face) => ({
                 id: face.id,
@@ -95,8 +99,8 @@ export default async function ObjectPage({
               kind={detail.kind}
             />
 
-            <div className="px-6">
-              <h1 className="text-[22px] leading-[1.2] font-semibold tracking-[-0.03em]">
+            <div className="px-6 lg:px-0">
+              <h1 className="text-[22px] leading-[1.2] font-semibold tracking-[-0.03em] lg:text-[27px]">
                 {detail.title}
               </h1>
               {meta ? (
@@ -124,9 +128,10 @@ export default async function ObjectPage({
                 <Tags objectId={detail.id} tags={detail.tags} />
               </div>
             </div>
+            </div>
 
             {stats && stats.objectCount > 1 ? (
-              <footer className="mt-auto flex items-center justify-between border-t border-hair px-4 py-3.5">
+              <footer className="mt-auto flex items-center justify-between border-t border-hair px-4 py-3.5 lg:mx-8 lg:px-0">
                 <div>
                   <div className="text-[12px] leading-[1.2] font-medium">
                     {stats.objectCount - 1} more from {stats.name}
@@ -160,12 +165,14 @@ function Field({
   defaultValue,
   placeholder,
   textarea,
+  type,
 }: {
   label: string
   name: string
   defaultValue?: string | null
   placeholder?: string
   textarea?: boolean
+  type?: 'text' | 'date'
 }) {
   const shared =
     'mt-2 w-full border-0 border-b border-hair-strong bg-transparent pb-2 text-[14px] outline-none placeholder:text-mute-3 focus:border-ink'
@@ -183,9 +190,10 @@ function Field({
       ) : (
         <input
           name={name}
+          type={type ?? 'text'}
           defaultValue={defaultValue ?? ''}
           placeholder={placeholder}
-          className={shared}
+          className={type === 'date' ? `${shared} mn mn-date w-auto tabular-nums` : shared}
         />
       )}
     </label>
@@ -202,15 +210,13 @@ function EditForm({
   lotNo: number
 }) {
   return (
-    <form action={saveFieldsAction.bind(null, detail.id)} className="flex flex-col gap-5 px-6 py-6">
+    <form
+      action={saveFieldsAction.bind(null, detail.id)}
+      className="flex w-full flex-col gap-5 px-6 py-6 lg:mx-auto lg:max-w-[560px] lg:py-10"
+    >
       <Field label="Title" name="title" defaultValue={detail.title} />
       <Field label="From" name="givenBy" defaultValue={giverName} placeholder="Who gave it to you?" />
-      <Field
-        label="Received"
-        name="receivedAt"
-        defaultValue={detail.receivedAt}
-        placeholder="YYYY-MM-DD"
-      />
+      <Field label="Received" name="receivedAt" defaultValue={detail.receivedAt} type="date" />
       <Field label="Origin" name="place" defaultValue={detail.placeName} placeholder="Where from?" />
       <Field
         label="Occasion"
