@@ -1,315 +1,249 @@
-# Handoff — 2026-07-27 (evening)
+# Handoff — 2026-07-28
 
-Branch: **`v2-rebuild`** (not merged to `master`). Working tree committed.
-Plan: [CAPSULE-V2-PLAN.md](CAPSULE-V2-PLAN.md) · Rules: [../CLAUDE.md](../CLAUDE.md)
+Supersedes the 2026-07-27 build log. That document was a phase-by-phase narrative of how v2 got
+built; the phase detail now lives in [CAPSULE-V2-PLAN.md](CAPSULE-V2-PLAN.md) and the durable
+platform traps in [../CLAUDE.md](../CLAUDE.md). This is state and traps only.
 
-**All 12 phases built; production is live** (`vercel ls capsule` for the URL — Vercel
-Authentication still fronts it). Full loop verified: sign in → upload → auto derive+extract →
-queue → file → all three surfaces → share link for a signed-out visitor. Extraction verified
-on prod at 95% per field. One optional item left under *Needs you* — the Clerk webhook,
-which nothing depends on. Before real use: reseed onto your own account, promote a custom
-domain, and decide when to switch Clerk off dev keys.
-
-Before doing UI work, reseed onto your own account so the Ledger is not empty:
-sign in once, then `npm run db:seed -- --owner <your clerk user id>`. The archive currently
-sits on a synthetic `user_seed_dev` row, which no signed-in session will ever match.
-
----
-
-## Where things stand
+## State
 
 | | |
 |---|---|
-| Repo | Single Next 16 app at root. `apps/`, `supabase/` deleted (recoverable at `4deef1e`). |
+| Branch | `v2-rebuild` @ `111fe69`, tree clean |
+| **Pushed** | **No.** `origin` has only `master` @ `31a2c2b`. Every commit below exists on this machine only |
+| Production | `capsule-omega-ruby.vercel.app` → deployment `capsule-8gke1e0kp`, running `111fe69` |
+| Gates | `build` `typecheck` `lint` `db:check` all 0; `db:verify` 33 ok, `db:verify:p6` 15 ok, `db:verify:upload` 12 ok |
+| Prod archive | 1 user, 40 objects (lots 1–139), 5 people, 1 share, 0 intake batches |
+| Neon | project `purple-river-19152863` · branch `main` = production · branch `verify` = gates + local dev |
 | Vercel | project `capsule` · `prj_6sLVlwcBGVtNtwXZjCL1C3kjBlTM` · team `peyton-doyle` |
-| Neon | `capsule-db` · project `purple-river-19152863` · Postgres 17.10 · `us-east-1` / iad1 · free plan |
-| Blob | `capsule-media` (public) `store_tCVSYcNtL8WVtWGV` · `capsule-originals` (private) `store_TJ3jyzfgZpJQro01` — both connected, all 3 envs |
-| Clerk | app `Capsule` · `app_3H2m8Htunq84mjsLvOiAEnixExd` · dev instance `ins_3H2m8FLMWs9QFXpe7UfnbmtK57I` · `unified-polecat-6.clerk.accounts.dev` |
-| Preview | https://capsule-mg2kfhg39-peyton-doyle.vercel.app (Vercel Authentication is on, so a plain `curl` gets 302/401 — that is protection, not a bug) |
-| DB tables | 16 tables + 11 enums + pg_trgm. Migrations `0000`–`0002`. `npm run db:verify` runs 24 assertions. |
+| Blob | `capsule-media` (public) `store_tCVSYcNtL8WVtWGV` · `capsule-originals` (private) `store_TJ3jyzfgZpJQro01` |
+| Clerk | app `app_3H2m8Htunq84mjsLvOiAEnixExd` · **development instance** `unified-polecat-6.clerk.accounts.dev` |
 
-### Verified, with output
+**The first row that matters is the second one.** Nothing is pushed. If this machine dies, the whole
+session is gone.
 
-```
-npm run build      exit=0      npm run typecheck  exit=0      npm run lint  exit=0
-```
+## What changed
 
-- **Blob round-trip** — `put` → `fetch` 200 with matching body → `head` → `del` → `fetch` 404.
-- **Clerk webhook** — bad signature → 400 (fails closed); `user.created` → 200 and the row
-  appears with email/name/avatar plus its `owner_counters` row; `user.updated` → 200;
-  `user.deleted` → 200 and both rows gone via FK cascade. Driven by a locally-signed Svix
-  payload against the real route.
-- **Full auth chain** — custom sign-in → email code → session → `ensureUser()` →
-  `users` + `owner_counters` rows. Used Clerk's `+clerk_test` fixture (fixed code `424242`)
-  so no real mail was sent; the test user and its rows were deleted afterwards. Clerk and
-  Neon are both back to **0 users**.
-- **Deployed runtime** — `GET /api/health` on the preview returns
-  `{"ok":true,"database":true,"node":"v24.18.0","region":"iad1"}`. Neon is reachable from the
-  function, Node satisfies the driver's ≥19 requirement, and function and database sit in the
-  same region.
+Ten commits, all bug fixes, all from adversarial review rather than from feature work.
 
-### Not verified
+**Capture was broken in production and is now fixed.** The ownership check added earlier
+(`assertOwnedOriginalUrl`) required every original to sit under `intake/{ownerId}/`, on the belief
+that `/api/blob/upload` rewrote the pathname to match. It does not — `handleUpload` puts the
+*client's* pathname into the issued token and discards whatever `onBeforeGenerateToken` returns. So
+every blob landed at the store root and every upload was rejected on the way back in. The path is
+now the client's to propose and the route's to refuse. Separately, `handleFiles` read the input's
+live `FileList` *after* its first `await`, by which point the change handler had cleared it — so the
+first "+ ADD PHOTOGRAPHS" of every session silently uploaded nothing and the second worked.
 
-- **Google OAuth.** Enabled on the instance with Clerk's shared dev credentials, and the
-  button starts the redirect, but no round trip was completed. `/sign-in/sso-callback` exists
-  and is untested.
-- **Sign-in with a real mailbox.** Only the `+clerk_test` fixture path ran.
-- **Anything on production.** There is one failed Production deployment from the first
-  `vercel deploy` attempt (before `vercel.json` existed). Harmless — nothing was ever live —
-  but the production URL is currently an error page until someone promotes a good build.
+**Three ways photographs could be destroyed, closed.** The P6 gate swept every intake blob belonging
+to its `--owner` — and a filed object's `object_faces` URLs are the *same strings* as its
+`intake_items` URLs, so it deleted live images of already-filed objects from the production store;
+it also adopted whatever was waiting in `/queue` as its probe and deleted that. The offline drain
+keyed its "safely uploaded" set on `file.name`, and every iOS camera capture is called `image.jpg`,
+so one success authorised deleting a same-named failure. Account deletion removed every row holding
+a blob URL and none of the blobs.
 
----
+**Gates and dev no longer run against the live archive.** `.env.local` and Production share one Neon
+endpoint. `scripts/verify-db.ts` repoints the gates at the `verify` branch and refuses to run
+without it; `npm run dev` (via `.claude/launch.json` → `dev:verify`) does the same.
 
-## Needs you
+**Smaller, user-visible:** chips inside the filing form were typeless `<button>`s, i.e. submit
+buttons, so tapping a suggested person filed the object. The Board's drag stuck forever on
+`pointercancel`. A late derive/extract could resurrect a filed item and jam the queue at an
+unfilable head.
 
-**1. ~~Connect `capsule-originals`~~ — done, via the API.** Recorded because the CLI cannot do it and the
-next second-store will hit the same wall:
+## Verified how
 
-```bash
-# the connection endpoint `vercel blob` does not expose
-curl -X POST -H "Authorization: Bearer $VERCEL_TOKEN" -H 'content-type: application/json' \
-  -d '{"projectId":"prj_…","envVarPrefix":"BLOB_ORIGINALS"}' \
-  "https://api.vercel.com/v1/storage/stores/store_…/connections?teamId=team_…"
-```
+Not by reading diffs. A throwaway Clerk account was driven through the real browser: upload landed
+at `intake/{clerkId}/image-{suffix}.jpg`, derive ran, filing advanced the queue 2 → 1, the `+ someone`
+chip did not submit, and the production database was untouched throughout. Deleting that account
+took its blob count 4 → 0, which is the account-deletion fix proven rather than asserted.
 
-It targets Production and Preview only, so Development needs a manual mirror — and note that
-`GET /v9/projects/{id}/env?decrypt=true` returns **ciphertext**, not the token. Use
-`vercel env pull <file> --environment=preview`, which decrypts server-side, then
-`vercel env add … development`.
+`db:verify:upload` is new and exists specifically because `db:verify:p6` seeds through the
+server-side `put()` — the share-target shape — and therefore never exercised the browser upload path
+at all. That gap is what let a dead capture flow ship.
 
-Verified: `put` lands on `…private.blob.vercel-storage.com`, an anonymous fetch of that URL
-returns **403**, and `del` cleans up.
+## Open items — only you can do these
 
-**2. Register the Clerk webhook endpoint.** The Svix app exists; endpoint CRUD is not in
-Clerk's Backend API, so this is a dashboard step. Get a fresh one-time dashboard link with:
+1. **Push.** `git push -u origin v2-rebuild`. Nothing is backed up.
+2. **Clerk is a development instance in production.** The key served at `/sign-in` is `pk_test_…`.
+   Dev instances have hard usage limits, issue ~60-second tokens, and authenticate through Clerk's
+   shared `accounts.dev` domain. A production instance requires a custom domain and DNS records —
+   which is why this is blocked on you choosing a domain. Until then the app is not fit for anyone
+   but you.
+3. **Decide whether sign-up stays open.** It is public, and `/api/extract` bills Anthropic per call
+   with no rate limit (below).
 
-```bash
-clerk api /webhooks/svix_url -X POST --yes
-```
+## Deliberate limitations — do not "fix" these
 
-Add an endpoint pointing at `<your-domain>/api/webhooks/clerk`, subscribe to `user.created`,
-`user.updated`, `user.deleted`, copy the signing secret, then:
+- **`moveObjectAction` does not revalidate.** The client already shows the truth it created; a
+  revalidate would fight the drag. The override retires by matching the server value.
+- **Derivatives are not alpha-masked.** The design system clips every cutout in CSS; baking the
+  silhouette would double it and make the stored image wrong the moment the cut style changes.
+- **Lot numbers are not gapless over time.** A lot number is an accession number, so deleting an
+  object retires it permanently. `db:verify` asserts unique-and-monotonic, not `1..n` — the older
+  "gapless from 1" assertion could not pass twice, because the gate's own concurrency test creates
+  and deletes objects.
+- **`deleteBlobs` swallows failures.** A leaked blob is recoverable by a sweep; a throw would leave
+  someone unable to delete their own object.
+- **Blobs are not branched.** The `verify` Neon branch isolates rows, not bytes. Anything that
+  deletes blobs during a gate run hits the real store — which is why the P6 gate now tracks ids.
 
-```bash
-vercel env add CLERK_WEBHOOK_SIGNING_SECRET production
-```
+## Known bugs
 
-**This is genuinely optional.** `ensureUser()` creates the row synchronously on the first
-authenticated request, so sign-up never depends on webhook delivery. Without the secret the
-route returns 400 and only `user.updated` / `user.deleted` propagation is missing.
+A 152-agent adversarial audit ran over the whole app on 2026-07-28. It confirmed **44 findings — 0
+critical, 9 high** — each having survived two independent attempts to refute it, one on
+reachability and one on real-world impact. Deduped by site below; where two dimensions found the
+same defect from different angles the fuller write-up is kept.
 
----
+**None of these are fixed.** The raw audit output (evidence, reproductions, refutation reasoning)
+was in session scratch and is gone; what follows is the durable record.
 
-## Decisions made during phase 1 that differ from the plan
+### High
 
-**Lazy `ensureUser()` is the guarantee; the webhook is only for updates and deletes.**
-The plan's phase-1 proof was "a users row appears via webhook". That has a race: webhook
-delivery is asynchronous and droppable, and every foreign key in the schema points at
-`users.id`, so a delayed webhook means a signed-in user whose first write fails. `getCurrentUser()`
-in [src/server/auth.ts](../src/server/auth.ts) does one indexed primary-key lookup and, only on
-a miss, hydrates from Clerk's Backend API and upserts. The webhook still exists and is verified.
+**`src/app/accession/uploader.tsx:77`** — Offline capture never engages on the first pick of a session: startBatchAction is awaited before any file is touched, so with no network the picker aborts with a raw "Failed to fetch" and parks nothing in IndexedDB.
+<br>*Fix:* Do not gate the files on the batch. Park every picked file in IndexedDB first (or at minimum when `!navigator.onLine`), then mint the batch. Defer batch creation to the first successful upload, and give the offline case its own copy — "no signal — 3 photographs saved on this device, they'll upload next time" — instead of the browser's fetch error string.
 
-**Two Blob stores, not one namespace.** Access level turns out to be a property of the
-*store*, not the blob: private stores serve from `{id}.private.blob.vercel-storage.com` behind
-a bearer token, public ones from `{id}.public...`. So the plan's private-originals /
-public-derivatives split needs two stores. Consequence for phase 6: originals go to
-`capsule-originals` via `BLOB_ORIGINALS_READ_WRITE_TOKEN`, derivatives to `capsule-media`
-via `BLOB_READ_WRITE_TOKEN`.
+**`src/app/api/derive/route.ts:41`** — The route persists only cutoutUrl; thumbUrl, width and height from deriveFromOriginal are returned to the browser and thrown away, so every object in the archive renders at the fallback 1.15 aspect and the t640 thumbnail is dead weight.
+<br>*Fix:* Add thumb_url/width/height to intake_items (or pass the derive result straight through), have /api/derive persist all four, and have fileIntakeItem copy thumbUrl, width and height onto the object_faces row alongside cutoutUrl.
 
-**Schema lives in `src/server/db/schema.ts`, not `drizzle/schema.ts`.** `drizzle/` holds
-generated SQL only. The server-only boundary rule matters more than the folder name: keeping
-every DB symbol under `src/server/` is what makes "never import drizzle outside `src/server/`"
-mechanically checkable.
+**`src/app/board/canvas.tsx:197`** — The Board container calls setPointerCapture on every pointerdown, which retargets the subsequent click to the container and kills every control inside the canvas — SCATTER, TIDY, CLUSTER BY (and its four menu items), FIT and the "+ ADD" link.
+<br>*Fix:* Only capture when a card is actually grabbed: move the `setPointerCapture` call inside the `if (el) { ... }` branch. For panning, either skip capture entirely (pointermove/pointerup on the container already cover the gesture while the pointer is over it) or capture only after confirming the pointerdown did not originate in chrome — e.g. `if (!(event.target as Element).closest('button, a')) { pan.current = ...; setPointerCapture(...) }`. Guarding the pan branch this way also stops toolbar drags from panning the board.
 
-**Passwords are disabled on the Clerk instance.** Clerk created the app with
-`auth_password.required: true`, which silently makes a passwordless flow uncompletable — the
-sign-up sits at `missing_requirements` with `missingFields: ['password']` *after* the email is
-verified, so it looks like a broken verify step. Patched with:
+**`src/app/page.tsx:19`** — The root route — where every sign-in lands — is still the phase-1 platform-wiring debug page, and it renders a hardcoded "0 OBJECTS · 0 PEOPLE" in the archival mono style regardless of what is in the archive.
+<br>*Fix:* Make `/` a redirect: `const { userId } = await auth(); redirect(userId ? '/timeline' : '/sign-in')`, and delete the debug dl. Alternatively point the three sign-in redirects (sign-in/page.tsx:47, sign-in/page.tsx:131, sso-callback/page.tsx:7) at '/timeline' to match manifest.ts start_url. Either way the SESSION / DB ROW rows printing the Clerk id should not stay on a production route.
 
-```bash
-clerk config patch --json '{"auth_password":{"enabled":false,"required":false}}' --yes
-```
+**`src/server/derive.ts:55`** — sharp cannot decode HEIC/HEIF, so every HEIC original fails derive and the item never gets an image, with no error surfaced anywhere.
+<br>*Fix:* Either decode HEIC before it reaches sharp (transcode client-side in the uploader via createImageBitmap/canvas before upload, which also fixes the corner editor's <img>), or drop 'image/heic'/'image/heif' from allowedContentTypes so the upload fails loudly at the picker with a message the user can act on. Whichever is chosen, /api/derive's 500 must be surfaced: the uploader should mark the item failed and CornerEditor.save() must show the error instead of silently doing nothing when res.ok is false.
 
-Sign-in is now email code + Google only. Nothing in the app ever handles a password.
+**`src/server/derive.ts:93`** — Re-cutting an object appears to do nothing: derivatives are overwritten at a byte-identical URL that Vercel Blob serves with `cache-control: public, max-age=2592000`, so the browser keeps painting the pre-adjustment cutout for 30 days.
+<br>*Fix:* Make the derivative key change when the pixels change — e.g. `${target.key}/cutout-${hashOfCorners}.webp`, or keep `addRandomSuffix: true` and store the returned URL — so a re-cut yields a new URL. If the path must stay deterministic, pass `cacheControlMaxAge` short enough to revalidate (and drop the SW's CacheFirst rule for derivatives in favour of StaleWhileRevalidate), or append the item's `updatedAt` as a query parameter at render time.
 
-**Custom Clerk UI, not `<SignIn />`.** Per your mid-phase request. One unified flow at
-[src/app/sign-in/page.tsx](../src/app/sign-in/page.tsx): a single email field tries
-`signIn.emailCode.sendCode()` and falls through to `signUp.create()` when Clerk returns
-`form_identifier_not_found`, so there is no sign-in/sign-up fork in the UI. `/sign-up`
-redirects to `/sign-in`. Styled in the Ledger idiom inline — phase 3 refactors it onto the
-real primitives, and [src/app/sign-in/cutout.tsx](../src/app/sign-in/cutout.tsx) is the
-throwaway stand-in for `<Cutout>`.
+**`src/server/intake.ts:189`** — fileIntakeItem snapshots the intake row's cutoutUrl into object_faces, and nothing ever backfills that face — an item filed before its derive lands becomes an object whose photograph is unreachable on every surface, permanently.
+<br>*Fix:* After a successful derive, write through to the face as well as the intake row: in /api/derive, if the item already has an objectId, UPDATE object_faces SET cutout_url = $1, thumb_url = $2, width, height WHERE object_id = $3 AND role = 'recto'. Alternatively have fileIntakeItem refuse to file an item whose cutout_url is null (or file it and enqueue a repair), so a face is never created pointing at nothing.
 
----
 
-## Serwist × Next 16 — plan risk #3, resolved
+### Medium
 
-Tested and **not adopted**. Three findings, in order of how much they will bite:
+**`package.json:25`** — dev:verify repoints only the database at the verify branch while leaving the production Blob tokens in place, so an ordinary local dev session overwrites live production image bytes at deterministic paths.
+<br>*Fix:* Branch the bytes as well as the rows, or refuse to write: have dev:verify also point BLOB_READ_WRITE_TOKEN / BLOB_ORIGINALS_READ_WRITE_TOKEN at scratch stores (and fail fast if they still resolve to the production store ids), the same way verify-db.ts refuses to run without DATABASE_URL_VERIFY. At minimum, drop `allowOverwrite: true` from deriveFromOriginal and version the derivative key so a re-derive can never clobber bytes an existing row references.
 
-1. `@serwist/next` injects a **webpack** config. Next 16 defaults to Turbopack and the build
-   hard-fails: *"This build is using Turbopack, with a `webpack` config and no `turbopack` config."*
-2. `next build --webpack` works — it emitted a valid 41 KB `public/sw.js`. So Serwist is
-   usable, at the cost of leaving the default builder.
-3. **The dangerous one:** adding `turbopack: {}` to silence (1) makes the build **succeed with
-   no service worker at all**. Exit 0, no warning, no `sw.js`. A PWA that quietly stops being
-   a PWA. Never silence that error.
+**`src/app/accession/[itemId]/editor.tsx:50`** — CUT IT OUT does nothing at all when /api/derive returns a non-2xx — there is no else branch — and when the service worker is active it treats the worker's offline 202 as success and navigates away as if the cut happened.
+<br>*Fix:* Add an error state: `if (!res.ok) { setError(res.status === 401 ? 'Signed out — sign in and try again' : 'Could not cut this out. Try again.'); return }`, wrap the fetch in try/catch for the network case, and treat 202 explicitly ("queued — this will be cut out when you're back online") instead of letting res.ok conflate it with a real derive.
 
-Left the repo on Turbopack with Serwist uninstalled. Phase 11 picks one of:
+**`src/app/accession/uploader.tsx:177`** — The offline upload queue in IndexedDB is not owner-scoped and is never cleared on sign-out, so on a shared device the next user to open /accession silently uploads the previous user's parked photographs into their own archive.
+<br>*Fix:* Stamp `ownerId` onto each `PendingUpload` row at `enqueueUpload` time and filter in `listQueued(ownerId)`, so a drain only ever uploads rows belonging to the signed-in user; rows belonging to nobody in this session stay parked (or are dropped after a retention window). Belt and braces: wrap `SignOutButton` in a handler that deletes the `capsule-offline` database before signing out.
 
-- **A** — Serwist + `next build --webpack`. Simplest, gives up Turbopack permanently.
-- **B** — hand-written `public/sw.js`, which is what Next's own PWA guide does. Keeps
-  Turbopack; you implement background sync yourself and get no precache manifest.
-- **C (recommended)** — keep Turbopack and compile `src/sw.ts` → `public/sw.js` with a
-  standalone esbuild step in the build script. Keeps Serwist's runtime classes, including the
-  `BackgroundSyncQueue` that offline capture depends on, without the webpack plugin.
+**`src/app/api/extract/route.ts:31`** — No rate limiting exists anywhere — app-level or platform-level — on /api/extract (billed Anthropic calls) or /api/derive (sharp CPU + Blob writes), and Clerk sign-up is public.
+<br>*Fix:* Add a per-owner token bucket in front of both routes (Vercel Runtime Cache or an Upstash counter keyed on `user.id`), and make /api/extract idempotent — short-circuit with the stored `item.suggestions` unless the request explicitly asks for a re-run. Consider gating sign-up (allowlist or waitlist) for a single-user archive.
 
----
+**`src/app/api/share-target/route.ts:36`** — The share target creates intake items but never triggers a derive, then redirects straight to the Filer, so a shared photo files as an object with no image at all.
+<br>*Fix:* Call deriveFromOriginal inline in the share-target loop after addIntakeItem (the route already has runtime 'nodejs' and maxDuration 60, and the ~4.5 MB body cap bounds the work), persisting cutoutUrl/thumbUrl/width/height on the item before redirecting.
 
-## Pinned versions — do not "upgrade" these
+**`src/app/layout.tsx:64`** — There is no error.tsx, global-error.tsx or not-found.tsx anywhere in the app, so any Server Action rejection replaces the whole document with Next's generic "This page couldn't load" and destroys everything the user typed.
+<br>*Fix:* Add src/app/error.tsx (a Ledger-surface 'use client' boundary with unstable_retry), src/app/global-error.tsx, and src/app/not-found.tsx. Separately, stop relying on the boundary for expected failures: wrap each mutating client call in try/catch and surface a real message — for the filer, keep the form contents mounted and show "Couldn't file this — your words are still here" rather than losing them.
 
-Reasons in [../CLAUDE.md](../CLAUDE.md). All three were tested, not assumed.
+**`src/app/queue/filer.tsx:172`** — Once "+ someone" is tapped the hidden givenBy input is unmounted, so a person chosen from the suggestion chips still renders as selected but is silently dropped from the filed object.
+<br>*Fix:* Render the `chosen.person` hidden input unconditionally (outside the namingPerson ternary) and suppress it only when the free-text field actually has a value, or — simpler — have the chips clear `namingPerson` when tapped (`setChosen(...); setNamingPerson(false)`), and give the free-text field an escape (blur/Escape → `setNamingPerson(false)`) so the two inputs can never both be live.
 
-- `typescript ~5.9.3` — TS 7.0.2 is `latest` but `typescript-eslint@8` (bundled by
-  `eslint-config-next@16`) peers `typescript >=4.8.4 <6.1.0`. TS 7 compiles and breaks lint.
-- `eslint ^9.39.5` — eslint 10 would clear 9 of 11 audit findings and every declared peer
-  range allows it, but it crashes `eslint-plugin-react` in `getReactVersionFromContext`.
-- `overrides.sharp ^0.35.3` — Next pins `^0.34.5`, whose libvips 8.17 carries
-  CVE-2026-33327/33328/35590/35591. The override lands libvips 8.18.3. Phase 6 uses sharp directly.
+**`src/components/share-button.tsx:18`** — navigator.share is called only after awaiting a Server Action, so once transient activation expires the share sheet never opens and the bare catch swallows the failure with no message and no clipboard fallback.
+<br>*Fix:* Do not gate the sheet on the round trip. Either mint the share link ahead of the tap (fetch it on mount / on hover and keep it in state, so `navigator.share` runs synchronously in the click handler), or pass the promise to the Web Share API path that accepts one. Failing that, catch the share rejection and fall through to `navigator.clipboard.writeText(url)`, and surface a real error state instead of swallowing it — at minimum distinguish AbortError (user dismissed) from NotAllowedError.
 
-Remaining `npm audit`: 11 findings, none actionable. `postcss` 8.5.23 is the newest published
-version and is still flagged (npm's suggested "fix" is downgrading Next to 9.x);
-`brace-expansion`/`minimatch` are dev-only DoS reachable only through the eslint plugin
-chain's own globs.
+**`src/design/cutout.tsx:116`** — Every grid renders the 1600px `cutoutUrl` eagerly; the 640px `thumbUrl` that derive.ts produces for exactly this purpose is never used anywhere in the app.
+<br>*Fix:* Add `thumbUrl` to the `recto`/`face` projections in board.ts:36 and cabinet.ts:44, and render `thumbUrl ?? cutoutUrl` in Stream, SearchResults, cabinet shelves and the Board (keep `cutoutUrl` for the single Inspector hero and /o/[lot], which go up to 280px). In cutout.tsx add `loading="lazy"` and `decoding="async"` to the `<img>`, with an opt-out prop so the first row and the Inspector hero stay eager. Together this takes the /timeline first paint at n=500 from ~100 MB to roughly the ~25-30 visible thumbs (~1-1.5 MB).
 
----
+**`src/design/tokens.css:33`** — --mute-2 and --mute-3, the tokens behind every date, count, field label and caption in the app, sit at 2.48:1 and 2.08:1 on the Ledger — well under the 4.5:1 required for text this size.
+<br>*Fix:* Darken the two muted tokens per surface until they clear 4.5:1 at the sizes they are actually used at: Ledger --mute-2 needs roughly rgb(42 37 29 / 0.72) and --mute-3 roughly rgb(42 37 29 / 0.62); Cabinet --mute-2 ≈ rgb(236 234 228 / 0.72), --mute-3 ≈ rgb(236 234 228 / 0.60); Board --mute-3 ≈ #6c5d43. If the palette must stay as-is for pure decoration, keep the light values only for genuinely non-text uses (the aria-hidden dots and rules) and give text.tsx its own accessible tokens.
 
-## Phase 2, as built
+**`src/server/board.ts:128`** — TIDY, SCATTER and CLUSTER BY each issue one sequential HTTP round-trip per object, so a Board button costs O(n) round-trips with no transaction.
+<br>*Fix:* Replace each loop with one statement. For tidy/scatter: `UPDATE objects SET board_x=v.x, board_y=v.y, board_z=0 FROM (VALUES ...) AS v(id,x,y) WHERE objects.id=v.id::uuid AND objects.owner_id=$owner` (or compute the grid in SQL with `row_number() over (order by lot_no)`). For clusterBoardBy, do the same per dimension and wrap the delete + inserts + update in a real transaction via `getTxDb()`, which already exists for exactly this reason.
 
-14 tables, 11 enums, `pg_trgm` with 4 GIN indexes. Schema in
-[src/server/db/schema.ts](../src/server/db/schema.ts); migrations `0000`–`0002`.
+**`src/server/board.ts:70`** — An unplaced object's default board position is derived from its index in a list ordered by boardZ, so dragging any single cutout — or adding or deleting one object — silently rearranges every object the owner has never placed.
+<br>*Fix:* Derive the default slot from something stable per object rather than from list position — e.g. `defaultPosition(row.object.lotNo)` using lotNo (or a hash of object.id) for the angle and radius — or compute the index over a lotNo-only ordering taken before the boardZ sort.
 
-- **Lot allocation** runs on `drizzle-orm/neon-serverless` over a ws `Pool`
-  ([src/server/db/pool.ts](../src/server/db/pool.ts)) because `neon-http` cannot hold a
-  transaction open. The counter bump and the object insert commit together, so a failed
-  insert cannot leave OBJ-0148 following OBJ-0146. Deleting an object *does* retire its lot
-  for good — lots are never reused, so lot numbers and object counts drift apart by design.
-- **`name_key`** is a generated `lower(name)` column on people/places/occasions/tags.
-  The dedup has to be case-insensitive because intake writes into these constantly, and a
-  generated column is the only form `onConflictDoUpdate` can target — an expression index
-  is not addressable from drizzle's typed API.
-- **Bug found and fixed**, which would have surfaced in phase 4: drizzle decides whether a
-  left-joined group is null from its **first selected column**. `listTimeline` led with
-  `cutout_url`, which is null for every object between intake and phase 6, so every face
-  read as missing. The join now leads with `id`. Watch for this in any new left join.
+**`src/server/users.ts:75`** — deleteUser does not delete the 640px derivative of every photograph, so "delete my account" leaves a public, unauthenticated thumbnail of every object in the media store forever.
+<br>*Fix:* The thumb lives in the same folder as the cutout, so it is recoverable without a migration: in deleteBlobs' media list, for each non-null cutoutUrl also push `cutoutUrl.replace(/\/cutout\.webp$/, '/t640.webp')`. Cleaner: have /api/derive persist `thumbUrl` (add the column to intake_items, and copy it into object_faces.thumbUrl in fileIntakeItem alongside originalUrl/cutoutUrl) and then the existing `f.thumbUrl` term starts doing something. Apply the same change to deleteObject and scripts/verify-p6.ts cleanup.
 
-`npm run db:verify -- --owner <id>` runs 21 assertions over the seeded archive — gapless
-allocation under 12 concurrent inserts, counter rollback on failure, the unfiled predicate,
-timeline ordering and face join, search reaching giver and place, and cross-owner isolation.
 
-## Phase 3, as built
+### Low
 
-Everything lives in [src/design/](../src/design/), barrelled through `@/design`.
-**[/design](http://localhost:3000/design)** is the gallery and the gate — `?surface=ledger|board|cabinet`
-and `?section=silhouettes|cuts|states|type|fields|texture|capture|assemblies` isolate one
-thing at a time.
+**`scripts/verify-p6.ts:138`** — The rewritten P6 gate looks its own probe up inside a 50-row oldest-first window and then dereferences the result with `!`, so it crashes instead of running whenever the archive already holds 50 pending items.
+<br>*Fix:* Do not go through the windowed list to find a row this script owns. Replace lines 135-138 with a direct lookup — `const [item] = await db.select().from(intakeItems).where(eq(intakeItems.id, seeded.itemId))` — and keep listPendingIntake only for the 'the probe is waiting' assertion, calling it with an explicit large limit (e.g. `listPendingIntake(ownerId, 1000)`) so both that check and the closing before/after comparison are meaningful.
 
-- **`<Cutout>` is server-renderable.** The Ledger will put hundreds on a page and none of them
-  need to ship as client components. Interactivity comes from `<TiltLayer>`, one delegated
-  `pointermove` listener that finds `[data-sticker]` and composes the tilt onto the
-  server-rendered base transform — which is exactly how the design doc's own script does it.
-  Opt a cutout in with `interactive`.
-- **Two orthogonal axes**, both persisted per object: `silhouette` (the outline of the thing)
-  and `cut_style` (how it was trimmed). `full` deliberately ignores the silhouette — it is the
-  honest "I didn't cut it out" state.
-- **Measured against the doc, not eyeballed**: computed `filter` is
-  `drop-shadow(rgba(52,42,26,.17) 0 10px 14px) drop-shadow(rgba(52,42,26,.14) 0 1px 1.5px)`,
-  transition `transform .3s cubic-bezier(.2,.85,.25,1)`, hatch
-  `repeating-linear-gradient(128deg,#dfd8c9 0 5px,#eae4d8 5px 10px)`, sticker padding 5px.
-  All identical to `Capsule.dc.html`. Screenshots downscale enough to make the white edges
-  look heavier than they are — measure before "fixing" anything.
-- **Trap, now documented in CLAUDE.md**: aliasing surface colours inside Tailwind's `@theme`
-  silently froze every surface to the Ledger palette, because a custom property is substituted
-  where it is declared. The Cabinet rendered dark-on-cream and was invisible. The aliases are
-  re-declared per `[data-surface]` block.
-- Cabinet-specific: sticker edges are warm `#f4f0e6`, never pure white, and the shadow goes
-  black at 50% rather than warm brown. Pure white blows out against `#151418` and the objects
-  stop reading as paper.
+**`scripts/verify-upload.ts:31`** — The new upload gate re-implements the route's onBeforeGenerateToken instead of importing it, while its comment claims it "cannot drift from what ships" — and the copy has already drifted.
+<br>*Fix:* Export the callback factory from a module both sides import — e.g. move it to src/server/blob-upload.ts as `export function intakeTokenOptions(ownerId: string)` — and have both route.ts and verify-upload.ts call it, so the gate exercises the shipped code. Failing that, delete the comment's claim, because it is the kind of confident-but-false comment this codebase has already been bitten by.
 
-The throwaway `src/app/sign-in/cutout.tsx` is gone; sign-in uses the real primitive. All
-shipped pages now use tokens (`bg-bg`, `text-ink`, `border-hair`, `text-mute-*`) — the only
-remaining literal hex is `layout.tsx`'s `theme-color` meta, which browsers cannot resolve from
-a CSS variable, and Clerk's `appearance` object.
+**`src/app/accession/[itemId]/editor.tsx:104`** — The four crop-corner handles are <button>s wired only to onPointerDown, so they are focusable and announced but do nothing when activated from the keyboard.
+<br>*Fix:* Add an onKeyDown to each corner button that moves it with the arrow keys (1% per press, 5% with Shift) and clamps to 0-1, mirroring the pointer path's Math.min/max. Give the container a live region that reports the new position, and give the <img> a real alt such as `The photograph you are cutting out`. Announce the resulting crop box dimensions so the user can tell what CUT IT OUT will produce.
 
-## Phase 4, as built
+**`src/app/accession/uploader.tsx:156`** — An enqueueUpload rejection escapes handleFiles entirely, leaving every tile of the pick stuck on "uploading" forever with no message and an unhandled promise rejection.
+<br>*Fix:* Wrap the enqueue: `try { await enqueueUpload(...); patch({status:'queued'}) } catch { patch({status:'failed', error:'no signal, and this browser will not let the app hold the photo — reconnect and try again'}) }`, and add a `.catch` to the drain IIFE.
 
-`/timeline` — rail, toolbar, year/month runs and the permanent inspector, all server
-components. Selection lives in `?lot=`, so the inspector is server-rendered and every object
-is deep-linkable; no client state at all on this screen.
+**`src/app/api/blob/upload/route.ts:51`** — The client-upload token omits maximumSizeInBytes, so any signed-in user can park an arbitrarily large file in the private originals store and then use /api/original as a 2x bandwidth amplifier.
+<br>*Fix:* Set `maximumSizeInBytes` in onBeforeGenerateToken (a phone photo is well under 50 MB) so the token itself refuses oversized bodies, and reject in deriveFromOriginal if the fetched original exceeds the same bound before it reaches sharp.
 
-- **Authed pages call `getCurrentUser()`, never `auth()` alone.** It also creates the `users`
-  row. This surfaced for real: after signing in, the client-side push to `/` did not trigger a
-  server render, so no row existed and seeding FK-failed. Any page that skips this renders an
-  empty archive and then fails on the first object added.
-- **`NULLS LAST` on the default-lot query.** Postgres sorts nulls *first* on `DESC`, so
-  "newest received" handed back an undated, unfiled object and the Ledger opened on a row of
-  em-dashes every time.
-- Cutout widths come from each face's real aspect ratio (`src/design/sizing.ts`), which is
-  what makes a run look hand-placed rather than gridded.
-- The seed now clusters filler into a handful of months instead of smearing one per month
-  across a decade. The Ledger is built around *runs*; one object per month reads as a list and
-  the design falls apart. Worth remembering when generating any future fixture data.
-- Not wired yet, deliberately: search, the NEWEST sort, and `+ ADD OBJECT` render as real
-  controls because their absence changes the balance of the header, but search lands in phase
-  10 and accession in phase 6.
+**`src/app/catalogue/page.tsx:88`** — The catalogue's retention column is a 6px coloured dot whose aria-label sits on a bare <span>, where ARIA prohibits it — so retained vs digital-only is conveyed by colour alone.
+<br>*Fix:* Mark the dot `aria-hidden` and put the state in a visually-hidden <span> next to it, matching the pattern already used in cabinet/page.tsx. Give the column a real <th> name such as "Kept". If the label must stay on the element itself, give it `role="img"` so aria-label is permitted.
 
-## Phase 5, as built
+**`src/app/people/page.tsx:22`** — The back link on four pages is a bare '‹' glyph with no accessible name, while the same control on two other pages is correctly labelled.
+<br>*Fix:* Add `aria-label="Back to the timeline"` (and "Back to people" on /people/{id}) to the four links, matching the two that already have it, and pad them to at least a 24×24 hit area.
 
-`/o/[lot]` is the doc's phone screen, and stays a single column on desktop rather than
-inventing a layout the design never specified. `?edit=1` swaps the body for a plain
-`<form action={...}>` — no client JS on the save path at all.
+**`src/app/queue/filer.tsx:148`** — Every suggestion chip in the filing queue is a toggle whose selected state is conveyed only by background colour — no aria-pressed, no text change — so a screen-reader user cannot tell what they have attached to the object.
+<br>*Fix:* Pass `aria-pressed={chosen.person === name}` (and the place/date equivalents) at the three Chip call sites; Chip already forwards it through ...rest. Wrap each group in a `role="group"` with an aria-label ("Who gave it to you", "Where it came from", "When it arrived") so the chips are not an undifferentiated run of buttons.
 
-- **Server Actions re-derive the owner from the session.** `requireOwner()` in
-  `src/server/actions/objects.ts`, and every mutation that takes an object id calls
-  `assertOwned` first. An action is a public endpoint; a caller passing an id is not evidence
-  they own it. `db:verify` now asserts that a mutation with the wrong owner throws and writes
-  nothing — 24 checks total.
-- Only three client components on these screens: `<Faces>` (the recto/verso dots),
-  `<Tags>` and `<RetentionControl>`. Both editors use `useOptimistic`, because a tag is a
-  two-word thought and waiting on a round trip to see it appear is the difference between
-  filing things and not bothering.
-- Two rules encoded in the actions, not the UI: switching to "Only here now" **clears**
-  `retained_location` (a shelf location for an object you no longer have is a lie), and
-  clearing the date also resets `received_precision` to `unknown`, or the object claims a day
-  it does not have and silently drops out of Unfiled.
-- Shared editors live in `src/components/`, not under a route folder, since `/timeline`'s
-  inspector uses the same two.
+**`src/app/queue/filer.tsx:242`** — Filing or skipping an item destroys keyboard focus — the submit button is disabled mid-transition and the card is remounted by key — so a keyboard user restarts from the top of the document for every object.
+<br>*Fix:* Use aria-disabled + an early return in the handler instead of the disabled attribute so the button keeps focus, and after the transition resolves move focus deliberately to the new card's heading (or back to the submit button) via a ref plus tabIndex={-1}. Pair it with the polite live region announcing "Filed. {n} left".
 
-Verified signed in, with every path confirmed by querying Neon directly: tag add from both
-the phone view and the inspector, the full field form (title, story, occasion — which created
-and linked a new occasion without duplicating the dictionary, while preserving the giver,
-place and date), and the retention toggle in both directions.
+**`src/app/sign-in/page.tsx:209`** — There is no live region anywhere in the application — sign-in errors, upload progress and upload failures are inserted into the DOM silently.
+<br>*Fix:* Give the sign-in error <p>s `role="alert"`. Add a single `aria-live="polite"` region to the uploader summarising "{done} of {total} uploaded" plus any failure text, and one to the filer announcing "Filed. {n} left" after each submit.
 
-## Start of phase 6
+**`src/app/timeline/stream.tsx:68`** — None of the three main surfaces has an h1 — /timeline's first heading is an h2, and /board, /cabinet, /people, /places, /occasions and /catalogue have no heading at all.
+<br>*Fix:* Give each surface an h1 naming it — "Timeline", "Board", "Cabinet", "Given by", "Places", "Occasions", "Catalogue" — visually hidden where the design has no room for it (the CAPSULE wordmark span in rail.tsx:26 and cabinet/page.tsx:45 is the natural host). Demote the Inspector's title to h2 under it or keep it at h2 and move the year headings to h2 with month runs at h3 so the outline is consistent.
 
-The capture pipeline, and the real project inside the project. Ship it in the four stages the
-plan lays out, each degrading cleanly to manual:
+**`src/components/tag-editor.tsx:46`** — Tag chips are destructive buttons whose accessible name is just the tag text, and the new-tag input discards what was typed when focus leaves it.
+<br>*Fix:* Give the chip `aria-label={`Remove tag ${tag.name}`}` (Chip already forwards ...rest) and render a visible × so sighted users see it too. Commit the typed value on blur instead of discarding it, or only close on Escape, and return focus to the "+ tag" chip after a successful add.
 
-1. **Ingest** — client `upload()` straight to Blob, EXIF via `exifr` to prefill date and
-   place. Do this first; it is the only stage that must never lose data.
-2. **Corners** — ship the manual four-corner drag *before* the detector. `<ScanFrame>` is
-   built and already has the handles; the doc says "DRAG A CORNER TO CORRECT", which means a
-   mediocre detector is still a good experience.
-3. **Derivatives** — a Node-runtime route with sharp. This is when
-   `capsule-originals` needs connecting (see *Needs you*) and when `object_faces` URLs stop
-   being null, so re-check anything that assumed the hatch placeholder.
-4. **Extraction** — Claude vision with a structured-output tool, confidence per field. EXIF
-   wins over the model on date and GPS.
+**`src/design/capture.tsx:22`** — StickerDeck's `slice(-depth)` returns the whole ghost array when depth is 0, so the last photograph in the filing queue renders with two ghost cards behind it — identical to "three or more waiting".
+<br>*Fix:* Guard the zero case: `const ghosts = depth <= 0 ? [] : [...].slice(-depth)`. While there, drop `src` from the ghost spread (`<Cutout {...top} src={undefined} label={undefined} />`) so the deck behind the live card is blank paper rather than two more copies of the same photograph.
 
-`intake_batches` / `intake_items` are already in the schema with the right statuses.
+**`src/design/tokens.css:182`** — The Cabinet's scoped `.cutout-shadow` override ties on specificity with the `[data-state]` rules above it and wins on source order, so all four cutout states compute an identical shadow in the Cabinet.
+<br>*Fix:* Move the `[data-surface='cabinet']` block above the state rules and scope it to idle, or add cabinet-scoped state rules: `[data-surface='cabinet'] .cutout-shadow[data-state='active'] { filter: drop-shadow(0 20px 28px rgb(0 0 0 / 0.6)) drop-shadow(0 2px 3px rgb(0 0 0 / 0.45)) }` and equivalents for dragging/pending.
 
-## Things to clean up when convenient
+**`src/design/tokens.css:164`** — `transform: scale(1.02)` on the active cutout state never applies on any surface, because Cutout always writes an inline `transform` and inline styles beat stylesheet declarations.
+<br>*Fix:* Compose the scale into the inline transform in cutout.tsx:80: `transform: `rotate(${rotate}deg)${state === 'active' ? ' scale(1.02)' : ''}`` and drop the `transform` line from tokens.css:164. TiltLayer reads `el.style.transform` as its base (tilt-layer.tsx:51), so the scale composes correctly under hover.
 
-- `src/app/page.tsx` is a phase-1 proof surface (SESSION / DB ROW / SYNCED AT). Phase 4
-  replaces it with the real Ledger.
-- `.claude/launch.json` runs the dev server for the preview pane; `npm run dev` on :3000.
-- The failed Production deployment mentioned above.
+**`src/server/intake.ts:114`** — The new PENDING_STATUSES guard keys on item.objectId, so it protects filed items but not skipped ones — a late derive/extract un-skips a photograph and puts it back at the head of the queue.
+<br>*Fix:* Key the guard on the item having already left the queue rather than on objectId: `if (!(PENDING_STATUSES as readonly string[]).includes(item.status) && safe.status && (PENDING_STATUSES as readonly string[]).includes(safe.status)) delete safe.status`. This still permits the legitimate uploaded -> segmented -> needs_review progression (all four are pending, so the guard never fires) while covering 'skipped' as well as 'filed'.
+
+**`src/server/intake.ts:52`** — addIntakeItem accepts an exif argument and never writes it, so the capture date and GPS the uploader reads off every photo are silently discarded.
+<br>*Fix:* Add an `exif jsonb` column (or fold the EXIF date and coordinates into `suggestions` as {date:{value,confidence:1}} at insert time) and write it in addIntakeItem, so the Filer shows a date chip with no model involved and /api/extract has a real exifDate hint.
+
+**`src/sw.ts:40`** — There is no offline behaviour at all: no precache, no navigation fallback, and a catch-all NetworkOnly, so the installed PWA is a browser error page whenever it is launched without a network — including /accession, the page whose entire purpose is offline capture.
+<br>*Fix:* Precache one static, auth-free `/offline` shell (it needs no user data) and register it as the catch handler / navigation fallback for navigation requests, and precache the icons rather than hoping a runtime request populates them. If offline capture is meant to work, /accession's shell has to be reachable offline — that means a static capture route whose data comes from IndexedDB rather than a server render.
+
+
+<!-- 38 distinct sites, deduped from 44 confirmed findings -->
+
+## Working notes
+
+- **Deploy is manual.** `npx vercel --prod --yes` from the repo root. There is no git-push-to-deploy
+  wired up, and since nothing is pushed, GitHub is not the source of what is live.
+- **The gates write.** They are not read-only checks; they allocate lots, upload a photograph, file
+  it and delete it. They are safe only because they now target the `verify` branch and track what
+  they create. If `DATABASE_URL_VERIFY` is missing they refuse to run — do not reach for
+  `--allow-prod` to make that go away.
+- **The `verify` branch drifts.** `db:migrate` targets production. After any schema change, recreate
+  it: `neonctl branches create --project-id $NEON_PROJECT_ID --name verify` and put the pooled and
+  direct URLs in `.env.local`.
+- **Green gates proved less than they appeared to, twice.** `build`, `typecheck` and `lint` all
+  passed while photo capture was completely dead in production, because the offending property is
+  not in the library's declared return type. Both times the bug was found by driving the actual
+  interaction, never by review. Weight browser verification accordingly.
+- **Every fix batch this session introduced new bugs.** The first batch of 8 fixes introduced 4; the
+  second batch of 10 has 44 findings against the app it left behind. Do not ship a batch of fixes
+  from this codebase without re-reviewing it.
+- **Clerk test fixture:** any email of the form `x+clerk_test@example.com` with code `424242`.
+  Delete the user afterwards — `DELETE https://api.clerk.com/v1/users/{id}` with the secret key —
+  and remember that deleting the Clerk user does *not* delete the Neon row or the blobs unless the
+  webhook fires; call `deleteUser` directly if it did not.
+- **Do not paste secrets into a shell.** `vercel env add` prompts for the value so it never reaches
+  shell history.

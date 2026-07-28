@@ -24,8 +24,12 @@ a custom domain, and the full accessibility audit.
 
 `/design` is the design-system gallery and the phase-3 gate — every primitive, every
 surface, every state. `?surface=ledger|board|cabinet` and `?section=…` isolate one at a time.
-**Read [docs/HANDOFF.md](docs/HANDOFF.md) first** — it has the live resource ids, what is and
-isn't verified, and the platform gotchas found along the way.
+
+**Read [docs/HANDOFF.md](docs/HANDOFF.md) first.** It has the live resource ids, the open items
+only the owner can do, and — as of 2026-07-28 — **38 confirmed unfixed bugs** from an adversarial
+audit, 9 of them high. Notably: the Board toolbar is inert, `sharp` cannot decode HEIC so those
+uploads never get an image, and an item filed before its derive lands is permanently imageless.
+Do not treat the app as finished.
 
 ## Stack
 
@@ -50,7 +54,7 @@ npm run build && npm run typecheck && npm run lint
 Database work: `db:generate` → `db:migrate` → `db:check`. `db:seed -- --owner <clerk id>`
 fills an archive with the design doc's own fixtures; `db:verify -- --owner <id>` runs the
 33 data-layer assertions, `db:verify:p6` the 15 capture-pipeline ones, and
-`db:verify:upload` the 8 that cover the browser's client-upload path. All need the
+`db:verify:upload` the 12 that cover the browser's client-upload path. All need the
 `react-server` condition, which their npm scripts set.
 
 **The proof gates write.** `db:verify` allocates a dozen lots to prove the counter is
