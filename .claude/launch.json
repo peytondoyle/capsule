@@ -13,7 +13,8 @@
         "run",
         "dev:verify"
       ],
-      "port": 3000
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }
