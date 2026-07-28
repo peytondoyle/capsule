@@ -20,6 +20,7 @@ export default async function BoardPage() {
 
   return (
     <div data-surface="board" className="relative h-dvh overflow-hidden bg-bg text-ink">
+      <h1 className="sr-only">Board</h1>
       <BoardCanvas
         items={items.map((row) => ({
           id: row.object.id,
@@ -51,16 +52,21 @@ export default async function BoardPage() {
         }))}
       />
 
-      {/* surface switcher, minimal until the Cabinet lands */}
       <nav className="mn absolute top-5 left-5 flex flex-col gap-1 rounded-[12px] border border-hair-strong p-1.5 text-[9px] tracking-[0.08em]"
         style={{ background: 'color-mix(in srgb, var(--panel) 94%, transparent)', backdropFilter: 'blur(12px)' }}
       >
         <Link href="/timeline" className="rounded-md px-2.5 py-1.5" style={{ color: 'var(--mute-2)' }}>
           LEDGER
         </Link>
-        <span className="rounded-md bg-[color-mix(in_srgb,var(--ink)_10%,transparent)] px-2.5 py-1.5 font-medium">
+        <span
+          aria-current="page"
+          className="rounded-md bg-[color-mix(in_srgb,var(--ink)_10%,transparent)] px-2.5 py-1.5 font-medium"
+        >
           BOARD
         </span>
+        <Link href="/cabinet" className="rounded-md px-2.5 py-1.5" style={{ color: 'var(--mute-2)' }}>
+          CABINET
+        </Link>
       </nav>
 
       {unfiled > 0 ? (

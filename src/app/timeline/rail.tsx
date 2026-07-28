@@ -29,6 +29,32 @@ export function Rail({ summary, people }: { summary: ArchiveSummary; people: Peo
         </div>
       </div>
 
+      {/* The Ledger, the Board and the Cabinet are three views of one archive,
+          but until now only the Cabinet linked to the other two — from here the
+          only way to reach them was to type the URL. */}
+      <ul className="mb-3 flex gap-1 px-2.5">
+        {(
+          [
+            ['LEDGER', '/timeline', true],
+            ['BOARD', '/board', false],
+            ['CABINET', '/cabinet', false],
+          ] as const
+        ).map(([label, href, active]) => (
+          <li key={label}>
+            <Link
+              href={href}
+              aria-current={active ? 'page' : undefined}
+              className={[
+                'mn block rounded px-1.5 py-1 text-[8.5px] tracking-[0.14em]',
+                active ? 'text-ink' : 'text-mute-3 hover:text-mute-1',
+              ].join(' ')}
+            >
+              {label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+
       <ul className="flex flex-col gap-px px-2.5">
         {nav.map((item) => (
           <li key={item.label}>
