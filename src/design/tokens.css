@@ -184,8 +184,57 @@
     drop-shadow(0 1px 2px rgb(0 0 0 / 0.35));
 }
 
+/**
+ * Native date input, dragged into the archival idiom.
+ *
+ * The picker itself is worth keeping — typing `2019-11-12` by hand was the cost
+ * this replaces — but the browser's chrome is not. The indicator is greyed back
+ * to roughly --mute-3 and only inks up on hover or focus, so a row of these
+ * still reads as hairline fields rather than as a form. `tabular-nums` on the
+ * edit segments keeps the digits from reflowing as they are typed, which is the
+ * same reason every other date in the app is mono.
+ */
+.mn-date::-webkit-datetime-edit {
+  font-variant-numeric: tabular-nums;
+}
+
+.mn-date::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.4;
+  filter: grayscale(1);
+  transition: opacity var(--dur-capsule) var(--ease-capsule);
+}
+
+.mn-date:hover::-webkit-calendar-picker-indicator,
+.mn-date:focus::-webkit-calendar-picker-indicator {
+  opacity: 0.85;
+}
+
+/* Chrome draws the indicator as a dark glyph and will not take a `color`, so on
+   the lit vitrine it is a black icon on a black ground. Invert it there. */
+[data-surface='cabinet'] .mn-date::-webkit-calendar-picker-indicator {
+  filter: grayscale(1) invert(1);
+}
+
+/* An empty date reads as the same em-dash-ish grey the read view uses for null,
+   rather than the browser's near-black mm/dd/yyyy. */
+.mn-date:not(:focus)::-webkit-datetime-edit-text,
+.mn-date:not(:focus)::-webkit-datetime-edit-month-field,
+.mn-date:not(:focus)::-webkit-datetime-edit-day-field,
+.mn-date:not(:focus)::-webkit-datetime-edit-year-field {
+  color: var(--mute-1);
+}
+
+.mn-date:not(:focus):invalid::-webkit-datetime-edit {
+  color: var(--mute-3);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cutout-shadow {
+    transition: none;
+  }
+
+  .mn-date::-webkit-calendar-picker-indicator {
     transition: none;
   }
 }

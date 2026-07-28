@@ -12,7 +12,7 @@ export {
   type Silhouette,
 } from './silhouettes'
 export { Chip, type ChipVariant } from './chip'
-export { FieldRows, type FieldRow } from './field-rows'
+export { FieldRows, FieldRowsEdit, type FieldRow, type EditableFieldRow } from './field-rows'
 export { Hairline, Meta, MonoLabel, SectionLabel } from './text'
 export { RetentionPill, RetentionToggle, type Retention } from './retention'
 export { Inspector, SheetPhone } from './panels'

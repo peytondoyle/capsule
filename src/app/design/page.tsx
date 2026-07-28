@@ -5,6 +5,7 @@ import {
   Chip,
   Cutout,
   FieldRows,
+  FieldRowsEdit,
   GrainSurface,
   Inspector,
   Meta,
@@ -35,6 +36,14 @@ const ROWS = [
   { label: 'Received', value: '12 Nov 2019', mono: true },
   { label: 'Origin', value: 'Lisbon Airport, gate 24' },
   { label: 'Occasion', value: 'Coming home' },
+]
+
+/** Same four fields the read view shows, so the two can be compared row for row. */
+const EDIT_ROWS = [
+  { label: 'From', name: 'givenBy', defaultValue: 'Dad' },
+  { label: 'Received', name: 'receivedAt', defaultValue: '2019-11-12', type: 'date' as const },
+  { label: 'Origin', name: 'place', defaultValue: 'Lisbon Airport, gate 24' },
+  { label: 'Occasion', name: 'occasion', defaultValue: null, placeholder: 'What was the occasion?' },
 ]
 
 const STORY =
@@ -209,9 +218,15 @@ function Gallery({ surface, section }: { surface: SurfaceName; section?: Section
         {/* --- fields + retention ---------------------------------------- */}
         {show('fields') ? (
         <div className="grid gap-8 sm:grid-cols-2">
-          <div>
-            <SectionLabel className="mb-4">Field rows</SectionLabel>
-            <FieldRows rows={ROWS} />
+          <div className="space-y-6">
+            <div>
+              <SectionLabel className="mb-4">Field rows</SectionLabel>
+              <FieldRows rows={ROWS} />
+            </div>
+            <div>
+              <SectionLabel className="mb-4">Field rows · editing</SectionLabel>
+              <FieldRowsEdit rows={EDIT_ROWS} />
+            </div>
           </div>
           <div className="space-y-6">
             <RetentionToggle value="retained" location="In the blue tin, top shelf" />

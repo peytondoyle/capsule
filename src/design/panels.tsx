@@ -19,6 +19,7 @@ export function Inspector({
   footer,
   children,
   width = 322,
+  action,
 }: {
   /** A <Cutout>, lit on its own slightly different ground. */
   hero?: ReactNode
@@ -33,7 +34,19 @@ export function Inspector({
   footer?: ReactNode
   children?: ReactNode
   width?: number
+  /**
+   * Makes the lot / title / rows / story block a form posting to this action —
+   * the panel's edit mode.
+   *
+   * Deliberately does not enclose `children` or `footer`: retention is a set of
+   * buttons that would become submit buttons the moment they were nested (the
+   * exact bug that once filed an object when you tapped a suggestion chip), and
+   * the tag editor renders a form of its own, which cannot nest at all.
+   */
+  action?: (formData: FormData) => void | Promise<void>
 }) {
+  const Body = action ? 'form' : 'div'
+
   return (
     <aside
       // Scrolls independently of the stream: a long story plus a full tag row
@@ -47,30 +60,36 @@ export function Inspector({
         </div>
       ) : null}
 
-      <div className="px-[22px] pt-5">
-        {lot || aside ? (
-          <div className="flex items-baseline justify-between gap-3">
-            {lot ? (
-              <span className="mn text-[9px] tracking-[0.18em] uppercase text-accent">{lot}</span>
-            ) : null}
-            {aside ? (
-              <span className="mn text-[9px] tracking-[0.1em] uppercase text-mute-3">{aside}</span>
-            ) : null}
+      <Body {...(action ? { action } : {})}>
+        <div className="px-[22px] pt-5">
+          {lot || aside ? (
+            <div className="flex items-baseline justify-between gap-3">
+              {lot ? (
+                <span className="mn text-[9px] tracking-[0.18em] uppercase text-accent">{lot}</span>
+              ) : null}
+              {aside ? (
+                <span className="mn text-[9px] tracking-[0.1em] uppercase text-mute-3">{aside}</span>
+              ) : null}
+            </div>
+          ) : null}
+          <h2 className="mt-[7px] text-[19px] leading-[1.25] font-semibold tracking-[-0.025em]">
+            {title}
+          </h2>
+        </div>
+
+        {rows ? <div className="px-[22px] pt-[18px]">{rows}</div> : null}
+
+        {story ? (
+          <div className="px-[22px] pt-[18px]">
+            <SectionLabel className="mb-2">{storyLabel}</SectionLabel>
+            {typeof story === 'string' ? (
+              <p className="m-0 text-[12.5px] leading-[1.6] text-pretty text-mute-1">{story}</p>
+            ) : (
+              story
+            )}
           </div>
         ) : null}
-        <h2 className="mt-[7px] text-[19px] leading-[1.25] font-semibold tracking-[-0.025em]">
-          {title}
-        </h2>
-      </div>
-
-      {rows ? <div className="px-[22px] pt-[18px]">{rows}</div> : null}
-
-      {story ? (
-        <div className="px-[22px] pt-[18px]">
-          <SectionLabel className="mb-2">{storyLabel}</SectionLabel>
-          <p className="m-0 text-[12.5px] leading-[1.6] text-pretty text-mute-1">{story}</p>
-        </div>
-      ) : null}
+      </Body>
 
       {children ? <div className="px-[22px] pt-[18px]">{children}</div> : null}
 
