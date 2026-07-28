@@ -19,8 +19,13 @@ Read it before touching anything structural.
 **All 12 phases built** and merged to `master`; production is live. The archive works end to
 end: sign in → photograph → cut → file → Ledger/Board/Cabinet → share. Each phase's deferred
 items are marked ◐ in the plan's phase table — the notable ones are OpenCV auto-detect,
-CLUSTER BY + the Board phone sheet, the CATALOGUE/MAP tabs, install/splash/push PWA polish,
+the Board phone sheet and filter rail, the MAP tab, install/splash/push PWA polish,
 a custom domain, and the full accessibility audit.
+
+CATALOGUE and CLUSTER BY are **not** deferred, whatever an older note says: `/catalogue` is
+built, routed and linked from the Cabinet nav, and `clusterBoardBy` is implemented in full.
+CLUSTER BY merely *looks* absent because the Board's pointer capture eats every toolbar
+click (see the bug list). MAP is the one genuinely missing tab.
 
 `/design` is the design-system gallery and the phase-3 gate — every primitive, every
 surface, every state. `?surface=ledger|board|cabinet` and `?section=…` isolate one at a time.
@@ -34,7 +39,9 @@ Do not treat the app as finished.
 ## Stack
 
 - **Next.js 16** App Router (Turbopack), React 19, TypeScript, Tailwind v4 (CSS-first)
-- **Clerk** auth — `proxy.ts` at root (Next 16 renamed `middleware.ts` → `proxy.ts`)
+- **Clerk** auth — `src/proxy.ts`, not the repo root (Next 16 renamed `middleware.ts` →
+  `proxy.ts`). It is a bare `clerkMiddleware()`: it attaches the auth context and gates
+  **nothing**. Every route and page guards itself with `getCurrentUser()`.
 - **Neon Postgres** + Drizzle ORM (via Vercel Marketplace)
 - **Vercel Blob** for originals + derivatives
 - **PWA** — installable, offline capture, share target
@@ -49,7 +56,10 @@ Run all three after every edit. Never report work as done without showing this o
 npm run build && npm run typecheck && npm run lint
 ```
 
-`npm run dev` serves on :3000 (`.claude/launch.json` has the preview config).
+`npm run dev` serves on :3000. **The preview config does not run it** — `.claude/launch.json`
+runs `dev:verify`, which repoints the dev server at the Neon `verify` branch and refuses to
+start without `DATABASE_URL_VERIFY`. It also has `autoPort`, so it takes any free port when
+:3000 is busy; read the port out of the `preview_start` result rather than assuming 3000.
 
 Database work: `db:generate` → `db:migrate` → `db:check`. `db:seed -- --owner <clerk id>`
 fills an archive with the design doc's own fixtures; `db:verify -- --owner <id>` runs the
@@ -104,7 +114,11 @@ Violating these makes the app look wrong in a way no amount of polish recovers.
   with `turbopack: {}` makes the build succeed with **no service worker and no warning**.
   See the Serwist section of [docs/HANDOFF.md](docs/HANDOFF.md) before touching the PWA.
 - **`drizzle-orm/neon-http` cannot do multi-statement transactions.** Lot allocation must use
-  `neon-serverless` (ws `Pool`) against `DATABASE_URL_UNPOOLED`.
+  `neon-serverless` (ws `Pool`) — that is `getTxDb()` in `src/server/db/pool.ts`, its only
+  caller being `createObject`. It connects on the **pooled** `DATABASE_URL`, deliberately:
+  pgbouncer's transaction mode pins a server connection for the life of a transaction. No
+  file under `src/` reads `DATABASE_URL_UNPOOLED` at all — only `scripts/verify-db.ts` and
+  the `dev:verify` script, both of which *write* it.
 - **Scripts importing `src/server/**` need `NODE_OPTIONS='--conditions=react-server'`**, or
   `import 'server-only'` throws outside Next.
 - **Drizzle only qualifies interpolated columns when the query has a join.** In a join-less
