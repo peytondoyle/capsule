@@ -21,6 +21,7 @@ import {
 import { createObject, type NewObject } from '../src/server/objects'
 import { upsertPerson } from '../src/server/people'
 import { upsertOccasion, upsertPlace, upsertTag } from '../src/server/taxonomy'
+import { requireVerificationBranch } from './verify-db'
 
 /** Deterministic PRNG so reseeding produces an identical archive. */
 function rng(seed: number) {
@@ -222,6 +223,13 @@ const FILLER = [
   'Ticket, rained off',
   'Charm from a bracelet',
 ]
+
+// The three verify gates all guard; this one did not, so `npm run db:seed`
+// wrote 40 objects into whatever DATABASE_URL pointed at — which for .env.local
+// is production. It allocates lot numbers, which are accession numbers and are
+// never reissued, so a stray run permanently burns a block of them in the real
+// archive. Same escape hatch as the gates: --allow-prod.
+requireVerificationBranch()
 
 async function main() {
   const db = getDb()
