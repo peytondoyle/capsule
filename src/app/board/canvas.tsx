@@ -170,7 +170,8 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
     <div
       className="relative h-full w-full touch-none overflow-hidden select-none"
       onPointerDown={(event) => {
-        const el = (event.target as Element).closest?.('[data-board-id]') as HTMLElement | null
+        const target = event.target as Element
+        const el = target.closest?.('[data-board-id]') as HTMLElement | null
         if (el) {
           const id = el.dataset.boardId!
           const pos = positions[id]!
@@ -187,6 +188,12 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
           // Top of the pile while it travels, and it stays there.
           setPositions((p) => ({ ...p, [id]: { ...p[id]!, z } }))
         } else {
+          // A press that began on the toolbar, the zoom chip or the "+ ADD"
+          // link is chrome, not a board gesture. Capturing the pointer for it
+          // retargets the subsequent click to this container, so the button
+          // never fires — which is what made SCATTER, TIDY, CLUSTER BY, FIT and
+          // "+ ADD" all inert — and it would pan the board under the thumb too.
+          if (target.closest?.('button, a')) return
           pan.current = {
             startX: event.clientX,
             startY: event.clientY,
