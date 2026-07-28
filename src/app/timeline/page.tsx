@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import {
   Cutout,
   FieldRows,
+  FieldRowsEdit,
   Inspector,
   TiltLayer,
   aspectOf,
@@ -13,6 +14,7 @@ import {
   type Silhouette,
 } from '@/design'
 import { RetentionControl } from '@/components/retention-control'
+import { saveFieldsAction } from '@/server/actions/objects'
 import { Tags } from '@/components/tag-editor'
 import { countLine, lotLabel, receivedLabel } from '@/lib/format'
 import { getArchiveSummary, getDefaultLot, getObjectDetail } from '@/server/archive'
@@ -27,7 +29,7 @@ export const metadata: Metadata = { title: 'Timeline — Capsule' }
 export default async function TimelinePage({
   searchParams,
 }: {
-  searchParams: Promise<{ lot?: string; q?: string }>
+  searchParams: Promise<{ lot?: string; q?: string; edit?: string }>
 }) {
   // getCurrentUser, not auth(): it also creates the users row on first sight.
   // Every foreign key points at users.id, so an authed page that skips this
@@ -36,9 +38,10 @@ export default async function TimelinePage({
   if (!user) redirect('/sign-in')
   const userId = user.id
 
-  const { lot, q } = await searchParams
+  const { lot, q, edit } = await searchParams
   const requested = Number.parseInt(lot ?? '', 10)
   const query = q?.trim() || null
+  const editing = edit === '1'
 
   const [summary, people, rows] = await Promise.all([
     getArchiveSummary(userId),
@@ -65,7 +68,13 @@ export default async function TimelinePage({
         </div>
       </main>
 
-      {detail ? <Detail detail={detail} /> : null}
+      {detail ? (
+        editing ? (
+          <DetailEdit detail={detail} query={query} />
+        ) : (
+          <Detail detail={detail} query={query} />
+        )
+      ) : null}
     </div>
   )
 }
@@ -101,32 +110,49 @@ function Toolbar({ total, query }: { total: number; query: string | null }) {
   )
 }
 
-function Detail({
-  detail,
-}: {
-  detail: NonNullable<Awaited<ReturnType<typeof getObjectDetail>>>
-}) {
+type Detail = NonNullable<Awaited<ReturnType<typeof getObjectDetail>>>
+
+/** `?lot=` and `?q=` are already URL state, so `?edit=1` joins them. */
+function inspectorHref(lotNo: number, query: string | null, edit = false) {
+  const params = new URLSearchParams({ lot: String(lotNo) })
+  if (query) params.set('q', query)
+  if (edit) params.set('edit', '1')
+  return `/timeline?${params}`
+}
+
+function Hero({ detail }: { detail: Detail }) {
   const recto = detail.faces.find((face) => face.role === 'recto') ?? detail.faces[0]
   const aspect = aspectOf(recto?.width, recto?.height)
+  return (
+    <Cutout
+      width={cutoutWidth(detail.silhouette as Silhouette, aspect, { min: 150, max: 216 })}
+      silhouette={detail.silhouette as Silhouette}
+      cut={detail.cutStyle as CutStyle}
+      rotate={detail.rotationDeg}
+      aspect={aspect}
+      src={recto?.cutoutUrl ?? undefined}
+      alt={detail.title}
+      label={recto?.cutoutUrl ? undefined : (detail.kind ?? undefined)}
+      interactive
+    />
+  )
+}
 
+function Detail({ detail, query }: { detail: Detail; query: string | null }) {
   return (
     <Inspector
-      hero={
-        <Cutout
-          width={cutoutWidth(detail.silhouette as Silhouette, aspect, { min: 150, max: 216 })}
-          silhouette={detail.silhouette as Silhouette}
-          cut={detail.cutStyle as CutStyle}
-          rotate={detail.rotationDeg}
-          aspect={aspect}
-          src={recto?.cutoutUrl ?? undefined}
-          alt={detail.title}
-          label={recto?.cutoutUrl ? undefined : (detail.kind ?? undefined)}
-          interactive
-        />
-      }
+      hero={<Hero detail={detail} />}
       lot={
         <Link href={`/o/${detail.lotNo}`} className="underline-offset-4 hover:underline">
           {lotLabel(detail.lotNo)}
+        </Link>
+      }
+      aside={
+        <Link
+          href={inspectorHref(detail.lotNo, query, true)}
+          className="underline-offset-4 hover:text-mute-1 hover:underline"
+        >
+          EDIT
         </Link>
       }
       title={detail.title}
@@ -145,6 +171,100 @@ function Detail({
         />
       }
       story={detail.story}
+      footer={<Tags objectId={detail.id} tags={detail.tags} />}
+    >
+      <RetentionControl
+        objectId={detail.id}
+        value={detail.retention}
+        location={detail.retainedLocation}
+      />
+    </Inspector>
+  )
+}
+
+/**
+ * The inspector, writable.
+ *
+ * Adding a date to an already-filed object used to mean leaving the Ledger for
+ * /o/[lot] — a 430px phone column on a desktop screen — pressing EDIT, and
+ * hand-typing an ISO string, six steps from a panel that was already showing
+ * the field. This edits it where it is read.
+ *
+ * Retention and tags stay outside the form and keep working live: they are
+ * their own actions, and nesting them would make their buttons submit this one.
+ */
+function DetailEdit({ detail, query }: { detail: Detail; query: string | null }) {
+  const giver = detail.givenBy.map((p) => p.name).join(', ')
+
+  return (
+    <Inspector
+      action={saveFieldsAction.bind(null, detail.id)}
+      hero={<Hero detail={detail} />}
+      lot={lotLabel(detail.lotNo)}
+      aside={
+        <Link
+          href={inspectorHref(detail.lotNo, query)}
+          className="underline-offset-4 hover:text-mute-1 hover:underline"
+        >
+          CANCEL
+        </Link>
+      }
+      title={
+        <>
+          {/* The action rebuilds the destination from lotNo; this only says
+              which surface asked, so it cannot become an open redirect. */}
+          <input type="hidden" name="returnTo" value="timeline" />
+          <input type="hidden" name="returnQ" value={query ?? ''} />
+          <input
+            name="title"
+            defaultValue={detail.title}
+            placeholder="Untitled"
+            aria-label="Title"
+            className="w-full border-b border-transparent bg-transparent text-[19px] leading-[1.25] font-semibold tracking-[-0.025em] outline-none transition-colors focus:border-hair-strong placeholder:font-normal placeholder:text-mute-3"
+          />
+        </>
+      }
+      rows={
+        <FieldRowsEdit
+          rows={[
+            { label: 'From', name: 'givenBy', defaultValue: giver, placeholder: 'Who gave it to you?' },
+            { label: 'Received', name: 'receivedAt', defaultValue: detail.receivedAt, type: 'date' },
+            { label: 'Origin', name: 'place', defaultValue: detail.placeName, placeholder: 'Where from?' },
+            {
+              label: 'Occasion',
+              name: 'occasion',
+              defaultValue: detail.occasionName,
+              placeholder: 'What was the occasion?',
+            },
+          ]}
+        />
+      }
+      story={
+        <>
+          <textarea
+            name="story"
+            defaultValue={detail.story ?? ''}
+            rows={4}
+            placeholder="Say one sentence and move on…"
+            aria-label="The story"
+            className="w-full resize-none border-b border-transparent bg-transparent text-[12.5px] leading-[1.6] text-mute-1 outline-none transition-colors focus:border-hair-strong placeholder:text-mute-3"
+          />
+          <div className="mt-4 flex gap-2">
+            <button
+              type="submit"
+              className="mn flex-1 rounded-md bg-ink py-2 text-[9px] font-medium tracking-[0.1em] text-bg"
+            >
+              SAVE
+            </button>
+            <Link
+              href={inspectorHref(detail.lotNo, query)}
+              className="mn flex-1 rounded-md border border-hair-strong py-2 text-center text-[9px] tracking-[0.1em] text-mute-1"
+            >
+              CANCEL
+            </Link>
+          </div>
+        </>
+      }
       footer={<Tags objectId={detail.id} tags={detail.tags} />}
     >
       <RetentionControl

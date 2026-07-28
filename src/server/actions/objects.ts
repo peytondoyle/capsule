@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 
 import { getCurrentUser } from '@/server/auth'
 import {
@@ -105,4 +106,15 @@ export async function saveFieldsAction(objectId: string, formData: FormData) {
   })
 
   refresh(lotNo)
+
+  // The Ledger inspector edits in place, so it has somewhere to go back to;
+  // /o/[lot] does not send this and stays where it is, as before.
+  //
+  // The destination is rebuilt here from lotNo rather than accepted as a URL —
+  // a form field is client-controlled, and "return to wherever this says" on a
+  // public endpoint is an open redirect.
+  if (formData.get('returnTo') === 'timeline') {
+    const q = text('returnQ')
+    redirect(`/timeline?lot=${lotNo}${q ? `&q=${encodeURIComponent(q)}` : ''}`)
+  }
 }
