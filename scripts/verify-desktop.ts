@@ -13,12 +13,13 @@
  * Writes. Runs against the verify branch or refuses, like the other gates, and
  * restores every board position it disturbs.
  */
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 
 import { getDb } from '../src/server/db'
-import { objects, users } from '../src/server/db/schema'
-import { listTimeline, updateObject, getObjectByLot } from '../src/server/objects'
+import { collectionObjects, collections, objects, users } from '../src/server/db/schema'
+import { listTimeline, updateObject } from '../src/server/objects'
 import { getObjectDetail } from '../src/server/archive'
+import { group } from '../src/app/timeline/grouping'
 import { getBoard, tidyBoard, scatterBoard, clusterBoardBy } from '../src/server/board'
 import { requireVerificationBranch } from './verify-db'
 
@@ -48,28 +49,68 @@ async function main() {
     console.error('no users on the branch; pass --owner <id>')
     process.exit(1)
   }
-  console.log(`\nverifying against ${ownerId}\n`)
+  // Pinned to a const: `ownerId` is a `let`, and TS does not carry the
+  // not-undefined narrowing into the closures below.
+  const owner: string = ownerId
+  console.log(`\nverifying against ${owner}\n`)
 
-  /* ---- the board is restored on the way out, whatever happens ------------- */
+  /* ---- everything this gate disturbs is restored on the way out -----------
+   *
+   * Positions AND collections. clusterBoardBy deletes every cluster row and
+   * inserts fresh ones, so restoring only board_x/y/z leaves the archive with
+   * generated clusters in place of its own — and a count check cannot see it,
+   * because the counts can coincide. Read raw columns here, never getBoard():
+   * getBoard substitutes a computed default for a null position, so comparing
+   * against it makes the restore check fail for every unplaced object.
+   */
   const before = await db
     .select({ id: objects.id, x: objects.boardX, y: objects.boardY, z: objects.boardZ })
     .from(objects)
-    .where(eq(objects.ownerId, ownerId))
+    .where(eq(objects.ownerId, owner))
 
-  async function restoreBoard() {
+  const beforeClusters = await db
+    .select()
+    .from(collections)
+    .where(and(eq(collections.ownerId, owner), eq(collections.kind, 'cluster')))
+  const beforeClusterIds = new Set(beforeClusters.map((c) => c.id))
+  const beforeMembership = (
+    await db.select().from(collectionObjects)
+  ).filter((m) => beforeClusterIds.has(m.collectionId))
+
+  async function restoreAll() {
     for (const row of before) {
       await db
         .update(objects)
         .set({ boardX: row.x, boardY: row.y, boardZ: row.z })
         .where(eq(objects.id, row.id))
     }
+    await db
+      .delete(collections)
+      .where(and(eq(collections.ownerId, owner), eq(collections.kind, 'cluster')))
+    if (beforeClusters.length) {
+      await db.insert(collections).values(beforeClusters)
+      if (beforeMembership.length) await db.insert(collectionObjects).values(beforeMembership)
+    }
   }
+
+  /** Raw positions, straight from the column — no coalescing. */
+  const rawPositions = async () =>
+    db
+      .select({ id: objects.id, x: objects.boardX, y: objects.boardY, z: objects.boardZ })
+      .from(objects)
+      .where(eq(objects.ownerId, owner))
+  const clusterRows = async () =>
+    db
+      .select({ id: collections.id, rule: collections.rule })
+      .from(collections)
+      .where(and(eq(collections.ownerId, owner), eq(collections.kind, 'cluster')))
+  const clusterIds = async () => (await clusterRows()).map((c) => c.id)
 
   try {
     /* ---- 1. the sort control actually sorts ------------------------------- */
     console.log('Ledger sort')
-    const newest = await listTimeline(ownerId)
-    const oldest = await listTimeline(ownerId, { sort: 'oldest' })
+    const newest = await listTimeline(owner)
+    const oldest = await listTimeline(owner, { sort: 'oldest' })
 
     check('newest is the default', newest.length > 0 && oldest.length > 0, `${newest.length} rows`)
     const nDates = newest.map((r) => r.object.receivedAt).filter(Boolean) as string[]
@@ -85,6 +126,45 @@ async function main() {
       `${oDates[0]} … ${oDates.at(-1)}`,
     )
     check('the two are actual reverses of each other', nDates[0] === oDates.at(-1))
+
+    // The query order is not what the page renders — Stream regroups it. This
+    // is the assertion whose absence let a sort control ship that did not sort.
+    const shownNewest = group(newest, 'newest').map((y) => y.year)
+    const shownOldest = group(oldest, 'oldest').map((y) => y.year)
+    check(
+      'the rendered stream leads with the newest year',
+      shownNewest[0] === Math.max(...shownNewest),
+      String(shownNewest[0]),
+    )
+    check(
+      'the rendered stream leads with the oldest year when sorted oldest',
+      shownOldest[0] === Math.min(...shownOldest),
+      String(shownOldest[0]),
+    )
+    check(
+      'the rendered year order actually reverses',
+      JSON.stringify(shownOldest) === JSON.stringify([...shownNewest].reverse()),
+      `${shownNewest.join(' ')}  vs  ${shownOldest.join(' ')}`,
+    )
+    // Pick a year that actually has more than one month — comparing a
+    // single-element array against its own reverse passes for any implementation.
+    const gNew = group(newest, 'newest')
+    const gOld = group(oldest, 'oldest')
+    const multi = gNew.find((y) => y.months.filter((m) => m.month !== 0).length > 1)
+    if (!multi) {
+      check('months reverse too, within a year', false, 'no year has two months — assertion would be vacuous')
+    } else {
+      const mNew = multi.months.map((m) => m.month).filter((m) => m !== 0)
+      const mOld = gOld
+        .find((y) => y.year === multi.year)!
+        .months.map((m) => m.month)
+        .filter((m) => m !== 0)
+      check(
+        `months reverse too, within ${multi.year}`,
+        JSON.stringify(mOld) === JSON.stringify([...mNew].reverse()),
+        `${mNew.join(',')} vs ${mOld.join(',')}`,
+      )
+    }
     check('same rows either way, only reordered', newest.length === oldest.length)
     // The bug this guards: ordering on createdAt while the heading says received.
     check(
@@ -99,76 +179,147 @@ async function main() {
       receivedAt: target.receivedAt,
       receivedPrecision: target.receivedPrecision,
     }
+    const originalLocation = target.retainedLocation
 
     // Exactly what saveFieldsAction writes for a supplied date.
-    await updateObject(ownerId, target.id, { receivedAt: '2021-03-07', receivedPrecision: 'day' })
-    let read = await getObjectDetail(ownerId, target.lotNo)
+    await updateObject(owner, target.id, { receivedAt: '2021-03-07', receivedPrecision: 'day' })
+    let read = await getObjectDetail(owner, target.lotNo)
     check('a date written by the inspector persists', read?.receivedAt === '2021-03-07', String(read?.receivedAt))
     check('precision follows the date', read?.receivedPrecision === 'day')
 
     // And what it writes when the field is cleared — the branch that keeps a
     // cleared object out of the months instead of claiming a day it lost.
-    await updateObject(ownerId, target.id, { receivedAt: null, receivedPrecision: 'unknown' })
-    read = await getObjectDetail(ownerId, target.lotNo)
+    await updateObject(owner, target.id, { receivedAt: null, receivedPrecision: 'unknown' })
+    read = await getObjectDetail(owner, target.lotNo)
     check('clearing the date clears it', read?.receivedAt === null)
     check('and drops precision to unknown', read?.receivedPrecision === 'unknown')
-    const cleared = await listTimeline(ownerId)
+    const cleared = await listTimeline(owner)
     check('a cleared object leaves the timeline', !cleared.some((r) => r.object.id === target.id))
 
-    await updateObject(ownerId, target.id, original)
-    read = await getObjectDetail(ownerId, target.lotNo)
+    await updateObject(owner, target.id, original)
+    read = await getObjectDetail(owner, target.lotNo)
     check('restored', read?.receivedAt === original.receivedAt, String(read?.receivedAt))
 
     // Ownership still holds on the path the inspector uses.
-    const foreign = await getObjectByLot('user_does_not_exist', target.lotNo)
+    // The bug this guards: saveFieldsAction wrote retainedLocation
+    // unconditionally, so the Ledger inspector — whose form has no such field —
+    // erased "in the blue tin, top shelf" on every save. The action needs a
+    // session and cannot be called here, but the mechanism the fix relies on can:
+    // a patch that omits the key must leave the column alone.
+    await updateObject(owner, target.id, { retainedLocation: 'in the blue tin, top shelf' })
+    await updateObject(owner, target.id, { title: (await getObjectDetail(owner, target.lotNo))!.title })
+    const kept = await getObjectDetail(owner, target.lotNo)
+    check(
+      'a patch that omits retainedLocation does not erase it',
+      kept?.retainedLocation === 'in the blue tin, top shelf',
+      String(kept?.retainedLocation),
+    )
+    await updateObject(owner, target.id, { retainedLocation: originalLocation })
+
+    // getObjectDetail, not getObjectByLot — the inspector reads through the
+    // former, and asserting on a function the surface never calls proves nothing
+    // about the surface.
+    const foreign = await getObjectDetail('user_does_not_exist', target.lotNo)
     check('another owner cannot read this lot', foreign === null)
 
-    /* ---- 3. the three actions the toolbar now reaches --------------------- */
+    /* ---- 3. the three actions the toolbar now reaches --------------------- *
+     * Asserted against raw board_x/board_y, never getBoard(): getBoard fills a
+     * null position with a computed default, so `x !== null` is unfalsifiable
+     * through it and every one of these checks would pass on a dead function.
+     */
     console.log('\nBoard actions')
-    const start = await getBoard(ownerId)
-    check('board loads', start.items.length > 0, `${start.items.length} items, ${start.clusters.length} clusters`)
+    const startItems = await getBoard(owner)
+    check('board loads', startItems.items.length > 0, `${startItems.items.length} items`)
 
-    await tidyBoard(ownerId)
-    const tidied = await getBoard(ownerId)
-    check('TIDY places every object', tidied.items.every((i) => i.x !== null && i.y !== null))
-    const tidyPositions = tidied.items.map((i) => `${i.x},${i.y}`)
-    check('TIDY does not stack two objects on one spot', new Set(tidyPositions).size === tidyPositions.length)
-    await tidyBoard(ownerId)
-    const tidiedAgain = await getBoard(ownerId)
+    await tidyBoard(owner)
+    const tidied = await rawPositions()
+    check(
+      'TIDY writes a real position for every object',
+      tidied.length > 0 && tidied.every((r) => r.x !== null && r.y !== null),
+      `${tidied.filter((r) => r.x !== null).length}/${tidied.length} placed`,
+    )
+    const spots = tidied.map((r) => `${r.x},${r.y}`)
+    check('TIDY does not stack two objects on one spot', new Set(spots).size === spots.length)
+    await tidyBoard(owner)
+    const tidiedAgain = await rawPositions()
+    const byId = new Map(tidied.map((r) => [r.id, r]))
     check(
       'TIDY is idempotent',
-      tidiedAgain.items.every((i, n) => i.x === tidied.items[n]!.x && i.y === tidied.items[n]!.y),
+      tidiedAgain.every((r) => byId.get(r.id)?.x === r.x && byId.get(r.id)?.y === r.y),
     )
 
-    await scatterBoard(ownerId)
-    const scattered = await getBoard(ownerId)
-    check('SCATTER moves things', scattered.items.some((i, n) => i.x !== tidied.items[n]!.x))
-    await scatterBoard(ownerId)
-    const scatteredAgain = await getBoard(ownerId)
-    // Seeded by object id, so it survives a reload rather than reshuffling.
+    await scatterBoard(owner)
+    const scattered = await rawPositions()
+    check('SCATTER moves things', scattered.some((r) => byId.get(r.id)?.x !== r.x))
+    await scatterBoard(owner)
+    const scatteredAgain = await rawPositions()
+    const scatterById = new Map(scattered.map((r) => [r.id, r]))
+    // Seeded by object id, so a scattered board survives a reload rather than
+    // reshuffling on every navigation.
     check(
       'SCATTER is deterministic, not random',
-      scatteredAgain.items.every((i, n) => i.x === scattered.items[n]!.x && i.y === scattered.items[n]!.y),
+      scatteredAgain.every((r) => scatterById.get(r.id)?.x === r.x),
     )
 
+    // Only generated clusters (rule is not null) are clusterBoardBy's to
+    // replace; one the owner made by hand has no rule and must survive. That
+    // distinction is the whole contract, so assert both halves of it.
+    const handMade = (await clusterRows()).filter((c) => c.rule === null).map((c) => c.id)
     for (const dimension of ['person', 'place', 'year', 'kind'] as const) {
-      await clusterBoardBy(ownerId, dimension)
-      const clustered = await getBoard(ownerId)
+      const genBefore = (await clusterRows()).filter((c) => c.rule !== null).map((c) => c.id)
+      await clusterBoardBy(owner, dimension)
+      const after = await clusterRows()
+      const genAfter = after.filter((c) => c.rule !== null).map((c) => c.id)
       check(
-        `CLUSTER BY ${dimension}`,
-        clustered.clusters.length > 0,
-        `${clustered.clusters.length} clusters`,
+        `CLUSTER BY ${dimension} replaces every generated cluster`,
+        genAfter.length > 0 && !genAfter.some((id) => genBefore.includes(id)),
+        `${genBefore.length} → ${genAfter.length} generated`,
+      )
+      check(
+        `CLUSTER BY ${dimension} leaves hand-made clusters alone`,
+        handMade.every((id) => after.some((c) => c.id === id)),
+        `${handMade.length} hand-made`,
+      )
+      check(
+        `CLUSTER BY ${dimension} tags every generated cluster with the dimension`,
+        genAfter.length > 0 &&
+          after
+            .filter((c) => c.rule !== null)
+            .every((c) => (c.rule as { clusterBy?: string }).clusterBy === dimension),
       )
     }
+
+    // The grouping is real, not one bucket: clustering by year must produce
+    // exactly one generated cluster per distinct label, counting the 'Undated'
+    // bucket that objects with no date collapse into.
+    await clusterBoardBy(owner, 'year')
+    const [labels] = await db
+      .select({
+        n: sql<number>`count(distinct coalesce(to_char(${objects.receivedAt}, 'YYYY'), 'Undated'))::int`,
+      })
+      .from(objects)
+      .where(eq(objects.ownerId, owner))
+    const generated = (await clusterRows()).filter((c) => c.rule !== null)
+    check(
+      'CLUSTER BY year makes one cluster per distinct year, plus Undated',
+      generated.length === labels!.n,
+      `${generated.length} generated vs ${labels!.n} labels`,
+    )
   } finally {
-    await restoreBoard()
-    const after = await getBoard(ownerId)
-    const same = before.every((b) => {
-      const now = after.items.find((i) => i.object.id === b.id)
-      return !now || (now.x === b.x && now.y === b.y)
+    await restoreAll()
+    const after = await rawPositions()
+    const nowById = new Map(after.map((r) => [r.id, r]))
+    const positionsBack = before.every((b) => {
+      const now = nowById.get(b.id)
+      return now && now.x === b.x && now.y === b.y && now.z === b.z
     })
-    console.log(`\n  ${same ? 'ok  ' : 'FAIL'}  board restored to where it started`)
-    if (!same) failures++
+    const idsBack = new Set(await clusterIds())
+    const clustersBack =
+      idsBack.size === beforeClusterIds.size && [...beforeClusterIds].every((id) => idsBack.has(id))
+    console.log(`\n  ${positionsBack ? 'ok  ' : 'FAIL'}  every board position restored (incl. z and nulls)`)
+    console.log(`  ${clustersBack ? 'ok  ' : 'FAIL'}  the archive's own clusters restored, not just the count`)
+    if (!positionsBack) failures++
+    if (!clustersBack) failures++
   }
 
   console.log(failures ? `\n${failures} FAILED\n` : '\nall passed\n')
