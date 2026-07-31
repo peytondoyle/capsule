@@ -4,6 +4,28 @@ import { put } from '@vercel/blob'
 import sharp from 'sharp'
 
 import { assertOwnedOriginalUrl, mediaToken, originalsToken } from './blob'
+import { isSaneQuad, orderCorners, recoverAspect, warpPerspective } from './warp'
+
+/**
+ * The camera's focal length, in pixels of this image — the one number that
+ * disambiguates aspect recovery when the photo was tilted about a single axis
+ * (a phone held square to a flat object and pitched down, i.e. most of this
+ * archive). FocalLengthIn35mmFormat is relative to the 43.27mm full-frame
+ * diagonal, so it converts through the image's own diagonal.
+ */
+async function focalPxFromExif(input: Buffer, width: number, height: number) {
+  try {
+    const { default: exifr } = await import('exifr')
+    const exif = (await exifr.parse(input, ['FocalLengthIn35mmFormat'])) as {
+      FocalLengthIn35mmFormat?: number
+    } | null
+    const f35 = exif?.FocalLengthIn35mmFormat
+    if (!f35 || f35 <= 0) return undefined
+    return (f35 * Math.hypot(width, height)) / 43.266615
+  } catch {
+    return undefined
+  }
+}
 
 export type Corner = { x: number; y: number }
 
@@ -66,15 +88,80 @@ export async function deriveFromOriginal(
   const fullHeight = oriented.height ?? 0
 
   if (corners?.length === 4 && fullWidth && fullHeight) {
-    const xs = corners.map((c) => c.x)
-    const ys = corners.map((c) => c.y)
     // Corners arrive normalised 0–1 so they survive any later resize.
-    const left = Math.max(0, Math.round(Math.min(...xs) * fullWidth))
-    const top = Math.max(0, Math.round(Math.min(...ys) * fullHeight))
-    const width = Math.min(fullWidth - left, Math.round((Math.max(...xs) - Math.min(...xs)) * fullWidth))
-    const height = Math.min(fullHeight - top, Math.round((Math.max(...ys) - Math.min(...ys)) * fullHeight))
-    if (width > 8 && height > 8) {
-      image = image.extract({ left, top, width, height })
+    const quad = orderCorners(
+      corners.map((c) => ({ x: c.x * fullWidth, y: c.y * fullHeight })),
+    )
+
+    if (isSaneQuad(quad.map((c) => ({ x: c.x / fullWidth, y: c.y / fullHeight })))) {
+      // A real perspective unwarp, not the old bounding-box crop — which made
+      // "DRAG A CORNER TO CORRECT" a lie: it took min/max of the corners and
+      // extract()ed the axis-aligned rectangle, so a skewed photo stayed
+      // skewed, just tighter. sharp cannot do this itself (see warp.ts).
+      const focalPx = await focalPxFromExif(input, fullWidth, fullHeight)
+      const aspect = recoverAspect(quad, fullWidth, fullHeight, focalPx)
+
+      // Output sized from the quad's own pixel area, shaped to the recovered
+      // aspect, capped at 1600 — the warp equivalent of withoutEnlargement.
+      // Normalising to 1600 unconditionally upscaled small crops, which the P6
+      // gate's "corner correction re-derives smaller" caught immediately.
+      let quadArea = 0
+      for (let i = 0; i < 4; i++) {
+        const a = quad[i]!
+        const b = quad[(i + 1) % 4]!
+        quadArea += a.x * b.y - b.x * a.y
+      }
+      quadArea = Math.abs(quadArea / 2)
+      const fitScale = Math.min(1, 1600 / Math.sqrt(quadArea * Math.max(aspect, 1 / aspect)))
+      const outW = Math.max(64, Math.round(Math.sqrt(quadArea * aspect) * fitScale))
+      const outH = Math.max(64, Math.round(Math.sqrt(quadArea / aspect) * fitScale))
+
+      // Pre-shrink so the bilinear sampler never minifies by more than ~1.4×,
+      // which is where it starts to alias — and so a 48MP original does not
+      // become a 150MB raw buffer.
+      const longestEdge = Math.max(
+        Math.hypot(quad[1]!.x - quad[0]!.x, quad[1]!.y - quad[0]!.y),
+        Math.hypot(quad[2]!.x - quad[3]!.x, quad[2]!.y - quad[3]!.y),
+        Math.hypot(quad[3]!.x - quad[0]!.x, quad[3]!.y - quad[0]!.y),
+        Math.hypot(quad[2]!.x - quad[1]!.x, quad[2]!.y - quad[1]!.y),
+      )
+      const prescale = Math.min(1, (Math.max(outW, outH) * 1.4) / Math.max(1, longestEdge))
+      const workW = Math.max(1, Math.round(fullWidth * prescale))
+      const workH = Math.max(1, Math.round(fullHeight * prescale))
+
+      const { data, info } = await image
+        .clone()
+        .resize({ width: workW, height: workH, fit: 'fill' })
+        .removeAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true })
+
+      const scaled = quad.map((c) => ({
+        x: (c.x / fullWidth) * info.width,
+        y: (c.y / fullHeight) * info.height,
+      }))
+      const warped = warpPerspective(
+        data,
+        info.width,
+        info.height,
+        info.channels,
+        scaled,
+        outW,
+        outH,
+      )
+      image = sharp(warped, { raw: { width: outW, height: outH, channels: 3 } })
+    } else {
+      // Degenerate quad (bowtie, sliver): fall back to the old bounding box
+      // rather than produce garbage or refuse the derive outright.
+      const xs = corners.map((c) => c.x)
+      const ys = corners.map((c) => c.y)
+      const left = Math.max(0, Math.round(Math.min(...xs) * fullWidth))
+      const top = Math.max(0, Math.round(Math.min(...ys) * fullHeight))
+      const width = Math.min(fullWidth - left, Math.round((Math.max(...xs) - Math.min(...xs)) * fullWidth))
+      const height = Math.min(fullHeight - top, Math.round((Math.max(...ys) - Math.min(...ys)) * fullHeight))
+      if (width > 8 && height > 8) {
+        image = image.extract({ left, top, width, height })
+      }
     }
   }
 

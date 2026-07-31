@@ -62,15 +62,8 @@ export function CornerEditor({
     })
   }
 
-  // The bbox the four corners imply — the dashed rust rectangle.
   const xs = corners.map((c) => c.x)
   const ys = corners.map((c) => c.y)
-  const box = {
-    left: `${Math.min(...xs) * 100}%`,
-    top: `${Math.min(...ys) * 100}%`,
-    width: `${(Math.max(...xs) - Math.min(...xs)) * 100}%`,
-    height: `${(Math.max(...ys) - Math.min(...ys)) * 100}%`,
-  }
 
   return (
     <div>
@@ -98,11 +91,27 @@ export function CornerEditor({
           draggable={false}
         />
 
-        <div
+        {/* The quad itself, not its bounding box — the server warps exactly
+            this shape now, and drawing a rectangle over four skewed handles
+            told the user their cut was something it was not. */}
+        <svg
           aria-hidden
-          className="pointer-events-none absolute rounded-[6px] border-[1.5px] border-dashed border-accent"
-          style={box}
-        />
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+        >
+          <polygon
+            points={corners.map((c) => `${c.x * 100},${c.y * 100}`).join(' ')}
+            fill="none"
+            stroke="var(--accent)"
+            // Screen pixels, because of non-scaling-stroke — matches the 1.5px
+            // dashed accent everywhere else. The dash array is in viewBox units
+            // and stays proportional to the photo instead.
+            strokeWidth={1.5}
+            strokeDasharray="1.6 1.1"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
 
         {corners.map((corner, i) => (
           <button
