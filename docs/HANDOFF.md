@@ -1,4 +1,4 @@
-# Handoff — 2026-07-31
+# Handoff — 2026-07-31 (b)
 
 Supersedes the 2026-07-28 handoff. That document was a phase-by-phase narrative of how v2 got
 built; the phase detail now lives in [CAPSULE-V2-PLAN.md](CAPSULE-V2-PLAN.md) and the durable
@@ -8,12 +8,12 @@ platform traps in [../CLAUDE.md](../CLAUDE.md). This is state and traps only.
 
 | | |
 |---|---|
-| Branch | `master` @ `23ec0b4`, tree clean, pushed |
-| **Unmerged** | **`feat/edit-in-the-inspector` @ `ac04dec`, 8 commits ahead of master, pushed, not reviewed** |
+| Branch | `master` @ `358ecbe`, tree clean, pushed |
+| Reviewed | `feat/edit-in-the-inspector` was adversarially reviewed (56 raised → 29 confirmed → fixed), cleaned up, merged and deployed |
 | Production | `capsule-omega-ruby.vercel.app` → deployment `dpl_9k34MHkgxP9FkmjiDTwrAJ4rgo7V`, running `23ec0b4` |
-| Gates | `build` `typecheck` `lint` all 0; `db:verify` 33 ok, `db:verify:p6` 15 ok, `db:verify:upload` 12 ok, `db:verify:desktop` 24 ok |
+| Gates | `build` `typecheck` `lint` `db:check` all 0; `db:verify` 33, `db:verify:p6` 19, `db:verify:upload` 12, `db:verify:desktop` 39 |
 | Prod archive | 2 users, 41 objects (lots 1–139), 5 people, 1 share, 1 intake batch |
-| Prod images | 41 `object_faces`, of which **1** has a `cutout_url` and **0** have a `thumb_url` — the 40 seeded fixtures have no image at all |
+| Prod images | 41 `object_faces`; before this session **1** had a `cutout_url` and **0** a `thumb_url`. New captures now persist all four; the 40 seeded fixtures are still imageless and always were |
 | Neon | project `purple-river-19152863` · branch `main` = production · branch `verify` = gates + local dev |
 | Vercel | project `capsule` · `prj_6sLVlwcBGVtNtwXZjCL1C3kjBlTM` · team `peyton-doyle` |
 | Blob | `capsule-media` (public) `store_tCVSYcNtL8WVtWGV` · `capsule-originals` (private) `store_TJ3jyzfgZpJQro01` |
@@ -126,10 +126,9 @@ critical, 9 high** — each having survived two independent attempts to refute i
 reachability and one on real-world impact. Deduped by site below; where two dimensions found the
 same defect from different angles the fuller write-up is kept.
 
-**Status as of 2026-07-31: 8 fixed, 2 partly, 28 open**, of 38 sites. Every site was re-checked
-against `feat/edit-in-the-inspector` on 2026-07-31; fixed ones are marked ✅ and partial ones ◐,
-with the rest untouched. Two of the eight are on `master` and deployed; the other six are on the
-unmerged branch.
+**Status as of 2026-07-31: 13 fixed, 1 partly, 24 open**, of 38 sites. Every site was re-checked
+against the branch on 2026-07-31; fixed ones are marked ✅ and partial ones ◐. All of them are now
+on `master`.
 
 **Do not trust a "fixed" mark you have not re-derived.** The re-check initially returned
 `src/server/users.ts:75` as fixed because `deleteBlobs` is passed `f.thumbUrl`. It is still open:
@@ -145,8 +144,9 @@ gone; what follows is the durable record.
 **`src/app/accession/uploader.tsx:77`** — Offline capture never engages on the first pick of a session: startBatchAction is awaited before any file is touched, so with no network the picker aborts with a raw "Failed to fetch" and parks nothing in IndexedDB.
 <br>*Fix:* Do not gate the files on the batch. Park every picked file in IndexedDB first (or at minimum when `!navigator.onLine`), then mint the batch. Defer batch creation to the first successful upload, and give the offline case its own copy — "no signal — 3 photographs saved on this device, they'll upload next time" — instead of the browser's fetch error string.
 
-**`src/app/api/derive/route.ts:41`** — The route persists only cutoutUrl; thumbUrl, width and height from deriveFromOriginal are returned to the browser and thrown away, so every object in the archive renders at the fallback 1.15 aspect and the t640 thumbnail is dead weight.
+✅ FIXED — **`src/app/api/derive/route.ts:41`** — The route persists only cutoutUrl; thumbUrl, width and height from deriveFromOriginal are returned to the browser and thrown away, so every object in the archive renders at the fallback 1.15 aspect and the t640 thumbnail is dead weight.
 <br>*Fix:* Add thumb_url/width/height to intake_items (or pass the derive result straight through), have /api/derive persist all four, and have fileIntakeItem copy thumbUrl, width and height onto the object_faces row alongside cutoutUrl.
+<br>*Status ✅ FIXED:* 358ecbe. `intake_items` gained thumb_url/width/height (migration 0003) and the route persists all four. `db:verify:p6` asserts it.
 
 ✅ FIXED — **`src/app/board/canvas.tsx:197`** — The Board container calls setPointerCapture on every pointerdown, which retargets the subsequent click to the container and kills every control inside the canvas — SCATTER, TIDY, CLUSTER BY (and its four menu items), FIT and the "+ ADD" link.
 <br>*Fix:* Only capture when a card is actually grabbed: move the `setPointerCapture` call inside the `if (el) { ... }` branch. For panning, either skip capture entirely (pointermove/pointerup on the container already cover the gesture while the pointer is over it) or capture only after confirming the pointerdown did not originate in chrome — e.g. `if (!(event.target as Element).closest('button, a')) { pan.current = ...; setPointerCapture(...) }`. Guarding the pan branch this way also stops toolbar drags from panning the board.
@@ -156,14 +156,16 @@ gone; what follows is the durable record.
 <br>*Fix:* Make `/` a redirect: `const { userId } = await auth(); redirect(userId ? '/timeline' : '/sign-in')`, and delete the debug dl. Alternatively point the three sign-in redirects (sign-in/page.tsx:47, sign-in/page.tsx:131, sso-callback/page.tsx:7) at '/timeline' to match manifest.ts start_url. Either way the SESSION / DB ROW rows printing the Clerk id should not stay on a production route.
 <br>*Status ✅ FIXED:* 4502709, deployed. `/` redirects to `/timeline` or `/sign-in`.
 
-**`src/server/derive.ts:55`** — sharp cannot decode HEIC/HEIF, so every HEIC original fails derive and the item never gets an image, with no error surfaced anywhere.
+✅ FIXED — **`src/server/derive.ts:55`** — sharp cannot decode HEIC/HEIF, so every HEIC original fails derive and the item never gets an image, with no error surfaced anywhere.
 <br>*Fix:* Either decode HEIC before it reaches sharp (transcode client-side in the uploader via createImageBitmap/canvas before upload, which also fixes the corner editor's <img>), or drop 'image/heic'/'image/heif' from allowedContentTypes so the upload fails loudly at the picker with a message the user can act on. Whichever is chosen, /api/derive's 500 must be surfaced: the uploader should mark the item failed and CornerEditor.save() must show the error instead of silently doing nothing when res.ok is false.
+<br>*Status ✅ FIXED:* 358ecbe. Not fixed server-side — it cannot be. sharp's libheif ships the AV1 codec only (`sharp.format.heif.input.fileSuffix` is `['.avif']`), so no HEVC HEIC will ever decode there however sharp is upgraded. `src/lib/heic.ts` transcodes to JPEG in the browser before upload, on the device that has the codec; browsers that cannot decode it refuse at the picker with a message. Verified in Chromium that the refusal path is graceful. **The success path is only reachable on Safari/iOS and has not been driven.**
 
 **`src/server/derive.ts:93`** — Re-cutting an object appears to do nothing: derivatives are overwritten at a byte-identical URL that Vercel Blob serves with `cache-control: public, max-age=2592000`, so the browser keeps painting the pre-adjustment cutout for 30 days.
 <br>*Fix:* Make the derivative key change when the pixels change — e.g. `${target.key}/cutout-${hashOfCorners}.webp`, or keep `addRandomSuffix: true` and store the returned URL — so a re-cut yields a new URL. If the path must stay deterministic, pass `cacheControlMaxAge` short enough to revalidate (and drop the SW's CacheFirst rule for derivatives in favour of StaleWhileRevalidate), or append the item's `updatedAt` as a query parameter at render time.
 
-**`src/server/intake.ts:189`** — fileIntakeItem snapshots the intake row's cutoutUrl into object_faces, and nothing ever backfills that face — an item filed before its derive lands becomes an object whose photograph is unreachable on every surface, permanently.
+✅ FIXED — **`src/server/intake.ts:189`** — fileIntakeItem snapshots the intake row's cutoutUrl into object_faces, and nothing ever backfills that face — an item filed before its derive lands becomes an object whose photograph is unreachable on every surface, permanently.
 <br>*Fix:* After a successful derive, write through to the face as well as the intake row: in /api/derive, if the item already has an objectId, UPDATE object_faces SET cutout_url = $1, thumb_url = $2, width, height WHERE object_id = $3 AND role = 'recto'. Alternatively have fileIntakeItem refuse to file an item whose cutout_url is null (or file it and enqueue a repair), so a face is never created pointing at nothing.
+<br>*Status ✅ FIXED:* 358ecbe. `fileIntakeItem` carries all four onto the face, and `repairObjectFace` writes a late derive through to an object already filed. The gate reproduces the race directly — blanks the face, lands a derive, proves the repair — and proves another owner cannot.
 
 
 ### Medium
@@ -204,8 +206,9 @@ gone; what follows is the durable record.
 **`src/server/board.ts:70`** — An unplaced object's default board position is derived from its index in a list ordered by boardZ, so dragging any single cutout — or adding or deleting one object — silently rearranges every object the owner has never placed.
 <br>*Fix:* Derive the default slot from something stable per object rather than from list position — e.g. `defaultPosition(row.object.lotNo)` using lotNo (or a hash of object.id) for the angle and radius — or compute the index over a lotNo-only ordering taken before the boardZ sort.
 
-**`src/server/users.ts:75`** — deleteUser does not delete the 640px derivative of every photograph, so "delete my account" leaves a public, unauthenticated thumbnail of every object in the media store forever.
+✅ FIXED — **`src/server/users.ts:75`** — deleteUser does not delete the 640px derivative of every photograph, so "delete my account" leaves a public, unauthenticated thumbnail of every object in the media store forever.
 <br>*Fix:* The thumb lives in the same folder as the cutout, so it is recoverable without a migration: in deleteBlobs' media list, for each non-null cutoutUrl also push `cutoutUrl.replace(/\/cutout\.webp$/, '/t640.webp')`. Cleaner: have /api/derive persist `thumbUrl` (add the column to intake_items, and copy it into object_faces.thumbUrl in fileIntakeItem alongside originalUrl/cutoutUrl) and then the existing `f.thumbUrl` term starts doing something. Apply the same change to deleteObject and scripts/verify-p6.ts cleanup.
+<br>*Status ✅ FIXED:* 358ecbe — and it was *not* fixed by the earlier re-check's reading. `f.thumbUrl` is null on every row written before today, and deleteBlobs skips nulls. `thumbBesideCutout` derives the t640 path from the cutout instead. Applied to deleteUser, deleteObject and verify-p6, which was orphaning one into the real store per run.
 
 
 ### Low
@@ -278,12 +281,10 @@ gone; what follows is the durable record.
 
 ### The 28 that are open, worth doing in this order
 
-**Loses or destroys what someone photographed.** `derive.ts:55` (HEIC never decodes and the failure
-is surfaced nowhere), `intake.ts:189` (filed before derive = permanently imageless),
-`api/derive/route.ts:41` (thumbUrl/width/height dropped), `package.json:25` (`dev:verify` writes to
-the production Blob stores), `layout.tsx:64` (no error boundary, so a rejected Server Action
-replaces the document and destroys what was typed). The middle three are one gap wearing three
-hats: the derive result is not persisted and nothing repairs a face afterwards.
+**Loses or destroys what someone photographed.** `package.json:25` (`dev:verify` writes to the
+production Blob stores) and `layout.tsx:64` (no error boundary, so a rejected Server Action replaces
+the document and destroys what was typed). The other three in this tier — HEIC, filed-before-derive,
+and the dropped derive result — were fixed in `358ecbe`; they were one gap wearing three hats.
 
 **Visibly wrong.** `share-target:36` (files an imageless object), `filer.tsx:172` (a chip-chosen
 person is silently dropped once "+ someone" is tapped), `derive.ts:93` (a re-cut appears to do
