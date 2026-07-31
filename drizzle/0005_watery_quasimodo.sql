@@ -1,0 +1,1 @@
+ALTER TABLE "intake_items" ADD COLUMN "exif" jsonb;

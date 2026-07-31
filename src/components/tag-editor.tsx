@@ -49,10 +49,17 @@ export function Tags({ objectId, tags }: { objectId: string; tags: Tag[] }) {
           as="button"
           size="md"
           onClick={() => remove(tag)}
+          // These chips DELETE. Their accessible name was just the tag text, so
+          // a screen reader announced "Portugal, button" for a control that
+          // removes Portugal, and nothing sighted said so either — hence the ×.
+          aria-label={`Remove tag ${tag.name}`}
           title={`Remove ${tag.name}`}
           className={tag.id.startsWith('pending:') ? 'opacity-50' : undefined}
         >
           {tag.name}
+          <span aria-hidden className="ml-1.5 text-mute-3">
+            ×
+          </span>
         </Chip>
       ))}
 
@@ -69,9 +76,22 @@ export function Tags({ objectId, tags }: { objectId: string; tags: Tag[] }) {
             name="tag"
             autoFocus
             placeholder="tag"
-            onBlur={() => setAdding(false)}
+            // Commit on blur rather than discard. Typing a tag and clicking
+            // away silently threw it out — the one interaction where losing
+            // what someone typed is least excusable, since the whole control
+            // is three keystrokes long.
+            onBlur={(event) => {
+              const value = event.currentTarget.value.trim()
+              if (value) add(value)
+              event.currentTarget.value = ''
+              setAdding(false)
+            }}
             onKeyDown={(event) => {
-              if (event.key === 'Escape') setAdding(false)
+              // Escape is the discard, explicitly.
+              if (event.key === 'Escape') {
+                event.currentTarget.value = ''
+                setAdding(false)
+              }
             }}
             className="mn w-[110px] rounded-full border border-dashed border-hair-strong bg-transparent px-3 py-2 text-[10px] tracking-[0.06em] uppercase outline-none placeholder:text-mute-3"
           />

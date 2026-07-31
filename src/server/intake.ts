@@ -38,14 +38,26 @@ async function assertBatchOwned(ownerId: string, batchId: string) {
  * because the original is the only place it exists and re-reading a 12 MB HEIC
  * to find a timestamp is absurd.
  */
+export type IntakeExif = { taken?: string; lat?: number; lng?: number }
+
 export async function addIntakeItem(
   ownerId: string,
   batchId: string,
-  input: { originalUrl: string; exif?: unknown; suggestions?: IntakeSuggestions },
+  input: { originalUrl: string; exif?: IntakeExif | null; suggestions?: IntakeSuggestions },
 ) {
   await assertBatchOwned(ownerId, batchId)
   // The client reports this URL after uploading, so it is untrusted input.
   assertOwnedOriginalUrl(ownerId, input.originalUrl)
+
+  // The capture date is seeded straight into `suggestions` as a full-confidence
+  // value, not just stored raw. That makes the Filer show a date chip with no
+  // model involved at all, and gives /api/extract the exifDate hint it has
+  // always read from `suggestions.date` and never once found — because nothing
+  // wrote it. EXIF wins on dates; it is ground truth, not a guess.
+  const seeded: IntakeSuggestions = { ...(input.suggestions ?? {}) }
+  if (input.exif?.taken && !seeded.date) {
+    seeded.date = { value: input.exif.taken, confidence: 1 }
+  }
 
   const [row] = await getDb()
     .insert(intakeItems)
@@ -54,7 +66,8 @@ export async function addIntakeItem(
       originalUrl: input.originalUrl,
       status: 'uploaded',
       ocr: null,
-      suggestions: (input.suggestions ?? null) as never,
+      exif: (input.exif ?? null) as never,
+      suggestions: (Object.keys(seeded).length ? seeded : null) as never,
       corners: null,
     })
     .returning()

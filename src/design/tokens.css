@@ -161,8 +161,12 @@
 .cutout-shadow[data-state='active'] {
   filter: drop-shadow(0 16px 24px rgb(var(--shadow-ink) / 0.22))
     drop-shadow(0 2px 3px rgb(var(--shadow-ink) / 0.16));
-  transform: scale(1.02);
 }
+/* The active lift is NOT declared here. Cutout always writes an inline
+   `transform` for the persisted rotation, and an inline style beats any
+   stylesheet declaration — so `transform: scale(1.02)` on this rule never
+   applied on any surface. It is composed into the inline transform in
+   cutout.tsx instead, where TiltLayer also reads it as its base. */
 
 .cutout-shadow[data-state='dragging'] {
   filter: drop-shadow(0 26px 36px rgb(var(--shadow-ink) / 0.3))
@@ -178,10 +182,27 @@
 }
 
 /* The Cabinet lights its objects from above; on paper the same glow reads as a
-   rendering bug, so it is scoped rather than global. */
-[data-surface='cabinet'] .cutout-shadow {
+   rendering bug, so it is scoped rather than global.
+   
+   Scoped to idle, and the states restated below, because this selector ties
+   with `.cutout-shadow[data-state='…']` on specificity (0,2,0) and wins on
+   source order — so before, every cutout state computed an identical shadow in
+   the Cabinet and active/dragging/pending were invisible there. */
+[data-surface='cabinet'] .cutout-shadow:not([data-state='active']):not([data-state='dragging']):not([data-state='pending']) {
   filter: drop-shadow(0 var(--lift) 14px rgb(0 0 0 / 0.5))
     drop-shadow(0 1px 2px rgb(0 0 0 / 0.35));
+}
+
+[data-surface='cabinet'] .cutout-shadow[data-state='active'] {
+  filter: drop-shadow(0 20px 28px rgb(0 0 0 / 0.6)) drop-shadow(0 2px 3px rgb(0 0 0 / 0.45));
+}
+
+[data-surface='cabinet'] .cutout-shadow[data-state='dragging'] {
+  filter: drop-shadow(0 30px 40px rgb(0 0 0 / 0.7)) drop-shadow(0 3px 5px rgb(0 0 0 / 0.5));
+}
+
+[data-surface='cabinet'] .cutout-shadow[data-state='pending'] {
+  filter: drop-shadow(0 6px 10px rgb(0 0 0 / 0.4));
 }
 
 /**

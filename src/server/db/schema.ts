@@ -442,6 +442,15 @@ export const intakeItems = pgTable(
     thumbUrl: text('thumb_url'),
     width: integer('width'),
     height: integer('height'),
+    /**
+     * What the camera recorded: capture date and coordinates.
+     *
+     * addIntakeItem has accepted an `exif` argument since phase 6 and had
+     * nowhere to put it, so the date and GPS the uploader carefully reads off
+     * every photograph were read and dropped — and the original is the only
+     * place they exist, so re-deriving them means re-reading a 12 MB file.
+     */
+    exif: jsonb('exif'),
     /** Four points from edge detection, or dragged by hand. */
     corners: jsonb('corners'),
     ocr: jsonb('ocr'),

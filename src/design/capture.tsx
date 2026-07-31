@@ -16,10 +16,13 @@ export function StickerDeck({
   className?: string
 }) {
   // Fixed, not random: the deck must not reshuffle between renders.
+  // slice(-0) returns the WHOLE array, so the last card in the queue rendered
+  // with two ghosts behind it — indistinguishable from 'three or more waiting',
+  // which is the one thing the deck exists to say.
   const ghosts = [
     { rotate: 6, scale: 0.92, opacity: 0.5, offset: 16 },
     { rotate: -3, scale: 0.96, opacity: 0.75, offset: 10 },
-  ].slice(-depth)
+  ].slice(depth <= 0 ? 0 : -depth)
 
   return (
     <div className={['relative', className].filter(Boolean).join(' ')}>

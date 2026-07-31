@@ -97,7 +97,15 @@ export function Cutout({
       className={['cutout-shadow', className].filter(Boolean).join(' ')}
       data-state={state}
       {...(interactive ? { 'data-sticker': '' } : {})}
-      style={{ transform: `rotate(${rotate}deg)`, ...style }}
+      // The active lift composes into the inline transform rather than living
+      // in tokens.css: an inline style beats a stylesheet declaration, so
+      // `transform: scale(1.02)` on `.cutout-shadow[data-state='active']` never
+      // applied anywhere. TiltLayer reads el.style.transform as its base, so
+      // the scale composes correctly under hover too.
+      style={{
+        transform: `rotate(${rotate}deg)${state === 'active' ? ' scale(1.02)' : ''}`,
+        ...style,
+      }}
     >
       <div
         style={{

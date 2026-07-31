@@ -66,10 +66,10 @@ export async function getBoard(ownerId: string) {
   ])
 
   return {
-    items: rows.map((row, index) => ({
+    items: rows.map((row) => ({
       ...row,
-      x: row.object.boardX ?? defaultPosition(row.object.lotNo, index).x,
-      y: row.object.boardY ?? defaultPosition(row.object.lotNo, index).y,
+      x: row.object.boardX ?? defaultPosition(row.object.lotNo).x,
+      y: row.object.boardY ?? defaultPosition(row.object.lotNo).y,
       z: row.object.boardZ,
       placed: row.object.boardX !== null,
     })),
@@ -77,13 +77,26 @@ export async function getBoard(ownerId: string) {
   }
 }
 
-/** A loose spiral seeded by lot number — stable across loads, roomy enough to drag. */
-function defaultPosition(lotNo: number, index: number) {
-  const angle = index * 2.39996 // golden angle, keeps neighbours apart
-  const radius = 160 + 46 * Math.sqrt(index)
+/**
+ * A loose spiral seeded by lot number alone — stable across loads, roomy enough
+ * to drag.
+ *
+ * Seeded by lotNo and NOT by the row's index in the query: the list is ordered
+ * by boardZ, so the index moved whenever anything was dragged, added or
+ * deleted, and every object the owner had never placed silently rearranged
+ * itself underneath them. A lot number is an accession number — it never
+ * changes and is never reissued — so a position derived from it is the same
+ * position forever.
+ */
+function defaultPosition(lotNo: number) {
+  // lotNo - 1 so the first object sits at the spiral's origin rather than
+  // one turn out.
+  const n = Math.max(0, lotNo - 1)
+  const angle = n * 2.39996 // golden angle, keeps neighbours apart
+  const radius = 160 + 46 * Math.sqrt(n)
   return {
-    x: Math.round(760 + radius * Math.cos(angle) + (lotNo % 7) * 6),
-    y: Math.round(430 + radius * 0.72 * Math.sin(angle) + (lotNo % 5) * 6),
+    x: Math.round(760 + radius * Math.cos(angle)),
+    y: Math.round(430 + radius * 0.72 * Math.sin(angle)),
   }
 }
 
@@ -125,17 +138,22 @@ export async function tidyBoard(ownerId: string) {
     .where(eq(objects.ownerId, ownerId))
     .orderBy(asc(objects.lotNo))
 
+  if (rows.length === 0) return 0
+
+  // One statement, not one HTTP round-trip per object. Over neon-http each
+  // await is a separate request, so a Board button cost O(n) round-trips and
+  // left the board half-tidied if any of them failed. A single UPDATE ... FROM
+  // (VALUES …) is also atomic, which the loop never was.
   const perRow = 8
-  for (const [index, row] of rows.entries()) {
-    await db
-      .update(objects)
-      .set({
-        boardX: 140 + (index % perRow) * 170,
-        boardY: 120 + Math.floor(index / perRow) * 190,
-        boardZ: 0,
-      })
-      .where(and(eq(objects.id, row.id), eq(objects.ownerId, ownerId)))
-  }
+  const values = rows.map(
+    (row, index) =>
+      sql`(${row.id}::uuid, ${140 + (index % perRow) * 170}::real, ${120 + Math.floor(index / perRow) * 190}::real)`,
+  )
+  await db.execute(sql`
+    update ${objects} set board_x = v.x, board_y = v.y, board_z = 0
+    from (values ${sql.join(values, sql`, `)}) as v(id, x, y)
+    where ${objects.id} = v.id and ${objects.ownerId} = ${ownerId}
+  `)
   return rows.length
 }
 

@@ -18,6 +18,7 @@ import { handleUpload } from '@vercel/blob/client'
 
 import { clientIntakePath, intakePrefix } from '../src/lib/blob-path'
 import { assertOwnedOriginalUrl, originalsToken } from '../src/server/blob'
+import { intakeTokenOptions } from '../src/server/blob-upload'
 
 const OWNER = 'user_2probeOwner'
 const OTHER = 'user_2otherOwner'
@@ -26,20 +27,6 @@ let failures = 0
 const check = (label: string, pass: boolean, detail = '') => {
   console.log(`  ${pass ? 'ok  ' : 'FAIL'}  ${label}${detail ? '  — ' + detail : ''}`)
   if (!pass) failures++
-}
-
-/** The route's own callback, so this cannot drift from what ships. */
-function onBeforeGenerateToken(ownerId: string) {
-  return async (pathname: string) => {
-    if (pathname !== clientIntakePath(ownerId, pathname)) {
-      throw new Error('upload path is not this owner’s intake prefix')
-    }
-    return {
-      allowedContentTypes: ['image/jpeg', 'image/heic'],
-      addRandomSuffix: true,
-      tokenPayload: JSON.stringify({ ownerId }),
-    }
-  }
 }
 
 /** Asks the route for a token exactly the way @vercel/blob's `upload()` does. */
@@ -51,7 +38,7 @@ async function requestToken(ownerId: string, clientPathname: string) {
       type: 'blob.generate-client-token',
       payload: { pathname: clientPathname, clientPayload: null, multipart: false },
     },
-    onBeforeGenerateToken: onBeforeGenerateToken(ownerId),
+    onBeforeGenerateToken: intakeTokenOptions(ownerId),
     // Omitted deliberately: off Vercel the SDK cannot derive a callback URL and
     // warns. It plays no part in which pathname the token carries.
   })

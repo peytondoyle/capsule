@@ -9,6 +9,7 @@ import {
   fileIntakeItem,
   skipIntakeItems,
   updateIntakeItem,
+  type IntakeExif,
   type IntakeSuggestions,
 } from '@/server/intake'
 import { upsertOccasion, upsertPlace, upsertTag } from '@/server/taxonomy'
@@ -30,7 +31,7 @@ export async function startBatchAction(source: 'camera' | 'share_target' | 'file
 export async function recordUploadAction(
   batchId: string,
   originalUrl: string,
-  exif?: unknown,
+  exif?: IntakeExif | null,
   suggestions?: IntakeSuggestions,
 ) {
   const ownerId = await requireOwner()
