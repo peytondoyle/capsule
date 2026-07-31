@@ -17,24 +17,25 @@ Read it before touching anything structural.
 ## Status
 
 **All 12 phases built** and merged to `master`; production is live. The archive works end to
-end: sign in → photograph → cut → file → Ledger/Board/Cabinet → share. Each phase's deferred
-items are marked ◐ in the plan's phase table — the notable ones are OpenCV auto-detect,
-the Board phone sheet and filter rail, the MAP tab, install/splash/push PWA polish,
-a custom domain, and the full accessibility audit.
+end: sign in → photograph → cut → file → Ledger/Board/Cabinet → share.
 
-CATALOGUE and CLUSTER BY are **not** deferred, whatever an older note says: `/catalogue` is
-built, routed and linked from the Cabinet nav, and `clusterBoardBy` is implemented in full.
-CLUSTER BY merely *looks* absent because the Board's pointer capture eats every toolbar
-click (see the bug list). MAP is the one genuinely missing tab.
+Still genuinely missing: the MAP tab, the Board phone sheet and filter rail, web push, and a
+custom domain. CATALOGUE, CLUSTER BY and edge auto-detect are **not** deferred, whatever an
+older note says — all three are built.
 
 `/design` is the design-system gallery and the phase-3 gate — every primitive, every
 surface, every state. `?surface=ledger|board|cabinet` and `?section=…` isolate one at a time.
 
-**Read [docs/HANDOFF.md](docs/HANDOFF.md) first.** It has the live resource ids, the open items
-only the owner can do, and — as of 2026-07-28 — **38 confirmed unfixed bugs** from an adversarial
-audit, 9 of them high. Notably: the Board toolbar is inert, `sharp` cannot decode HEIC so those
-uploads never get an image, and an item filed before its derive lands is permanently imageless.
-Do not treat the app as finished.
+**Read [docs/HANDOFF.md](docs/HANDOFF.md) first.** It has the live resource ids and the per-site
+status of the 2026-07-28 adversarial audit: **37 of 38 fixed as of 2026-07-31**, each mark
+re-derived from the tree rather than remembered. The one still open is the muted-token contrast,
+which is a design decision rather than an unwritten patch.
+
+Two habits that doc records because they cost real time here: **a grep is not a fix** — a status
+re-check twice reported a defect gone on the strength of a string match and was wrong both times —
+and **green gates have twice certified a dead feature**, once when photo capture was entirely
+broken in production and once when a sort control did not sort. Assert on what the page renders,
+not on what the query returns.
 
 ## Stack
 
@@ -62,10 +63,16 @@ start without `DATABASE_URL_VERIFY`. It also has `autoPort`, so it takes any fre
 :3000 is busy; read the port out of the `preview_start` result rather than assuming 3000.
 
 Database work: `db:generate` → `db:migrate` → `db:check`. `db:seed -- --owner <clerk id>`
-fills an archive with the design doc's own fixtures; `db:verify -- --owner <id>` runs the
-33 data-layer assertions, `db:verify:p6` the 15 capture-pipeline ones, and
-`db:verify:upload` the 12 that cover the browser's client-upload path. All need the
-`react-server` condition, which their npm scripts set.
+fills an archive with the design doc's own fixtures. Five proof gates, all needing the
+`react-server` condition their npm scripts set:
+
+| | |
+|---|---|
+| `db:verify` | 33 · the data layer |
+| `db:verify:p6` | 29 · the capture pipeline, the derive-persistence race, the rate limiter |
+| `db:verify:upload` | 12 · the browser's client-upload path |
+| `db:verify:desktop` | 39 · the Ledger sort as *rendered*, the inspector save, the Board actions |
+| `db:verify:warp` | 11 · perspective geometry against synthetic ground truth. No DB, no Blob |
 
 **The proof gates write.** `db:verify` allocates a dozen lots to prove the counter is
 gapless; `db:verify:p6` uploads a photograph, files it as an object and deletes it again —
@@ -139,6 +146,37 @@ Violating these makes the app look wrong in a way no amount of polish recovers.
 - **Derivatives are not alpha-masked.** The design system already clips every cutout with CSS,
   so baking the silhouette would duplicate it and make the stored image wrong the moment
   someone changes the cut style.
+- **Derivatives are random-suffixed and never overwritten.** Deterministic keys with
+  `allowOverwrite` were two bugs in one flag: a re-cut wrote a byte-identical URL the CDN served
+  stale for 30 days, so the cut appeared to do nothing; and a dev session pointed at the
+  production store could clobber live bytes in place. `/api/derive` deletes the previous pair
+  only after the rows point at the new one. `thumbBesideCutout()` still understands the *old*
+  deterministic layout, which every pre-2026-07-31 face has.
+- **`sharp` cannot decode HEIC and never will here.** The bundled libheif ships the AV1 codec
+  only — `sharp.format.heif.input.fileSuffix` is `['.avif']` — so every iPhone HEIC failed
+  derive silently. It is a codec-licensing exclusion, not a version problem: upgrading sharp
+  does not fix it. `src/lib/heic.ts` transcodes in the browser, on the device that has the
+  codec. This also fixes the corner editor, whose `<img>` could not display a HEIC either.
+- **sharp has no perspective transform.** `mapim` and `quadratic` are unbound and `affine()` is
+  6 DOF — determined by three corners, parallelism-preserving, so the most general shape it maps
+  a rectangle onto is a parallelogram. The homography in `src/server/warp.ts` is why
+  "DRAG A CORNER TO CORRECT" is true. Recovering the *output aspect* is the subtle part: edge
+  averaging is ~13% wrong at a 29° tilt, and the single-axis-tilt case needs the camera's EXIF
+  focal length because the geometry alone is ambiguous there.
+- **iOS has never supported Web Share Target** (WebKit bug 194593, still unassigned). The share
+  target works on Android and ChromeOS only. The plan calls it the highest-leverage feature; on
+  the platform this app targets it does nothing.
+- **Next 16 does not emit `apple-mobile-web-app-capable`.** `appleWebApp.capable: true` emits
+  `mobile-web-app-capable` instead, and iOS only shows the `startupImage` splash set when the
+  Apple-prefixed tag is present — so all nine generated splash screens were dead until it was
+  added by hand via `metadata.other`.
+- **An in-memory rate limit is not a rate limit.** A serverless function has neither a process
+  nor a region that outlives the request, so a counter in module scope resets on every cold
+  start and is per-instance besides. `src/server/limits.ts` counts in Postgres.
+- **Workers built by esbuild into `public/` cannot be imported by a route.** That is the point:
+  `build:sw` and `build:detect` put the service worker and the 79 KB edge detector outside
+  Turbopack entirely, so "the Ledger bundle must never import the detector" is a property of the
+  build rather than something a CI check has to police.
 - **`sharp` is a direct dep, with the override scoped to `next`.** A bare `overrides.sharp`
   clashes with a direct dependency (`EOVERRIDE`); both must stay ≥0.35.3 for libvips 8.18.
 - **Never alias a surface colour inside Tailwind's `@theme`.** A custom property is

@@ -479,9 +479,11 @@ Rate-limit per user; cache by content hash so re-scans are free.
    maskable icons, `screenshots` with both `form_factor:'wide'` and `'narrow'` (this is what
    unlocks the rich install card), `categories`, `orientation:'any'`.
 2. **`share_target`** — `POST`, `multipart/form-data`, action `/accession/share`,
-   accepting `image/*`. This is the single highest-leverage native-feeling feature: the OS
-   share sheet gains "Capsule", and adding an object becomes two taps from Photos. Also
-   register `file_handlers` for `image/*`.
+   accepting `image/*`. **Android and ChromeOS only.** This was written as "the single
+   highest-leverage native-feeling feature — the OS share sheet gains Capsule"; that is false
+   on iOS, which has never supported Web Share Target (WebKit bug 194593, still unassigned as
+   of 2026-07). On the platform this app actually targets the route is unreachable. Kept
+   because it works where it works, but do not spend effort here expecting an iPhone win.
 3. **`shortcuts`** — Accession · Unfiled queue · Board. Long-press the home-screen icon.
 4. **Offline capture that actually works.** IndexedDB (`idb`) holds queued blobs + draft
    fields; a Serwist `BackgroundSyncQueue` flushes accession POSTs when connectivity
@@ -567,13 +569,13 @@ Each phase ends with `npm run build && npm run typecheck` green, and its own sta
 | 3 | ~~**Design system**~~ ✅ | Tokens for all three surfaces; fonts; `<Cutout>` + `<TiltLayer>` + `<FieldRows>` + `<MonoLabel>` + `<Chip>` + `<RetentionToggle>` + `<Inspector>` + `<SheetPhone>` + `<ShelfRule>` + `<GrainSurface>` + `<StickerDeck>` + `<ScanFrame>`; all 7 silhouettes | ✅ `/design` with `?surface=` and `?section=` filters; shadow, easing, hatch and padding measured equal to the doc; all three palettes verified in-browser |
 | 4 | ~~**Ledger**~~ ✅ | `/timeline` full desktop: rail, toolbar, year/month grouping, cutout runs, live inspector | ✅ verified signed-in against a seeded archive — rail 198px / inspector 322px measured, undated objects stay out of the months, unfiled reads 7, selection round-trips via `?lot=` |
 | 5 | ~~**Object detail**~~ ✅ | `/o/[lot]` phone + desktop; faces (recto/verso/detail); edit via Server Actions; retention toggle; tags | ✅ every edit path round-tripped to Neon and confirmed by query; person-stats footer computes; `db:verify` now 24 checks incl. cross-owner write rejection |
-| 6 | ~~**Capture pipeline**~~ ✅ | ingest+EXIF → manual corner editor → sharp derivatives → Claude extraction (auto-run after upload) | ✅ `db:verify:p6` 14 checks; extraction verified on prod: ticket_stub/title/place/date all 95%, FROM absent by design. Deferred: OpenCV auto-detect (manual is primary per the doc) |
+| 6 | ~~**Capture pipeline**~~ ✅ | ingest+EXIF → manual corner editor → sharp derivatives → Claude extraction (auto-run after upload) | ✅ `db:verify:p6` 14 checks; extraction verified on prod: ticket_stub/title/place/date all 95%, FROM absent by design. Deferred: OpenCV auto-detect (manual is primary per the doc)  **2026-07-31:** OpenCV auto-detect shipped — as scanic (79 KB, not OpenCV's 13.3 MB) in an esbuild worker; perspective unwarp now real (`src/server/warp.ts`), since the editor previously only bounding-boxed the corners; HEIC transcodes in the browser because sharp cannot decode it. |
 | 7 | **Queue** ◐ | `/queue` batch tagging; `TAP WHAT'S TRUE`; deck; skip/file; unfiled count everywhere incl. app badge | ◐ screen built and files real items; app badge and the 90-second timing still to do |
 | 8 | **Board** ◐ | Pan/zoom, drag+persist, clusters w/ drop-to-tag, SCATTER/TIDY, zoom chip, unfiled chip | ✅ core verified (drag persists, drop applies tags, tidy idempotent — `db:verify` 28 checks). Deferred: filter rail, hover card, phone sheet |
 | 9 | **Cabinet** ◐ | Shelves + shelf light, lot numbering, gold system, 344px panel, ?lot= selection, implicit Elsewhere + dimmed Unattributed shelves | ✅ screenshotted against `1c`: shelf light + bloom, gold lots, GIVEN BY/PROVENANCE, glowing retention dot. CATALOGUE shipped after this row was written (`/catalogue`, linked from the Cabinet nav). Deferred: the MAP tab, verso flip animation, dark scan chrome (accession is shared) |
 | 10 | **Index screens** ◐ | People / Places / Occasions / live search on `?q=` from both the Ledger toolbar and the Cabinet box | ✅ search verified: lot no., person, place, occasion and free text; person page shows the year-range runs. All shipped |
-| 11 | **PWA** ◐ | Manifest w/ share target + shortcuts, generated icon set, esbuild-compiled Serwist worker (option C — Turbopack stays), offline IDB upload queue, background-sync for derive/extract, app badging, apple metadata | ✅ manifest/worker/icons all serve; worker registers in prod only. Deferred: install affordance UI, iOS splash images, web push, real-device airplane test |
-| 12 | **Share, polish, ship** ◐ | `/s/[token]` public pages, share button w/ navigator.share, prod deploy | ✅ share link verified signed-out (no lot/location/tags leak; bad token 404s); prod live. Deferred: custom domain, full axe/keyboard audit |
+| 11 | **PWA** ◐ | Manifest w/ share target + shortcuts, generated icon set, esbuild-compiled Serwist worker (option C — Turbopack stays), offline IDB upload queue, background-sync for derive/extract, app badging, apple metadata | ✅ manifest/worker/icons all serve; worker registers in prod only. Deferred: install affordance UI, iOS splash images, web push, real-device airplane test  **2026-07-31:** offline navigation shell, safe-area insets, working splash (the Apple meta tag Next 16 omits), storage persistence, app badge wired. Deferred: web push, install affordance. |
+| 12 | **Share, polish, ship** ◐ | `/s/[token]` public pages, share button w/ navigator.share, prod deploy | ✅ share link verified signed-out (no lot/location/tags leak; bad token 404s); prod live. Deferred: custom domain, full axe/keyboard audit  **2026-07-31:** share button fixed (it minted the link after an await, so transient activation had lapsed and the sheet never opened). Deferred: custom domain, install screenshots. |
 
 ---
 
