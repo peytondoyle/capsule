@@ -70,16 +70,16 @@ export default async function TimelinePage({
           {query ? (
             <SearchResults rows={rows} query={query} activeLot={detail?.lotNo ?? null} />
           ) : (
-            <Stream rows={rows} activeLot={detail?.lotNo ?? null} />
+            <Stream rows={rows} activeLot={detail?.lotNo ?? null} sort={order} query={query} />
           )}
         </div>
       </main>
 
       {detail ? (
         editing ? (
-          <DetailEdit detail={detail} query={query} />
+          <DetailEdit detail={detail} query={query} sort={order} />
         ) : (
-          <Detail detail={detail} query={query} />
+          <Detail detail={detail} query={query} sort={order} />
         )
       ) : null}
     </div>
@@ -110,6 +110,7 @@ function Toolbar({
   return (
     <div className="flex h-14 shrink-0 items-center gap-3.5 border-b border-hair px-6">
       <form action="/timeline" className="mn flex h-[30px] max-w-[330px] flex-1 items-center gap-2 rounded-[7px] border border-hair-strong bg-paper px-3 text-[10.5px]">
+        {sort === 'oldest' ? <input type="hidden" name="sort" value="oldest" /> : null}
         <span aria-hidden className="opacity-50">
           ⌕
         </span>
@@ -123,6 +124,10 @@ function Toolbar({
       </form>
 
       <div className="ml-auto flex gap-1.5">
+        {/* searchObjects orders by received_at desc and takes no sort, so while a
+            search is live the control would flip its own label and the URL while
+            changing nothing about the results. */}
+        {query ? null : (
         <Link
           href={sortHref}
           aria-label={`Sorted ${sort === 'newest' ? 'newest' : 'oldest'} first. Show ${flipped} first.`}
@@ -130,6 +135,7 @@ function Toolbar({
         >
           {sort === 'newest' ? 'NEWEST' : 'OLDEST'}
         </Link>
+        )}
         <Link
           href="/accession"
           className="mn rounded-md bg-ink px-[11px] py-1.5 text-[9px] font-medium tracking-[0.08em] text-bg"
@@ -143,10 +149,21 @@ function Toolbar({
 
 type Detail = NonNullable<Awaited<ReturnType<typeof getObjectDetail>>>
 
-/** `?lot=` and `?q=` are already URL state, so `?edit=1` joins them. */
-function inspectorHref(lotNo: number, query: string | null, edit = false) {
+/**
+ * `?lot=`, `?q=` and `?sort=` are all URL state, so `?edit=1` joins them — and
+ * every one of them has to be carried by every link, or a click silently resets
+ * it. Dropping `sort` here reverted the whole Ledger to NEWEST on the first
+ * selection after choosing OLDEST.
+ */
+function inspectorHref(
+  lotNo: number,
+  query: string | null,
+  sort: TimelineSort,
+  edit = false,
+) {
   const params = new URLSearchParams({ lot: String(lotNo) })
   if (query) params.set('q', query)
+  if (sort === 'oldest') params.set('sort', 'oldest')
   if (edit) params.set('edit', '1')
   return `/timeline?${params}`
 }
@@ -169,7 +186,15 @@ function Hero({ detail }: { detail: Detail }) {
   )
 }
 
-function Detail({ detail, query }: { detail: Detail; query: string | null }) {
+function Detail({
+  detail,
+  query,
+  sort,
+}: {
+  detail: Detail
+  query: string | null
+  sort: TimelineSort
+}) {
   return (
     <Inspector
       hero={<Hero detail={detail} />}
@@ -180,8 +205,8 @@ function Detail({ detail, query }: { detail: Detail; query: string | null }) {
       }
       aside={
         <Link
-          href={inspectorHref(detail.lotNo, query, true)}
-          className="underline-offset-4 hover:text-mute-1 hover:underline"
+          href={inspectorHref(detail.lotNo, query, sort, true)}
+          className="text-mute-1 underline-offset-4 hover:text-ink hover:underline"
         >
           EDIT
         </Link>
@@ -224,7 +249,15 @@ function Detail({ detail, query }: { detail: Detail; query: string | null }) {
  * Retention and tags stay outside the form and keep working live: they are
  * their own actions, and nesting them would make their buttons submit this one.
  */
-function DetailEdit({ detail, query }: { detail: Detail; query: string | null }) {
+function DetailEdit({
+  detail,
+  query,
+  sort,
+}: {
+  detail: Detail
+  query: string | null
+  sort: TimelineSort
+}) {
   const giver = detail.givenBy.map((p) => p.name).join(', ')
 
   return (
@@ -234,8 +267,8 @@ function DetailEdit({ detail, query }: { detail: Detail; query: string | null })
       lot={lotLabel(detail.lotNo)}
       aside={
         <Link
-          href={inspectorHref(detail.lotNo, query)}
-          className="underline-offset-4 hover:text-mute-1 hover:underline"
+          href={inspectorHref(detail.lotNo, query, sort)}
+          className="text-mute-1 underline-offset-4 hover:text-ink hover:underline"
         >
           CANCEL
         </Link>
@@ -246,6 +279,7 @@ function DetailEdit({ detail, query }: { detail: Detail; query: string | null })
               which surface asked, so it cannot become an open redirect. */}
           <input type="hidden" name="returnTo" value="timeline" />
           <input type="hidden" name="returnQ" value={query ?? ''} />
+          <input type="hidden" name="returnSort" value={sort} />
           <input
             name="title"
             defaultValue={detail.title}
@@ -288,7 +322,7 @@ function DetailEdit({ detail, query }: { detail: Detail; query: string | null })
               SAVE
             </button>
             <Link
-              href={inspectorHref(detail.lotNo, query)}
+              href={inspectorHref(detail.lotNo, query, sort)}
               className="mn flex-1 rounded-md border border-hair-strong py-2 text-center text-[9px] tracking-[0.1em] text-mute-1"
             >
               CANCEL

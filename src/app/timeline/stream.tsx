@@ -2,50 +2,21 @@ import Link from 'next/link'
 
 import { Cutout, aspectOf, cutoutWidth, type CutStyle, type Silhouette } from '@/design'
 import { countLine, dayMonthLabel, monthName } from '@/lib/format'
-import type { listTimeline } from '@/server/objects'
+import type { TimelineSort } from '@/server/objects'
+import { group, type Rows } from './grouping'
 
-type Rows = Awaited<ReturnType<typeof listTimeline>>
-type Row = Rows[number]
-
-/**
- * Groups the timeline into years, then months.
- *
- * Objects whose date precision is 'year' have no honest month, so they collect
- * in a month-less run at the end of their year rather than being assigned to
- * January. Objects with no date at all never reach here — listTimeline excludes
- * them and they live in Unfiled.
- */
-function group(rows: Rows) {
-  const years = new Map<number, Map<number, Row[]>>()
-
-  for (const row of rows) {
-    const received = row.object.receivedAt
-    if (!received) continue
-    const [y, m] = received.slice(0, 10).split('-').map(Number)
-    if (!y) continue
-
-    const monthKey = row.object.receivedPrecision === 'year' ? 0 : (m ?? 0)
-    const months = years.get(y) ?? new Map<number, Row[]>()
-    const run = months.get(monthKey) ?? []
-    run.push(row)
-    months.set(monthKey, run)
-    years.set(y, months)
-  }
-
-  return [...years.entries()]
-    .sort((a, b) => b[0] - a[0])
-    .map(([year, months]) => ({
-      year,
-      rows: [...months.values()].flat(),
-      // Month 0 (year-only precision) sorts last, the rest newest-first.
-      months: [...months.entries()]
-        .sort((a, b) => (a[0] === 0 ? 1 : b[0] === 0 ? -1 : b[0] - a[0]))
-        .map(([month, run]) => ({ month, run })),
-    }))
-}
-
-export function Stream({ rows, activeLot }: { rows: Rows; activeLot: number | null }) {
-  const years = group(rows)
+export function Stream({
+  rows,
+  activeLot,
+  sort = 'newest',
+  query = null,
+}: {
+  rows: Rows
+  activeLot: number | null
+  sort?: TimelineSort
+  query?: string | null
+}) {
+  const years = group(rows, sort)
 
   if (years.length === 0) {
     return (
@@ -95,7 +66,11 @@ export function Stream({ rows, activeLot }: { rows: Rows; activeLot: number | nu
                       // a 120px column.
                       <li key={object.id} style={{ width: Math.max(width + 26, 118) }}>
                         <Link
-                          href={`/timeline?lot=${object.lotNo}`}
+                          href={`/timeline?${new URLSearchParams({
+                            lot: String(object.lotNo),
+                            ...(query ? { q: query } : {}),
+                            ...(sort === 'oldest' ? { sort: 'oldest' } : {}),
+                          })}`}
                           scroll={false}
                           aria-current={active ? 'true' : undefined}
                           className="block rounded-[3px] focus-visible:outline-2"
