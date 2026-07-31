@@ -158,10 +158,18 @@ async function main() {
     `${seeded.derived.width}×${seeded.derived.height}, ${seeded.derived.bytes}B`,
   )
 
-  const pending = await listPendingIntake(ownerId)
-  const mine = pending.find((row) => row.item.id === seeded.itemId)
-  check('the probe is waiting', Boolean(mine), `${pending.length} pending`)
-  const item = mine!.item
+  // Direct lookup, not a find() over listPendingIntake's 50-row window: with 50
+  // items already waiting the probe fell outside it and `mine!` crashed the
+  // gate rather than running it. listPendingIntake is still used for the
+  // "is it waiting" assertion, with an explicit limit that makes it meaningful.
+  const pending = await listPendingIntake(ownerId, 1000)
+  check(
+    'the probe is waiting',
+    pending.some((row) => row.item.id === seeded.itemId),
+    `${pending.length} pending`,
+  )
+  const [item] = await db.select().from(intakeItems).where(eq(intakeItems.id, seeded.itemId))
+  if (!item) throw new Error('seeded probe vanished')
   check(
     'it has a private original',
     (item.originalUrl ?? '').includes('.private.'),
