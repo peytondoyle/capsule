@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 
 import { getCurrentUser } from '@/server/auth'
+import { deleteBlobs, thumbBesideCutout } from '@/server/blob'
 import { intakePath } from '@/server/blob'
 import { deriveFromOriginal, type Corner } from '@/server/derive'
 import { getIntakeItem, repairObjectFace, updateIntakeItem } from '@/server/intake'
@@ -57,6 +58,14 @@ export async function POST(request: NextRequest) {
     // at nothing, on every surface, permanently — the derive lands in
     // intake_items, which nothing reads again once the item is filed.
     if (item.objectId) await repairObjectFace(user.id, item.objectId, derived)
+
+    // Derivatives are never overwritten (see deriveFromOriginal), so a re-cut
+    // leaves the previous pair orphaned. Delete it only after both rows point
+    // at the new URLs; best-effort, because a leaked blob is a sweepable
+    // nuisance and a throw here would fail a derive that already succeeded.
+    if (item.cutoutUrl && item.cutoutUrl !== derived.cutoutUrl) {
+      await deleteBlobs({ media: [item.cutoutUrl, item.thumbUrl ?? thumbBesideCutout(item.cutoutUrl)] })
+    }
 
     return Response.json(derived)
   } catch (error) {

@@ -106,13 +106,15 @@ export async function updateIntakeItem(
   const { id: _id, batchId: _batchId, ...safe } = patch
 
   // The derive and extract jobs are kicked off unawaited from the uploader, so
-  // one can land after the user has already filed the item from /queue. Letting
-  // it write a pending status back would resurrect a filed item into
-  // listPendingIntake, where fileIntakeItem early-returns `alreadyFiled`
-  // without repairing the status — the Filer reads the head of that list, so
-  // the item becomes a head that cannot be filed and the queue jams.
+  // one can land after the user has already dealt with the item from /queue.
+  // Letting it write a pending status back would resurrect the item into
+  // listPendingIntake. Keyed on the item having *left the queue*, not on
+  // objectId: an objectId check protects filed items but not skipped ones, so a
+  // late derive un-skipped a photograph and put it back at the head of the
+  // queue. The legitimate uploaded → segmented → needs_review progression is
+  // unaffected — all of those are pending, so the guard never fires.
   if (
-    item.objectId &&
+    !(PENDING_STATUSES as readonly string[]).includes(item.status) &&
     safe.status &&
     (PENDING_STATUSES as readonly string[]).includes(safe.status)
   ) {

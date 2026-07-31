@@ -73,6 +73,37 @@ export function Uploader({ ownerId }: { ownerId: string }) {
     // the second one worked.
     const picked = Array.from(files)
 
+    // The basement case, before anything that needs the network. Minting the
+    // batch used to come first, so with no signal the very flow the offline
+    // queue exists for — photograph twenty things in a basement — aborted with
+    // a fetch error and parked nothing. Park every file up front; they upload
+    // on the next visit with signal, batch and all.
+    if (!fromQueue && typeof navigator !== 'undefined' && !navigator.onLine) {
+      const parked: Queued[] = []
+      for (const [i, file] of picked.entries()) {
+        const key = `${Date.now()}-${i}-${file.name}`
+        try {
+          const exif = await readExif(file)
+          const uploadable = await toUploadable(file)
+          if (!uploadable.ok) {
+            parked.push({ key, name: file.name, status: 'failed', error: uploadable.reason })
+            continue
+          }
+          await enqueueUpload(ownerId, uploadable.file, exif?.taken)
+          parked.push({ key, name: file.name, status: 'queued', taken: exif?.taken })
+        } catch {
+          parked.push({
+            key,
+            name: file.name,
+            status: 'failed',
+            error: 'no signal, and this browser will not let the app hold the photo — reconnect and try again',
+          })
+        }
+      }
+      setItems((current) => [...current, ...parked])
+      return landed
+    }
+
     let batch = batchId
     if (!batch) {
       try {
@@ -167,8 +198,15 @@ export function Uploader({ ownerId }: { ownerId: string }) {
             // Unless they are already parked: a drain that loses connectivity
             // mid-flight would otherwise write a second row for the same photo
             // under a fresh key, and both would upload on the next visit.
-            if (!fromQueue) await enqueueUpload(outgoing, exif?.taken)
-            patch({ status: 'queued' })
+            try {
+              if (!fromQueue) await enqueueUpload(ownerId, outgoing, exif?.taken)
+              patch({ status: 'queued' })
+            } catch {
+              patch({
+                status: 'failed',
+                error: 'no signal, and this browser will not let the app hold the photo — reconnect and try again',
+              })
+            }
           } else {
             patch({
               status: 'failed',
@@ -192,7 +230,7 @@ export function Uploader({ ownerId }: { ownerId: string }) {
     if (drained.current || !navigator.onLine) return
     drained.current = true
     void (async () => {
-      const queued = await listQueued()
+      const queued = await listQueued(ownerId)
       if (queued.length === 0) return
 
       const list = new DataTransfer()

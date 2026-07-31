@@ -97,14 +97,26 @@ function Card({
 
   const suggested = item.suggestions ?? {}
 
+  const [actionError, setActionError] = useState<string | null>(null)
+
   // Guards the double submit that `disabled` used to guard. The buttons are now
   // only aria-disabled, so they stay focusable and stay put.
+  //
+  // The catch is what keeps a failure survivable: a rejected Server Action used
+  // to propagate out of the transition and replace the document — taking the
+  // story the user had just typed with it. The card stays mounted, the words
+  // stay in the fields, and the error is said out loud.
   const run = (fn: () => Promise<unknown>) => {
     if (busy) return
     onAct()
+    setActionError(null)
     startTransition(async () => {
-      await fn()
-      router.refresh()
+      try {
+        await fn()
+        router.refresh()
+      } catch {
+        setActionError('Couldn\u2019t file this \u2014 your words are still here. Try again.')
+      }
     })
   }
 
@@ -123,6 +135,12 @@ function Card({
       <p aria-live="polite" className="sr-only">
         {remaining} {remaining === 1 ? 'object' : 'objects'} left to file
       </p>
+
+      {actionError ? (
+        <p role="alert" className="mn mb-2 text-[9.5px] leading-relaxed tracking-[0.06em] text-accent">
+          {actionError.toUpperCase()}
+        </p>
+      ) : null}
 
       <div className="flex items-center justify-between">
         <a href="/timeline" className="text-[13px] text-mute-2">
@@ -182,9 +200,14 @@ function Card({
             size="md"
             variant={chosen.person === name ? 'solid' : 'quiet'}
             aria-pressed={chosen.person === name}
-            onClick={() =>
+            onClick={() => {
+              // Also closes the free-text input: while it was open, the hidden
+              // givenBy field was unmounted, so a person picked from the chips
+              // rendered as selected and was silently dropped from the filed
+              // object.
+              setNamingPerson(false)
               setChosen((c) => ({ ...c, person: c.person === name ? undefined : name }))
-            }
+            }}
           >
             {name}
           </Chip>
@@ -196,6 +219,14 @@ function Card({
             name="givenBy"
             autoFocus
             placeholder="who?"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setNamingPerson(false)
+            }}
+            onBlur={(event) => {
+              // Closing on empty blur restores the chips' hidden input; a
+              // typed name keeps the field so the value still posts.
+              if (!event.currentTarget.value.trim()) setNamingPerson(false)
+            }}
             className="mn w-[120px] rounded-full border border-dashed border-hair-strong bg-transparent px-3 py-2 text-[10px] tracking-[0.06em] uppercase outline-none placeholder:text-mute-3"
           />
         ) : (

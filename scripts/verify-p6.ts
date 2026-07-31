@@ -8,6 +8,8 @@ import {
   fileIntakeItem,
   listPendingIntake,
   repairObjectFace,
+  skipIntakeItems,
+  updateIntakeItem,
 } from '../src/server/intake'
 import { deleteObject } from '../src/server/objects'
 import { deleteBlobs, intakePath, originalsToken, thumbBesideCutout } from '../src/server/blob'
@@ -98,7 +100,11 @@ async function cleanup(ownerId: string) {
   }
   if (created.itemIds.length) {
     const rows = await getDb()
-      .select({ originalUrl: intakeItems.originalUrl, cutoutUrl: intakeItems.cutoutUrl })
+      .select({
+        originalUrl: intakeItems.originalUrl,
+        cutoutUrl: intakeItems.cutoutUrl,
+        thumbUrl: intakeItems.thumbUrl,
+      })
       .from(intakeItems)
       .where(inArray(intakeItems.id, created.itemIds))
     await deleteBlobs({
@@ -107,7 +113,10 @@ async function cleanup(ownerId: string) {
       // not branched — so without this each run orphaned a thumbnail in the real
       // media store, which the closing "left nothing behind" check compares
       // pending-intake counts and cannot see.
-      media: rows.flatMap((r) => [r.cutoutUrl, thumbBesideCutout(r.cutoutUrl)]),
+      // Stored thumbUrl first: new derivatives are random-suffixed, so the
+      // path-derived fallback only matches rows from the old deterministic
+      // layout.
+      media: rows.flatMap((r) => [r.cutoutUrl, r.thumbUrl ?? thumbBesideCutout(r.cutoutUrl)]),
     })
   }
   if (created.batchIds.length) {
@@ -220,6 +229,18 @@ async function main() {
   )
   const stolen = await repairObjectFace('user_does_not_exist', filed.objectId, landing)
   check('another owner cannot repair this face', stolen === null)
+
+  // A late derive must not resurrect an item the user already dealt with —
+  // 'filed' was guarded, 'skipped' was not, so a slow derive used to put a
+  // skipped photograph back at the head of the queue.
+  const [skipProbe] = await db
+    .insert(intakeItems)
+    .values({ batchId: seeded.batchId, originalUrl: item.originalUrl, status: 'uploaded' })
+    .returning()
+  created.itemIds.push(skipProbe!.id)
+  await skipIntakeItems(ownerId, [skipProbe!.id])
+  const late = await updateIntakeItem(ownerId, skipProbe!.id, { status: 'segmented' })
+  check('a late derive cannot un-skip an item', late?.status === 'skipped', late?.status)
 
   const [after] = await db.select().from(intakeItems).where(eq(intakeItems.id, item.id))
   check('the intake item is marked filed', after?.status === 'filed' && after?.objectId === filed.objectId)

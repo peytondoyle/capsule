@@ -177,11 +177,20 @@ export async function deriveFromOriginal(
   ])
 
   const token = mediaToken()
-  const shared = { access: 'public' as const, token, addRandomSuffix: false, allowOverwrite: true }
+  // Random-suffixed, never overwritten. Deterministic paths with allowOverwrite
+  // were two bugs in one: a re-cut wrote byte-identical URLs that the CDN kept
+  // serving stale for 30 days (the cut appeared to do nothing), and a local dev
+  // session pointed at the production store could clobber live image bytes in
+  // place. New writes now always mint new URLs — the rows store them, so
+  // nothing needs to derive them — and stale pairs are the caller's to delete
+  // once its rows point at the new ones. (thumbBesideCutout still understands
+  // the OLD deterministic layout, which every pre-existing face has.)
+  const stamp = Date.now().toString(36)
+  const shared = { access: 'public' as const, token, addRandomSuffix: true }
 
   const [cutoutBlob, thumbBlob] = await Promise.all([
-    put(`${target.key}/cutout.webp`, plain(cutout.data), { ...shared, contentType: 'image/webp' }),
-    put(`${target.key}/t640.webp`, plain(thumb), { ...shared, contentType: 'image/webp' }),
+    put(`${target.key}/cutout-${stamp}.webp`, plain(cutout.data), { ...shared, contentType: 'image/webp' }),
+    put(`${target.key}/t640-${stamp}.webp`, plain(thumb), { ...shared, contentType: 'image/webp' }),
   ])
 
   return {

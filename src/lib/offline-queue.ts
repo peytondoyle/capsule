@@ -12,6 +12,13 @@ const STORE = 'pending-uploads'
 
 export type PendingUpload = {
   key: string
+  /**
+   * Whose photograph this is. On a shared device the next signed-in user's
+   * drain used to upload the previous user's parked captures into their own
+   * archive; rows are now stamped at enqueue and filtered at drain. Rows
+   * written before the stamp existed have no owner and are never drained.
+   */
+  ownerId: string
   name: string
   type: string
   bytes: Blob
@@ -41,9 +48,10 @@ function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequ
   )
 }
 
-export async function enqueueUpload(file: File, taken?: string) {
+export async function enqueueUpload(ownerId: string, file: File, taken?: string) {
   const item: PendingUpload = {
     key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ownerId,
     name: file.name,
     type: file.type,
     bytes: file,
@@ -54,8 +62,9 @@ export async function enqueueUpload(file: File, taken?: string) {
   return item.key
 }
 
-export async function listQueued(): Promise<PendingUpload[]> {
-  return tx('readonly', (store) => store.getAll() as IDBRequest<PendingUpload[]>)
+export async function listQueued(ownerId: string): Promise<PendingUpload[]> {
+  const all = await tx('readonly', (store) => store.getAll() as IDBRequest<PendingUpload[]>)
+  return all.filter((item) => item.ownerId === ownerId)
 }
 
 export async function removeQueued(key: string) {
