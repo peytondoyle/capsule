@@ -102,7 +102,15 @@ export async function saveFieldsAction(objectId: string, formData: FormData) {
     receivedPrecision: receivedAt ? 'day' : 'unknown',
     placeId: place?.id ?? null,
     occasionId: occasion?.id ?? null,
-    retainedLocation: text('retainedLocation'),
+    // Presence-gated, unlike every other field here, because this action now has
+    // two callers that post different subsets. /o/[lot]'s form has the field, so
+    // for it a blank still means "clear this". The Ledger inspector does not, and
+    // an absent field read through text() is indistinguishable from a cleared
+    // one — so writing it unconditionally silently erased "in the blue tin, top
+    // shelf" on every save from the inspector, with no undo and no other copy.
+    ...(formData.has('retainedLocation')
+      ? { retainedLocation: text('retainedLocation') }
+      : {}),
   })
 
   refresh(lotNo)
@@ -115,6 +123,10 @@ export async function saveFieldsAction(objectId: string, formData: FormData) {
   // public endpoint is an open redirect.
   if (formData.get('returnTo') === 'timeline') {
     const q = text('returnQ')
-    redirect(`/timeline?lot=${lotNo}${q ? `&q=${encodeURIComponent(q)}` : ''}`)
+    // Rebuilt from lotNo and a closed set of values, never from a supplied URL.
+    const params = new URLSearchParams({ lot: String(lotNo) })
+    if (q) params.set('q', q)
+    if (formData.get('returnSort') === 'oldest') params.set('sort', 'oldest')
+    redirect(`/timeline?${params}`)
   }
 }
