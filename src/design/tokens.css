@@ -216,18 +216,12 @@
   filter: grayscale(1) invert(1);
 }
 
-/* An empty date reads as the same em-dash-ish grey the read view uses for null,
-   rather than the browser's near-black mm/dd/yyyy. */
-.mn-date:not(:focus)::-webkit-datetime-edit-text,
-.mn-date:not(:focus)::-webkit-datetime-edit-month-field,
-.mn-date:not(:focus)::-webkit-datetime-edit-day-field,
-.mn-date:not(:focus)::-webkit-datetime-edit-year-field {
-  color: var(--mute-1);
-}
-
-.mn-date:not(:focus):invalid::-webkit-datetime-edit {
-  color: var(--mute-3);
-}
+/* No colour rules here on purpose. The obvious pair — grey the segments, then
+   un-grey the filled case with :invalid — does not work: an empty date input is
+   not :invalid unless it is `required`, so that rule never matches, while the
+   greying rule is unconditional and fades *filled* dates too, leaving the one
+   mono field reading lighter than the text fields beside it. A date sits at the
+   same ink as every other value; the browser's own placeholder covers empty. */
 
 @media (prefers-reduced-motion: reduce) {
   .cutout-shadow {

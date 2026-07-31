@@ -156,9 +156,15 @@ export function CornerEditor({
       <p className="mn mt-5 text-center text-[9px] leading-[1.7] tracking-[0.12em] text-mute-2 uppercase">
         Drag a corner to correct
       </p>
+      {/* Only while nothing is being dragged. Driven straight off pointermove
+          this fired dozens of times a second and a screen reader read every one
+          of them; the useful moment is when the corner comes to rest. */}
       <p aria-live="polite" className="sr-only">
-        Cut {Math.round((Math.max(...xs) - Math.min(...xs)) * 100)}% wide by{' '}
-        {Math.round((Math.max(...ys) - Math.min(...ys)) * 100)}% tall
+        {dragging === null
+          ? `Cut ${Math.round((Math.max(...xs) - Math.min(...xs)) * 100)}% wide by ${Math.round(
+              (Math.max(...ys) - Math.min(...ys)) * 100,
+            )}% tall`
+          : ''}
       </p>
 
       <div className="mt-6 flex gap-2">
