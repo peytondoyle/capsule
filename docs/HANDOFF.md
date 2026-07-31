@@ -1,6 +1,6 @@
-# Handoff — 2026-07-28
+# Handoff — 2026-07-31
 
-Supersedes the 2026-07-27 build log. That document was a phase-by-phase narrative of how v2 got
+Supersedes the 2026-07-28 handoff. That document was a phase-by-phase narrative of how v2 got
 built; the phase detail now lives in [CAPSULE-V2-PLAN.md](CAPSULE-V2-PLAN.md) and the durable
 platform traps in [../CLAUDE.md](../CLAUDE.md). This is state and traps only.
 
@@ -8,16 +8,52 @@ platform traps in [../CLAUDE.md](../CLAUDE.md). This is state and traps only.
 
 | | |
 |---|---|
-| Branch | `master` @ `17e0f67`, tree clean, pushed. `v2-rebuild` points at the same commit |
-| Production | `capsule-omega-ruby.vercel.app` → deployment `capsule-8gke1e0kp`, running `111fe69` |
-| Gates | `build` `typecheck` `lint` `db:check` all 0; `db:verify` 33 ok, `db:verify:p6` 15 ok, `db:verify:upload` 12 ok |
-| Prod archive | 1 user, 40 objects (lots 1–139), 5 people, 1 share, 0 intake batches |
+| Branch | `master` @ `23ec0b4`, tree clean, pushed |
+| **Unmerged** | **`feat/edit-in-the-inspector` @ `ac04dec`, 8 commits ahead of master, pushed, not reviewed** |
+| Production | `capsule-omega-ruby.vercel.app` → deployment `dpl_9k34MHkgxP9FkmjiDTwrAJ4rgo7V`, running `23ec0b4` |
+| Gates | `build` `typecheck` `lint` all 0; `db:verify` 33 ok, `db:verify:p6` 15 ok, `db:verify:upload` 12 ok, `db:verify:desktop` 24 ok |
+| Prod archive | 2 users, 41 objects (lots 1–139), 5 people, 1 share, 1 intake batch |
+| Prod images | 41 `object_faces`, of which **1** has a `cutout_url` and **0** have a `thumb_url` — the 40 seeded fixtures have no image at all |
 | Neon | project `purple-river-19152863` · branch `main` = production · branch `verify` = gates + local dev |
 | Vercel | project `capsule` · `prj_6sLVlwcBGVtNtwXZjCL1C3kjBlTM` · team `peyton-doyle` |
 | Blob | `capsule-media` (public) `store_tCVSYcNtL8WVtWGV` · `capsule-originals` (private) `store_TJ3jyzfgZpJQro01` |
 | Clerk | app `app_3H2m8Htunq84mjsLvOiAEnixExd` · **development instance** `unified-polecat-6.clerk.accounts.dev` |
 
-## What changed
+## What changed — 2026-07-31
+
+Two commits on `master`, deployed. Eight on `feat/edit-in-the-inspector`, **not merged and not
+reviewed**.
+
+**Deployed.** The Board toolbar was inert — `setPointerCapture` ran after the if/else in
+`canvas.tsx`, so it fired on every pointerdown including one that started on a button, and a
+captured pointer retargets the click to the capturing element. SCATTER, TIDY, CLUSTER BY, FIT and
+"+ ADD" were unreachable; every action behind them was already correct. `/` was still the phase-1
+debug page printing the raw Clerk id under a hardcoded "0 OBJECTS · 0 PEOPLE", and every sign-in
+path lands there; it is now a redirect.
+
+**On the branch.** The Ledger inspector edits in place (`?edit=1`), so adding a date to a filed
+object no longer means a six-step detour through `/o/[lot]`, which was a 430px phone column on a
+desktop screen and the only caller of `saveFieldsAction`. `NEWEST` became a real control — it was a
+`<span>`, and `listTimeline` had no sort parameter to give it. The rail reaches Board and Cabinet.
+`/o/[lot]` opens into two columns above `lg` and is untouched below it. Ten accessibility findings,
+of which the load-bearing ones were: no surface had an `h1`, and filing destroyed keyboard focus.
+
+**One landmine closed that nobody asked about.** `scripts/seed.ts` had no verify-branch guard while
+all three gates do, so `npm run db:seed` wrote to whatever `DATABASE_URL` pointed at — production.
+Seeding allocates lot numbers, which are accession numbers and are never reissued.
+
+**New gate.** `db:verify:desktop`, 24 checks: the sort really reverses, the inspector's save
+round-trips and clearing a date drops precision to `unknown`, and TIDY / SCATTER / CLUSTER BY all
+work (SCATTER asserted *deterministic*, not merely different). It writes, so it snapshots
+`board_x/y/z` and restores in a `finally`.
+
+**Not verified.** The composed DOM of `/timeline` and `/board` while signed in — that `EDIT` is
+where it should be, that the rail renders sensibly, that the responsive `/o/[lot]` grid holds at
+desktop width — and focus retention when filing. Every surface is auth-gated and no gate covers
+layout. Coverage came from three places instead: `db:verify:desktop` for behaviour, a pointer
+harness for whether a click reaches it, `/design` for how it looks.
+
+## What changed — 2026-07-28
 
 Ten commits, all bug fixes, all from adversarial review rather than from feature work.
 
@@ -90,8 +126,19 @@ critical, 9 high** — each having survived two independent attempts to refute i
 reachability and one on real-world impact. Deduped by site below; where two dimensions found the
 same defect from different angles the fuller write-up is kept.
 
-**None of these are fixed.** The raw audit output (evidence, reproductions, refutation reasoning)
-was in session scratch and is gone; what follows is the durable record.
+**Status as of 2026-07-31: 8 fixed, 2 partly, 28 open**, of 38 sites. Every site was re-checked
+against `feat/edit-in-the-inspector` on 2026-07-31; fixed ones are marked ✅ and partial ones ◐,
+with the rest untouched. Two of the eight are on `master` and deployed; the other six are on the
+unmerged branch.
+
+**Do not trust a "fixed" mark you have not re-derived.** The re-check initially returned
+`src/server/users.ts:75` as fixed because `deleteBlobs` is passed `f.thumbUrl`. It is still open:
+`thumb_url` is NULL on every row of both databases (`select count(thumb_url) from object_faces` = 0),
+because `/api/derive` never persists it, and `deleteBlobs` skips nulls. Passing a column that is
+always NULL is not a fix.
+
+The raw audit output (evidence, reproductions, refutation reasoning) was in session scratch and is
+gone; what follows is the durable record.
 
 ### High
 
@@ -101,11 +148,13 @@ was in session scratch and is gone; what follows is the durable record.
 **`src/app/api/derive/route.ts:41`** — The route persists only cutoutUrl; thumbUrl, width and height from deriveFromOriginal are returned to the browser and thrown away, so every object in the archive renders at the fallback 1.15 aspect and the t640 thumbnail is dead weight.
 <br>*Fix:* Add thumb_url/width/height to intake_items (or pass the derive result straight through), have /api/derive persist all four, and have fileIntakeItem copy thumbUrl, width and height onto the object_faces row alongside cutoutUrl.
 
-**`src/app/board/canvas.tsx:197`** — The Board container calls setPointerCapture on every pointerdown, which retargets the subsequent click to the container and kills every control inside the canvas — SCATTER, TIDY, CLUSTER BY (and its four menu items), FIT and the "+ ADD" link.
+✅ FIXED — **`src/app/board/canvas.tsx:197`** — The Board container calls setPointerCapture on every pointerdown, which retargets the subsequent click to the container and kills every control inside the canvas — SCATTER, TIDY, CLUSTER BY (and its four menu items), FIT and the "+ ADD" link.
 <br>*Fix:* Only capture when a card is actually grabbed: move the `setPointerCapture` call inside the `if (el) { ... }` branch. For panning, either skip capture entirely (pointermove/pointerup on the container already cover the gesture while the pointer is over it) or capture only after confirming the pointerdown did not originate in chrome — e.g. `if (!(event.target as Element).closest('button, a')) { pan.current = ...; setPointerCapture(...) }`. Guarding the pan branch this way also stops toolbar drags from panning the board.
+<br>*Status ✅ FIXED:* a4f3e55, deployed. The capture now only runs for a real drag or pan; a press that began on `button, a` returns first, which also stops toolbar drags panning the board.
 
-**`src/app/page.tsx:19`** — The root route — where every sign-in lands — is still the phase-1 platform-wiring debug page, and it renders a hardcoded "0 OBJECTS · 0 PEOPLE" in the archival mono style regardless of what is in the archive.
+✅ FIXED — **`src/app/page.tsx:19`** — The root route — where every sign-in lands — is still the phase-1 platform-wiring debug page, and it renders a hardcoded "0 OBJECTS · 0 PEOPLE" in the archival mono style regardless of what is in the archive.
 <br>*Fix:* Make `/` a redirect: `const { userId } = await auth(); redirect(userId ? '/timeline' : '/sign-in')`, and delete the debug dl. Alternatively point the three sign-in redirects (sign-in/page.tsx:47, sign-in/page.tsx:131, sso-callback/page.tsx:7) at '/timeline' to match manifest.ts start_url. Either way the SESSION / DB ROW rows printing the Clerk id should not stay on a production route.
+<br>*Status ✅ FIXED:* 4502709, deployed. `/` redirects to `/timeline` or `/sign-in`.
 
 **`src/server/derive.ts:55`** — sharp cannot decode HEIC/HEIF, so every HEIC original fails derive and the item never gets an image, with no error surfaced anywhere.
 <br>*Fix:* Either decode HEIC before it reaches sharp (transcode client-side in the uploader via createImageBitmap/canvas before upload, which also fixes the corner editor's <img>), or drop 'image/heic'/'image/heif' from allowedContentTypes so the upload fails loudly at the picker with a message the user can act on. Whichever is chosen, /api/derive's 500 must be surfaced: the uploader should mark the item failed and CornerEditor.save() must show the error instead of silently doing nothing when res.ok is false.
@@ -167,8 +216,9 @@ was in session scratch and is gone; what follows is the durable record.
 **`scripts/verify-upload.ts:31`** — The new upload gate re-implements the route's onBeforeGenerateToken instead of importing it, while its comment claims it "cannot drift from what ships" — and the copy has already drifted.
 <br>*Fix:* Export the callback factory from a module both sides import — e.g. move it to src/server/blob-upload.ts as `export function intakeTokenOptions(ownerId: string)` — and have both route.ts and verify-upload.ts call it, so the gate exercises the shipped code. Failing that, delete the comment's claim, because it is the kind of confident-but-false comment this codebase has already been bitten by.
 
-**`src/app/accession/[itemId]/editor.tsx:104`** — The four crop-corner handles are <button>s wired only to onPointerDown, so they are focusable and announced but do nothing when activated from the keyboard.
+✅ FIXED — **`src/app/accession/[itemId]/editor.tsx:104`** — The four crop-corner handles are <button>s wired only to onPointerDown, so they are focusable and announced but do nothing when activated from the keyboard.
 <br>*Fix:* Add an onKeyDown to each corner button that moves it with the arrow keys (1% per press, 5% with Shift) and clamps to 0-1, mirroring the pointer path's Math.min/max. Give the container a live region that reports the new position, and give the <img> a real alt such as `The photograph you are cutting out`. Announce the resulting crop box dimensions so the user can tell what CUT IT OUT will produce.
+<br>*Status ✅ FIXED:* dfbfd3e, branch. Arrow keys move 1%, shift 5%, clamped by the same `Math.min/max` the pointer path uses; crop size announced; the `<img>` has a real alt. Reducer tested separately, 8/8.
 
 **`src/app/accession/uploader.tsx:156`** — An enqueueUpload rejection escapes handleFiles entirely, leaving every tile of the pick stuck on "uploading" forever with no message and an unhandled promise rejection.
 <br>*Fix:* Wrap the enqueue: `try { await enqueueUpload(...); patch({status:'queued'}) } catch { patch({status:'failed', error:'no signal, and this browser will not let the app hold the photo — reconnect and try again'}) }`, and add a `.catch` to the drain IIFE.
@@ -176,23 +226,29 @@ was in session scratch and is gone; what follows is the durable record.
 **`src/app/api/blob/upload/route.ts:51`** — The client-upload token omits maximumSizeInBytes, so any signed-in user can park an arbitrarily large file in the private originals store and then use /api/original as a 2x bandwidth amplifier.
 <br>*Fix:* Set `maximumSizeInBytes` in onBeforeGenerateToken (a phone photo is well under 50 MB) so the token itself refuses oversized bodies, and reject in deriveFromOriginal if the fetched original exceeds the same bound before it reaches sharp.
 
-**`src/app/catalogue/page.tsx:88`** — The catalogue's retention column is a 6px coloured dot whose aria-label sits on a bare <span>, where ARIA prohibits it — so retained vs digital-only is conveyed by colour alone.
+✅ FIXED — **`src/app/catalogue/page.tsx:88`** — The catalogue's retention column is a 6px coloured dot whose aria-label sits on a bare <span>, where ARIA prohibits it — so retained vs digital-only is conveyed by colour alone.
 <br>*Fix:* Mark the dot `aria-hidden` and put the state in a visually-hidden <span> next to it, matching the pattern already used in cabinet/page.tsx. Give the column a real <th> name such as "Kept". If the label must stay on the element itself, give it `role="img"` so aria-label is permitted.
+<br>*Status ✅ FIXED:* dfbfd3e, branch. Dot is `aria-hidden`, state is a visually-hidden string, column has a real `Kept` header.
 
-**`src/app/people/page.tsx:22`** — The back link on four pages is a bare '‹' glyph with no accessible name, while the same control on two other pages is correctly labelled.
+✅ FIXED — **`src/app/people/page.tsx:22`** — The back link on four pages is a bare '‹' glyph with no accessible name, while the same control on two other pages is correctly labelled.
 <br>*Fix:* Add `aria-label="Back to the timeline"` (and "Back to people" on /people/{id}) to the four links, matching the two that already have it, and pad them to at least a 24×24 hit area.
+<br>*Status ✅ FIXED:* dfbfd3e, branch. All six back links named, all with a 24px hit area.
 
-**`src/app/queue/filer.tsx:148`** — Every suggestion chip in the filing queue is a toggle whose selected state is conveyed only by background colour — no aria-pressed, no text change — so a screen-reader user cannot tell what they have attached to the object.
+✅ FIXED — **`src/app/queue/filer.tsx:148`** — Every suggestion chip in the filing queue is a toggle whose selected state is conveyed only by background colour — no aria-pressed, no text change — so a screen-reader user cannot tell what they have attached to the object.
 <br>*Fix:* Pass `aria-pressed={chosen.person === name}` (and the place/date equivalents) at the three Chip call sites; Chip already forwards it through ...rest. Wrap each group in a `role="group"` with an aria-label ("Who gave it to you", "Where it came from", "When it arrived") so the chips are not an undifferentiated run of buttons.
+<br>*Status ✅ FIXED:* dfbfd3e, branch. `aria-pressed` on all three chip groups, each wrapped in a named `role="group"`.
 
-**`src/app/queue/filer.tsx:242`** — Filing or skipping an item destroys keyboard focus — the submit button is disabled mid-transition and the card is remounted by key — so a keyboard user restarts from the top of the document for every object.
+◐ PARTLY — **`src/app/queue/filer.tsx:242`** — Filing or skipping an item destroys keyboard focus — the submit button is disabled mid-transition and the card is remounted by key — so a keyboard user restarts from the top of the document for every object.
 <br>*Fix:* Use aria-disabled + an early return in the handler instead of the disabled attribute so the button keeps focus, and after the transition resolves move focus deliberately to the new card's heading (or back to the submit button) via a ref plus tabIndex={-1}. Pair it with the polite live region announcing "Filed. {n} left".
+<br>*Status ◐ PARTLY:* dfbfd3e, branch. The `disabled` half is fixed — both buttons are `aria-disabled` and keep focus, with the double-submit guard moved into `run`. **The remount half is still open:** the card is still `key={item.id}`, so React unmounts the focused subtree and nothing calls `.focus()` afterwards.
 
-**`src/app/sign-in/page.tsx:209`** — There is no live region anywhere in the application — sign-in errors, upload progress and upload failures are inserted into the DOM silently.
+✅ FIXED — **`src/app/sign-in/page.tsx:209`** — There is no live region anywhere in the application — sign-in errors, upload progress and upload failures are inserted into the DOM silently.
 <br>*Fix:* Give the sign-in error <p>s `role="alert"`. Add a single `aria-live="polite"` region to the uploader summarising "{done} of {total} uploaded" plus any failure text, and one to the filer announcing "Filed. {n} left" after each submit.
+<br>*Status ✅ FIXED:* dfbfd3e, branch. Both sign-in error `<p>`s are `role="alert"`; polite live regions added to the uploader and the filer.
 
-**`src/app/timeline/stream.tsx:68`** — None of the three main surfaces has an h1 — /timeline's first heading is an h2, and /board, /cabinet, /people, /places, /occasions and /catalogue have no heading at all.
+✅ FIXED — **`src/app/timeline/stream.tsx:68`** — None of the three main surfaces has an h1 — /timeline's first heading is an h2, and /board, /cabinet, /people, /places, /occasions and /catalogue have no heading at all.
 <br>*Fix:* Give each surface an h1 naming it — "Timeline", "Board", "Cabinet", "Given by", "Places", "Occasions", "Catalogue" — visually hidden where the design has no room for it (the CAPSULE wordmark span in rail.tsx:26 and cabinet/page.tsx:45 is the natural host). Demote the Inspector's title to h2 under it or keep it at h2 and move the year headings to h2 with month runs at h3 so the outline is consistent.
+<br>*Status ✅ FIXED:* dfbfd3e, branch. Every surface names itself, visually hidden where the design has no room; the sign-in wordmark became the `h1` it already looked like.
 
 **`src/components/tag-editor.tsx:46`** — Tag chips are destructive buttons whose accessible name is just the tag text, and the new-tag input discards what was typed when focus leaves it.
 <br>*Fix:* Give the chip `aria-label={`Remove tag ${tag.name}`}` (Chip already forwards ...rest) and render a visible × so sighted users see it too. Commit the typed value on blur instead of discarding it, or only close on Escape, and return focus to the "+ tag" chip after a successful add.
@@ -212,16 +268,47 @@ was in session scratch and is gone; what follows is the durable record.
 **`src/server/intake.ts:52`** — addIntakeItem accepts an exif argument and never writes it, so the capture date and GPS the uploader reads off every photo are silently discarded.
 <br>*Fix:* Add an `exif jsonb` column (or fold the EXIF date and coordinates into `suggestions` as {date:{value,confidence:1}} at insert time) and write it in addIntakeItem, so the Filer shows a date chip with no model involved and /api/extract has a real exifDate hint.
 
-**`src/sw.ts:40`** — There is no offline behaviour at all: no precache, no navigation fallback, and a catch-all NetworkOnly, so the installed PWA is a browser error page whenever it is launched without a network — including /accession, the page whose entire purpose is offline capture.
+◐ PARTLY — **`src/sw.ts:40`** — There is no offline behaviour at all: no precache, no navigation fallback, and a catch-all NetworkOnly, so the installed PWA is a browser error page whenever it is launched without a network — including /accession, the page whose entire purpose is offline capture.
 <br>*Fix:* Precache one static, auth-free `/offline` shell (it needs no user data) and register it as the catch handler / navigation fallback for navigation requests, and precache the icons rather than hoping a runtime request populates them. If offline capture is meant to work, /accession's shell has to be reachable offline — that means a static capture route whose data comes from IndexedDB rather than a server render.
+<br>*Status ◐ PARTLY:* Not touched. The three specifics hold — catch-all `NetworkOnly`, no precache, no navigation fallback — but "no offline behaviour at all" overstates it: blob derivatives, `/_next/static/` and `/icons/` are runtime-cached, and failed derive/extract POSTs replay through a `BackgroundSyncQueue`. Navigations are dead offline; assets and pipeline retries are not.
 
 
-<!-- 38 distinct sites, deduped from 44 confirmed findings -->
+<!-- 38 distinct sites, deduped from 44 confirmed findings.
+     2026-07-31 re-check: 8 fixed, 2 partly, 28 open. -->
+
+### The 28 that are open, worth doing in this order
+
+**Loses or destroys what someone photographed.** `derive.ts:55` (HEIC never decodes and the failure
+is surfaced nowhere), `intake.ts:189` (filed before derive = permanently imageless),
+`api/derive/route.ts:41` (thumbUrl/width/height dropped), `package.json:25` (`dev:verify` writes to
+the production Blob stores), `layout.tsx:64` (no error boundary, so a rejected Server Action
+replaces the document and destroys what was typed). The middle three are one gap wearing three
+hats: the derive result is not persisted and nothing repairs a face afterwards.
+
+**Visibly wrong.** `share-target:36` (files an imageless object), `filer.tsx:172` (a chip-chosen
+person is silently dropped once "+ someone" is tapped), `derive.ts:93` (a re-cut appears to do
+nothing for 30 days), `tokens.css:33` (2.08:1 on every date and label), `cutout.tsx:116`
+(~100 MB first paint at n=500).
+
+**Cost and abuse.** `api/extract:31` (no rate limit on a billed endpoint, public sign-up),
+`api/blob/upload:51` (no `maximumSizeInBytes`).
+
+**Everything else** is polish, gate hygiene and two design-system bugs (`tokens.css:164` and `:182`)
+that make cutout states silently identical.
 
 ## Working notes
 
 - **Deploy is manual.** `npx vercel --prod --yes` from the repo root. There is no git-push-to-deploy
   wired up, so a green `master` on GitHub says nothing about what production is serving.
+- **`db:seed` can no longer reach production.** It now calls `requireVerificationBranch()` like the
+  three gates, because it could not before and nothing about the command said so. Seeding allocates
+  lot numbers, and a lot number is an accession number that is never reissued.
+- **`db:verify:desktop` writes and restores.** It rewrites every board position, then puts them
+  back in a `finally` and asserts the restore landed. If it is killed mid-run, re-run it — the
+  restore is idempotent — or expect the board to be left tidied or scattered.
+- **The verify branch is not your archive.** Its 40 objects belong to `user_seed_dev`, not to any
+  Clerk id, and every query is owner-scoped — so signing in against the branch shows an empty
+  archive until you seed under your own id.
 - **The gates write.** They are not read-only checks; they allocate lots, upload a photograph, file
   it and delete it. They are safe only because they now target the `verify` branch and track what
   they create. If `DATABASE_URL_VERIFY` is missing they refuse to run — do not reach for
