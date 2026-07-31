@@ -17,7 +17,8 @@ import { RetentionControl } from '@/components/retention-control'
 import { saveFieldsAction } from '@/server/actions/objects'
 import { Tags } from '@/components/tag-editor'
 import { countLine, lotLabel, receivedLabel } from '@/lib/format'
-import { getArchiveSummary, getDefaultLot, getObjectDetail } from '@/server/archive'
+import { timelineHref } from '@/lib/timeline'
+import { getArchiveSummary, getDefaultLot, getObjectDetail, type ObjectDetail } from '@/server/archive'
 import { getCurrentUser } from '@/server/auth'
 import { listTimeline, searchObjects, type TimelineSort } from '@/server/objects'
 import { listPeopleWithCounts } from '@/server/people'
@@ -70,7 +71,7 @@ export default async function TimelinePage({
           {query ? (
             <SearchResults rows={rows} query={query} activeLot={detail?.lotNo ?? null} />
           ) : (
-            <Stream rows={rows} activeLot={detail?.lotNo ?? null} sort={order} query={query} />
+            <Stream rows={rows} activeLot={detail?.lotNo ?? null} sort={order} />
           )}
         </div>
       </main>
@@ -101,11 +102,7 @@ function Toolbar({
   // Keeps the selection across a re-sort — the object is still there, just at a
   // different point in the run, and losing the inspector on every sort is worse
   // than a slightly longer URL.
-  const sortHref = `/timeline?${new URLSearchParams({
-    ...(activeLot !== null ? { lot: String(activeLot) } : {}),
-    ...(query ? { q: query } : {}),
-    ...(flipped === 'oldest' ? { sort: 'oldest' } : {}),
-  })}`
+  const sortHref = timelineHref({ lot: activeLot, q: query, sort: flipped })
 
   return (
     <div className="flex h-14 shrink-0 items-center gap-3.5 border-b border-hair px-6">
@@ -147,28 +144,7 @@ function Toolbar({
   )
 }
 
-type Detail = NonNullable<Awaited<ReturnType<typeof getObjectDetail>>>
-
-/**
- * `?lot=`, `?q=` and `?sort=` are all URL state, so `?edit=1` joins them — and
- * every one of them has to be carried by every link, or a click silently resets
- * it. Dropping `sort` here reverted the whole Ledger to NEWEST on the first
- * selection after choosing OLDEST.
- */
-function inspectorHref(
-  lotNo: number,
-  query: string | null,
-  sort: TimelineSort,
-  edit = false,
-) {
-  const params = new URLSearchParams({ lot: String(lotNo) })
-  if (query) params.set('q', query)
-  if (sort === 'oldest') params.set('sort', 'oldest')
-  if (edit) params.set('edit', '1')
-  return `/timeline?${params}`
-}
-
-function Hero({ detail }: { detail: Detail }) {
+function Hero({ detail }: { detail: ObjectDetail }) {
   const recto = detail.faces.find((face) => face.role === 'recto') ?? detail.faces[0]
   const aspect = aspectOf(recto?.width, recto?.height)
   return (
@@ -191,7 +167,7 @@ function Detail({
   query,
   sort,
 }: {
-  detail: Detail
+  detail: ObjectDetail
   query: string | null
   sort: TimelineSort
 }) {
@@ -205,7 +181,7 @@ function Detail({
       }
       aside={
         <Link
-          href={inspectorHref(detail.lotNo, query, sort, true)}
+          href={timelineHref({ lot: detail.lotNo, q: query, sort, edit: true })}
           className="text-mute-1 underline-offset-4 hover:text-ink hover:underline"
         >
           EDIT
@@ -254,7 +230,7 @@ function DetailEdit({
   query,
   sort,
 }: {
-  detail: Detail
+  detail: ObjectDetail
   query: string | null
   sort: TimelineSort
 }) {
@@ -267,31 +243,21 @@ function DetailEdit({
       lot={lotLabel(detail.lotNo)}
       aside={
         <Link
-          href={inspectorHref(detail.lotNo, query, sort)}
+          href={timelineHref({ lot: detail.lotNo, q: query, sort })}
           className="text-mute-1 underline-offset-4 hover:text-ink hover:underline"
         >
           CANCEL
         </Link>
       }
-      title={
-        <>
-          {/* The action rebuilds the destination from lotNo; this only says
-              which surface asked, so it cannot become an open redirect. */}
-          <input type="hidden" name="returnTo" value="timeline" />
-          <input type="hidden" name="returnQ" value={query ?? ''} />
-          <input type="hidden" name="returnSort" value={sort} />
-          <input
-            name="title"
-            defaultValue={detail.title}
-            placeholder="Untitled"
-            aria-label="Title"
-            className="w-full border-b border-transparent bg-transparent text-[19px] leading-[1.25] font-semibold tracking-[-0.025em] outline-none transition-colors focus:border-hair-strong placeholder:font-normal placeholder:text-mute-3"
-          />
-        </>
-      }
+      // Plain text, not the title input. Inspector renders this inside an <h2>,
+      // and a heading whose only content is a form control has no accessible
+      // name at all — on the branch that added the headings. The title is edited
+      // as its own row below, like every other field.
+      title={detail.title}
       rows={
         <FieldRowsEdit
           rows={[
+            { label: 'Title', name: 'title', defaultValue: detail.title, placeholder: 'Untitled' },
             { label: 'From', name: 'givenBy', defaultValue: giver, placeholder: 'Who gave it to you?' },
             { label: 'Received', name: 'receivedAt', defaultValue: detail.receivedAt, type: 'date' },
             { label: 'Origin', name: 'place', defaultValue: detail.placeName, placeholder: 'Where from?' },
@@ -306,6 +272,13 @@ function DetailEdit({
       }
       story={
         <>
+          {/* Hidden fields live here rather than in the title slot: that slot is
+              rendered inside the panel's <h2>. The action rebuilds the
+              destination from lotNo, so these only say which surface asked and
+              cannot become an open redirect. */}
+          <input type="hidden" name="returnTo" value="timeline" />
+          <input type="hidden" name="returnQ" value={query ?? ''} />
+          <input type="hidden" name="returnSort" value={sort} />
           <textarea
             name="story"
             defaultValue={detail.story ?? ''}
@@ -322,7 +295,7 @@ function DetailEdit({
               SAVE
             </button>
             <Link
-              href={inspectorHref(detail.lotNo, query, sort)}
+              href={timelineHref({ lot: detail.lotNo, q: query, sort })}
               className="mn flex-1 rounded-md border border-hair-strong py-2 text-center text-[9px] tracking-[0.1em] text-mute-1"
             >
               CANCEL
@@ -340,7 +313,6 @@ function DetailEdit({
     </Inspector>
   )
 }
-
 
 function SearchResults({
   rows,
@@ -370,7 +342,7 @@ function SearchResults({
           return (
             <li key={object.id} style={{ width: Math.max(width + 26, 118) }}>
               <Link
-                href={`/timeline?q=${encodeURIComponent(query)}&lot=${object.lotNo}`}
+                href={timelineHref({ lot: object.lotNo, q: query })}
                 scroll={false}
                 className="block"
               >

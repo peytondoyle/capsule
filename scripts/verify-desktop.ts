@@ -13,45 +13,26 @@
  * Writes. Runs against the verify branch or refuses, like the other gates, and
  * restores every board position it disturbs.
  */
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 
 import { getDb } from '../src/server/db'
 import { collectionObjects, collections, objects, users } from '../src/server/db/schema'
 import { listTimeline, updateObject } from '../src/server/objects'
 import { getObjectDetail } from '../src/server/archive'
-import { group } from '../src/app/timeline/grouping'
+import { group } from '../src/lib/timeline'
 import { getBoard, tidyBoard, scatterBoard, clusterBoardBy } from '../src/server/board'
-import { requireVerificationBranch } from './verify-db'
+import { check, failures, requireVerificationBranch, resolveOwner } from './verify-db'
 
 // Before the first getDb(), which is lazy — same position the other gates use.
 requireVerificationBranch()
 
-let failures = 0
-function check(label: string, pass: boolean, detail = '') {
-  console.log(`  ${pass ? 'ok  ' : 'FAIL'}  ${label}${detail ? '  — ' + detail : ''}`)
-  if (!pass) failures++
-}
-
 async function main() {
   const db = getDb()
 
-  const ownerArg = process.argv.indexOf('--owner')
-  let ownerId = ownerArg > -1 ? process.argv[ownerArg + 1] : undefined
-  if (!ownerId) {
-    const rows = await db
-      .select({ id: users.id })
-      .from(users)
-      .orderBy(asc(users.createdAt))
-      .limit(1)
-    ownerId = rows[0]?.id
-  }
-  if (!ownerId) {
-    console.error('no users on the branch; pass --owner <id>')
-    process.exit(1)
-  }
-  // Pinned to a const: `ownerId` is a `let`, and TS does not carry the
-  // not-undefined narrowing into the closures below.
-  const owner: string = ownerId
+  const owner = resolveOwner(
+    process.argv,
+    await db.select({ id: users.id }).from(users).orderBy(asc(users.createdAt)),
+  )
   console.log(`\nverifying against ${owner}\n`)
 
   /* ---- everything this gate disturbs is restored on the way out -----------
@@ -73,17 +54,29 @@ async function main() {
     .from(collections)
     .where(and(eq(collections.ownerId, owner), eq(collections.kind, 'cluster')))
   const beforeClusterIds = new Set(beforeClusters.map((c) => c.id))
-  const beforeMembership = (
-    await db.select().from(collectionObjects)
-  ).filter((m) => beforeClusterIds.has(m.collectionId))
+  // Scoped in the query, not filtered in JS: the unscoped version read every
+  // membership row in the database — including other owners' — and then held
+  // the whole array alive in restoreAll's closure for the run.
+  const beforeMembership = beforeClusterIds.size
+    ? await db
+        .select()
+        .from(collectionObjects)
+        .where(inArray(collectionObjects.collectionId, [...beforeClusterIds]))
+    : []
 
   async function restoreAll() {
-    for (const row of before) {
-      await db
-        .update(objects)
-        .set({ boardX: row.x, boardY: row.y, boardZ: row.z })
-        .where(eq(objects.id, row.id))
-    }
+    // Concurrent, not sequential: over neon-http each statement is its own HTTPS
+    // round-trip, so a loop of awaits costs one latency per object — and this
+    // runs in a finally, so it is paid on failure too. Each UPDATE is an
+    // independent autocommit, so there is nothing to serialise.
+    await Promise.all(
+      before.map((row) =>
+        db
+          .update(objects)
+          .set({ boardX: row.x, boardY: row.y, boardZ: row.z })
+          .where(eq(objects.id, row.id)),
+      ),
+    )
     await db
       .delete(collections)
       .where(and(eq(collections.ownerId, owner), eq(collections.kind, 'cluster')))
@@ -129,8 +122,10 @@ async function main() {
 
     // The query order is not what the page renders — Stream regroups it. This
     // is the assertion whose absence let a sort control ship that did not sort.
-    const shownNewest = group(newest, 'newest').map((y) => y.year)
-    const shownOldest = group(oldest, 'oldest').map((y) => y.year)
+    const gNew = group(newest)
+    const gOld = group(oldest)
+    const shownNewest = gNew.map((y) => y.year)
+    const shownOldest = gOld.map((y) => y.year)
     check(
       'the rendered stream leads with the newest year',
       shownNewest[0] === Math.max(...shownNewest),
@@ -148,8 +143,6 @@ async function main() {
     )
     // Pick a year that actually has more than one month — comparing a
     // single-element array against its own reverse passes for any implementation.
-    const gNew = group(newest, 'newest')
-    const gOld = group(oldest, 'oldest')
     const multi = gNew.find((y) => y.months.filter((m) => m.month !== 0).length > 1)
     if (!multi) {
       check('months reverse too, within a year', false, 'no year has two months — assertion would be vacuous')
@@ -207,7 +200,7 @@ async function main() {
     // session and cannot be called here, but the mechanism the fix relies on can:
     // a patch that omits the key must leave the column alone.
     await updateObject(owner, target.id, { retainedLocation: 'in the blue tin, top shelf' })
-    await updateObject(owner, target.id, { title: (await getObjectDetail(owner, target.lotNo))!.title })
+    await updateObject(owner, target.id, { title: target.title })
     const kept = await getObjectDetail(owner, target.lotNo)
     check(
       'a patch that omits retainedLocation does not erase it',
@@ -264,11 +257,14 @@ async function main() {
     // Only generated clusters (rule is not null) are clusterBoardBy's to
     // replace; one the owner made by hand has no rule and must survive. That
     // distinction is the whole contract, so assert both halves of it.
-    const handMade = (await clusterRows()).filter((c) => c.rule === null).map((c) => c.id)
+    let state = await clusterRows()
+    const handMade = state.filter((c) => c.rule === null).map((c) => c.id)
     for (const dimension of ['person', 'place', 'year', 'kind'] as const) {
-      const genBefore = (await clusterRows()).filter((c) => c.rule !== null).map((c) => c.id)
+      // Carried forward from the previous iteration rather than re-read.
+      const genBefore = state.filter((c) => c.rule !== null).map((c) => c.id)
       await clusterBoardBy(owner, dimension)
       const after = await clusterRows()
+      state = after
       const genAfter = after.filter((c) => c.rule !== null).map((c) => c.id)
       check(
         `CLUSTER BY ${dimension} replaces every generated cluster`,
@@ -316,18 +312,17 @@ async function main() {
     const idsBack = new Set(await clusterIds())
     const clustersBack =
       idsBack.size === beforeClusterIds.size && [...beforeClusterIds].every((id) => idsBack.has(id))
-    console.log(`\n  ${positionsBack ? 'ok  ' : 'FAIL'}  every board position restored (incl. z and nulls)`)
-    console.log(`  ${clustersBack ? 'ok  ' : 'FAIL'}  the archive's own clusters restored, not just the count`)
-    if (!positionsBack) failures++
-    if (!clustersBack) failures++
+    console.log('')
+    check('every board position restored (incl. z and nulls)', positionsBack)
+    check("the archive's own clusters restored, not just the count", clustersBack)
   }
 
-  console.log(failures ? `\n${failures} FAILED\n` : '\nall passed\n')
+  console.log(failures() ? `\n${failures()} FAILED\n` : '\nall checks passed\n')
 
 }
 
 main().then(
-  () => process.exit(failures ? 1 : 0),
+  () => process.exit(failures() ? 1 : 0),
   (error) => {
     console.error(error)
     process.exit(1)

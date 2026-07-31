@@ -11,6 +11,7 @@ export {
   type CutStyle,
   type Silhouette,
 } from './silhouettes'
+export { BackLink } from './back-link'
 export { Chip, type ChipVariant } from './chip'
 export { FieldRows, FieldRowsEdit, type FieldRow, type EditableFieldRow } from './field-rows'
 export { Hairline, Meta, MonoLabel, SectionLabel } from './text'

@@ -12,6 +12,7 @@ import {
   updateObject,
 } from '@/server/objects'
 import { upsertOccasion, upsertPlace } from '@/server/taxonomy'
+import { timelineHref } from '@/lib/timeline'
 
 /**
  * A Server Action is a public HTTP endpoint. The owner is therefore always
@@ -67,20 +68,36 @@ export async function removeTagAction(objectId: string, tagId: string) {
 }
 
 /**
- * The five fields, saved together. Blank strings mean "clear this", which is
- * different from leaving a field alone, so they normalise to null rather than
- * being dropped.
+ * The five fields, saved together.
+ *
+ * Three-valued on purpose: a field the form did not post is *absent*, which is
+ * not the same as one the user cleared. Blank still means "clear this" and
+ * normalises to null; absent means "leave it alone" and is omitted from the
+ * patch entirely.
+ *
+ * The distinction is load-bearing because this action has more than one caller
+ * and they post different subsets. /o/[lot]'s form posts all seven fields; the
+ * Ledger inspector posts six. While every field was written unconditionally,
+ * saving from the inspector set retained_location to NULL on every save — "in
+ * the blue tin, top shelf" gone, no undo, no other copy. Gating the one field
+ * that broke would have left the same trap for the next partial caller, so the
+ * rule is uniform.
  */
 export async function saveFieldsAction(objectId: string, formData: FormData) {
   const ownerId = await requireOwner()
   const { lotNo } = await assertOwned(ownerId, objectId)
 
+  /** undefined = not posted · null = posted blank · string = a value. */
   const text = (key: string) => {
+    if (!formData.has(key)) return undefined
     const value = formData.get(key)
     if (typeof value !== 'string') return null
     const trimmed = value.trim()
     return trimmed === '' ? null : trimmed
   }
+  /** Includes a patch fragment only when the form actually posted that field. */
+  const ifPosted = <T extends object>(key: string, patch: T) =>
+    formData.has(key) ? patch : {}
 
   const receivedAt = text('receivedAt')
   const placeName = text('place')
@@ -91,26 +108,24 @@ export async function saveFieldsAction(objectId: string, formData: FormData) {
     occasionName ? upsertOccasion(ownerId, occasionName) : null,
   ])
 
-  await setGiver(ownerId, objectId, text('givenBy'))
+  const givenBy = text('givenBy')
+  if (givenBy !== undefined) await setGiver(ownerId, objectId, givenBy)
 
   await updateObject(ownerId, objectId, {
-    title: text('title') ?? 'Untitled',
-    story: text('story'),
-    receivedAt,
-    // Clearing the date has to clear the precision too, or the object claims a
-    // day it no longer has and drops out of Unfiled while looking undated.
-    receivedPrecision: receivedAt ? 'day' : 'unknown',
-    placeId: place?.id ?? null,
-    occasionId: occasion?.id ?? null,
-    // Presence-gated, unlike every other field here, because this action now has
-    // two callers that post different subsets. /o/[lot]'s form has the field, so
-    // for it a blank still means "clear this". The Ledger inspector does not, and
-    // an absent field read through text() is indistinguishable from a cleared
-    // one — so writing it unconditionally silently erased "in the blue tin, top
-    // shelf" on every save from the inspector, with no undo and no other copy.
-    ...(formData.has('retainedLocation')
-      ? { retainedLocation: text('retainedLocation') }
-      : {}),
+    // A posted-but-blank title falls back rather than clearing: an object with
+    // no title has nothing to render in the Ledger.
+    ...ifPosted('title', { title: text('title') ?? 'Untitled' }),
+    ...ifPosted('story', { story: text('story') ?? null }),
+    // The date and its precision move together or not at all — clearing the
+    // date has to clear the precision, or the object claims a day it no longer
+    // has and drops out of Unfiled while looking undated.
+    ...ifPosted('receivedAt', {
+      receivedAt: receivedAt ?? null,
+      receivedPrecision: receivedAt ? ('day' as const) : ('unknown' as const),
+    }),
+    ...ifPosted('place', { placeId: place?.id ?? null }),
+    ...ifPosted('occasion', { occasionId: occasion?.id ?? null }),
+    ...ifPosted('retainedLocation', { retainedLocation: text('retainedLocation') ?? null }),
   })
 
   refresh(lotNo)
@@ -122,11 +137,13 @@ export async function saveFieldsAction(objectId: string, formData: FormData) {
   // a form field is client-controlled, and "return to wherever this says" on a
   // public endpoint is an open redirect.
   if (formData.get('returnTo') === 'timeline') {
-    const q = text('returnQ')
     // Rebuilt from lotNo and a closed set of values, never from a supplied URL.
-    const params = new URLSearchParams({ lot: String(lotNo) })
-    if (q) params.set('q', q)
-    if (formData.get('returnSort') === 'oldest') params.set('sort', 'oldest')
-    redirect(`/timeline?${params}`)
+    redirect(
+      timelineHref({
+        lot: lotNo,
+        q: text('returnQ'),
+        sort: formData.get('returnSort') === 'oldest' ? 'oldest' : 'newest',
+      }),
+    )
   }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { Chip, SectionLabel, StickerDeck } from '@/design'
@@ -30,10 +30,10 @@ export function Filer({
   people: string[]
   places: string[]
 }) {
-  // Survives the Card remount, so the next card knows the last one was mid-flow
-  // and focus should be handed on rather than dropped to <body>.
+  // Survives the Card remount, so the next card knows the last one was mid-flow.
+  // State rather than a ref because Filer reads it during render to pass it
+  // down, and reading a ref during render is not allowed.
   const [handed, setHanded] = useState(false)
-  const hand = () => setHanded(true)
   // Always the head of the list. Filing or skipping revalidates /queue and the
   // handled item drops out of listPendingIntake, so the array shortening *is*
   // the advance — incrementing an index on top of that skipped every other
@@ -69,7 +69,7 @@ export function Filer({
       places={places}
       remaining={items.length}
       restoreFocus={handed}
-      onAct={hand}
+      onAct={() => setHanded(true)}
     />
   )
 }
@@ -98,20 +98,7 @@ function Card({
   const suggested = item.suggestions ?? {}
 
   // Guards the double submit that `disabled` used to guard. The buttons are now
-  // only aria-disabled, so they stay focusable and stay put — see the submit
-  // button below for why that matters.
-  const submitRef = useRef<HTMLButtonElement>(null)
-
-  // Hand focus to the new card's primary action rather than letting the remount
-  // drop it on <body>. Only when the previous card was mid-flow, so arriving at
-  // /queue fresh does not yank focus off the top of the document.
-  useEffect(() => {
-    if (restoreFocus) submitRef.current?.focus()
-    // Runs on mount only: Card is remounted by key for every item, so "on mount"
-    // and "on advance" are the same moment.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
+  // only aria-disabled, so they stay focusable and stay put.
   const run = (fn: () => Promise<unknown>) => {
     if (busy) return
     onAct()
@@ -286,7 +273,13 @@ function Card({
           ⌂
         </a>
         <button
-          ref={submitRef}
+          // Card is remounted by key for every item, so "on mount" and "on
+          // advance" are the same moment — which is exactly what autoFocus
+          // already means. Hands focus to the new card's primary action instead
+          // of letting the remount drop it on <body>, and only when the previous
+          // card was mid-flow, so arriving at /queue fresh does not yank focus
+          // off the top of the document.
+          autoFocus={restoreFocus}
           type="submit"
           /* aria-disabled, not disabled: a disabled button loses focus to
              <body> the instant it is disabled, and the card remounts by key

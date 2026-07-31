@@ -73,15 +73,9 @@ export type EditableFieldRow = {
  * a panel of bordered text fields would read as a settings dialogue, not as the
  * archive's own inspector.
  */
-export function FieldRowsEdit({
-  rows,
-  className,
-}: {
-  rows: EditableFieldRow[]
-  className?: string
-}) {
+export function FieldRowsEdit({ rows }: { rows: EditableFieldRow[] }) {
   return (
-    <dl className={['flex flex-col', className].filter(Boolean).join(' ')}>
+    <dl className="flex flex-col">
       {rows.map((row, i) => (
         <div key={row.name} className={rowShell(i === rows.length - 1)}>
           <dt className="shrink-0">

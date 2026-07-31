@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 
-import { Hairline, TiltLayer, type CutStyle, type Silhouette } from '@/design'
+import { BackLink, Hairline, TiltLayer, type CutStyle, type Silhouette } from '@/design'
 import { lotLabel, plural, receivedLabel } from '@/lib/format'
 import { getObjectDetail } from '@/server/archive'
 import { getCurrentUser } from '@/server/auth'
@@ -62,9 +62,7 @@ export default async function ObjectPage({
           idiom, not a new one. */}
       <div className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col lg:max-w-[960px]">
         <nav className="flex h-11 shrink-0 items-center justify-between border-b border-hair px-4">
-          <Link href="/timeline" aria-label="Back to timeline" className="-ml-1.5 flex size-6 items-center justify-center text-[15px] text-mute-2">
-            ‹
-          </Link>
+          <BackLink href="/timeline" label="Back to the timeline" />
           <span className="mn text-[9px] tracking-[0.14em] text-mute-2">
             {lotLabel(detail.lotNo)}
           </span>

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
-import { Hairline } from '@/design'
+import { BackLink, Hairline } from '@/design'
 import { countLine } from '@/lib/format'
 import { getCurrentUser } from '@/server/auth'
 import { listPlacesWithCounts } from '@/server/taxonomy'
@@ -20,13 +20,7 @@ export default async function PlacesPage() {
       <h1 className="sr-only">Places</h1>
       <div className="mx-auto max-w-[560px] px-6 pt-10 pb-16">
         <nav className="mb-8 flex items-baseline justify-between">
-          <Link
-            href="/timeline"
-            aria-label="Back to the timeline"
-            className="-ml-1.5 flex size-6 items-center justify-center text-[15px] text-mute-2"
-          >
-            ‹
-          </Link>
+          <BackLink href="/timeline" label="Back to the timeline" />
           <span className="mn text-[9px] tracking-[0.16em] text-mute-2">PLACES</span>
           <span className="mn text-[9px] text-mute-3">{places.length}</span>
         </nav>

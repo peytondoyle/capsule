@@ -3,20 +3,18 @@ import Link from 'next/link'
 import { Cutout, aspectOf, cutoutWidth, type CutStyle, type Silhouette } from '@/design'
 import { countLine, dayMonthLabel, monthName } from '@/lib/format'
 import type { TimelineSort } from '@/server/objects'
-import { group, type Rows } from './grouping'
+import { group, timelineHref, type Rows } from '@/lib/timeline'
 
 export function Stream({
   rows,
   activeLot,
-  sort = 'newest',
-  query = null,
+  sort,
 }: {
   rows: Rows
   activeLot: number | null
-  sort?: TimelineSort
-  query?: string | null
+  sort: TimelineSort
 }) {
-  const years = group(rows, sort)
+  const years = group(rows)
 
   if (years.length === 0) {
     return (
@@ -66,11 +64,7 @@ export function Stream({
                       // a 120px column.
                       <li key={object.id} style={{ width: Math.max(width + 26, 118) }}>
                         <Link
-                          href={`/timeline?${new URLSearchParams({
-                            lot: String(object.lotNo),
-                            ...(query ? { q: query } : {}),
-                            ...(sort === 'oldest' ? { sort: 'oldest' } : {}),
-                          })}`}
+                          href={timelineHref({ lot: object.lotNo, sort })}
                           scroll={false}
                           aria-current={active ? 'true' : undefined}
                           className="block rounded-[3px] focus-visible:outline-2"

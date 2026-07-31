@@ -53,3 +53,42 @@ function hostOf(url: string) {
     return '(unparseable)'
   }
 }
+
+
+/* ------------------------------------------------------------------ *
+ * Shared gate plumbing
+ *
+ * Every gate had its own byte-identical copy of these, and they had already
+ * drifted — one printed "all passed" where the others printed "all checks
+ * passed", and the three owner resolvers disagreed about what to do when
+ * --owner was absent. Live here so a gate is the assertions and nothing else.
+ * ------------------------------------------------------------------ */
+
+let failed = 0
+
+export function check(label: string, pass: boolean, detail = '') {
+  console.log(`  ${pass ? 'ok  ' : 'FAIL'}  ${label}${detail ? '  — ' + detail : ''}`)
+  if (!pass) failed++
+}
+
+export function failures() {
+  return failed
+}
+
+/** `--owner <id>`, or the archive's single user. Explicit about ambiguity. */
+export function resolveOwner(argv: string[], users: { id: string }[]) {
+  const i = argv.indexOf('--owner')
+  if (i > -1) {
+    const value = argv[i + 1]
+    // indexOf + 1 lands on undefined when the flag is last, which then reads as
+    // "no owner given" and silently falls through to the first user.
+    if (!value || value.startsWith('--')) throw new Error('--owner needs a value')
+    return value
+  }
+  if (users.length === 1) return users[0]!.id
+  throw new Error(
+    users.length === 0
+      ? 'no users on this branch; pass --owner <clerk id>'
+      : `${users.length} users found; pass --owner <clerk id>`,
+  )
+}

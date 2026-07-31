@@ -176,7 +176,6 @@ export async function listTimeline(
   // reverse relative to its own year heading.
   const direction = sort === 'oldest' ? asc : desc
 
-
   return getDb()
     .select({
       object: objects,

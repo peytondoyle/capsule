@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 
-import { Cutout, TiltLayer, aspectOf, cutoutWidth, type CutStyle, type Silhouette } from '@/design'
+import { BackLink, Cutout, TiltLayer, aspectOf, cutoutWidth, type CutStyle, type Silhouette } from '@/design'
 import { countLine, dayMonthLabel, initialsOf } from '@/lib/format'
 import { getCurrentUser } from '@/server/auth'
 import { getPerson, getPersonStats, listObjectsByPerson } from '@/server/people'
@@ -27,13 +27,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
       <TiltLayer />
       <div className="mx-auto max-w-[760px] px-6 pt-10 pb-16">
         <nav className="mb-10 flex items-center justify-between">
-          <Link
-            href="/people"
-            aria-label="Back to people"
-            className="-ml-1.5 flex size-6 items-center justify-center text-[15px] text-mute-2"
-          >
-            ‹
-          </Link>
+          <BackLink href="/people" label="Back to people" />
           <span className="mn text-[9px] tracking-[0.16em] text-mute-2">GIVEN BY</span>
           <span className="w-3" />
         </nav>
