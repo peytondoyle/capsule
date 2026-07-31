@@ -22,7 +22,7 @@ export default async function CataloguePage() {
   const rows = await getCatalogue(user.id)
 
   return (
-    <div data-surface="cabinet" className="flex h-dvh flex-col overflow-hidden bg-bg text-ink">
+    <div data-surface="cabinet" className="safe-t safe-x flex h-dvh flex-col overflow-hidden bg-bg text-ink">
       <h1 className="sr-only">Catalogue</h1>
       <header className="flex h-14 shrink-0 items-center gap-[18px] border-b border-hair px-[26px]">
         <span className="mn text-[10.5px] font-semibold tracking-[0.24em]">CAPSULE</span>

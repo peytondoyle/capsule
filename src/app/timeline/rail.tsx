@@ -3,6 +3,7 @@ import Link from 'next/link'
 import type { ArchiveSummary } from '@/server/archive'
 import type { listPeopleWithCounts } from '@/server/people'
 import { agoLabel, countLine, initialsOf } from '@/lib/format'
+import { UnfiledBadge } from '@/components/badge'
 
 type People = Awaited<ReturnType<typeof listPeopleWithCounts>>
 
@@ -22,6 +23,7 @@ export function Rail({ summary, people }: { summary: ArchiveSummary; people: Peo
 
   return (
     <nav className="flex w-[198px] shrink-0 flex-col border-r border-hair pt-5">
+      <UnfiledBadge count={summary.unfiled} />
       <div className="px-[18px] pb-5">
         <div className="mn text-[10.5px] font-semibold tracking-[0.22em]">CAPSULE</div>
         <div className="mn mt-[5px] text-[8.5px] tracking-[0.1em] text-mute-2">

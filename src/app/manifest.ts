@@ -8,7 +8,15 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'A personal archive of the objects people gave you.',
     start_url: '/timeline',
     display: 'standalone',
-    display_override: ['window-controls-overlay', 'standalone'],
+    // No window-controls-overlay: it was declared with no env(titlebar-area-*)
+    // CSS anywhere, and Chromium takes the first supported display_override —
+    // so an installed Chrome PWA on macOS drew the traffic lights straight over
+    // the Board's floating nav and the Cabinet wordmark. Safari ignores the
+    // field entirely, so it bought nothing on the primary Mac install path.
+    // Reinstate only together with real titlebar-area styling.
+    // Explicit scope: Safari's Add to Dock opens out-of-scope links in the
+    // default browser, and an implicit scope is one route-move away from that.
+    scope: '/',
     background_color: '#fbf9f5',
     theme_color: '#fbf9f5',
     orientation: 'any',

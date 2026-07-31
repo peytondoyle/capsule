@@ -60,7 +60,7 @@ export default async function ObjectPage({
           the run opens into the hero-beside-fields anatomy the Ledger inspector
           and the Cabinet panel already use. That is the design's own desktop
           idiom, not a new one. */}
-      <div className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col lg:max-w-[960px]">
+      <div className="safe-t safe-b mx-auto flex min-h-dvh w-full max-w-[430px] flex-col lg:max-w-[960px]">
         <nav className="flex h-11 shrink-0 items-center justify-between border-b border-hair px-4">
           <BackLink href="/timeline" label="Back to the timeline" />
           <span className="mn text-[9px] tracking-[0.14em] text-mute-2">

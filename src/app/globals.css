@@ -38,6 +38,10 @@ html {
 body {
   font-family: var(--font-sans);
   background: var(--bg);
+  /* iOS rubber-band overscroll shows the body behind the surface div; without
+     this the Board and Cabinet flashed Ledger cream at the top of every bounce.
+     The shells already own their scroll, so chaining overscroll costs nothing. */
+  overscroll-behavior-y: none;
   color: var(--ink);
 }
 
@@ -47,4 +51,24 @@ body {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
   border-radius: 3px;
+}
+
+/**
+ * Safe-area insets, as composable utilities.
+ *
+ * viewportFit 'cover' + black-translucent means the app owns the whole screen
+ * including the regions under the Dynamic Island and the home indicator — and
+ * until these existed, nothing in the codebase referenced env(safe-area-inset-*)
+ * at all, so every surface's chrome ran underneath both. Padding, not margin, so
+ * the surface colour still paints edge-to-edge behind the notch.
+ */
+@utility safe-t {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+@utility safe-b {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@utility safe-x {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }

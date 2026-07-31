@@ -50,6 +50,12 @@ export const metadata: Metadata = {
     })),
   },
   icons: { apple: '/icons/apple-touch-icon.png' },
+  other: {
+    // Next 16 emits `mobile-web-app-capable` but not the Apple-prefixed tag —
+    // and iOS only shows the startupImage splash set when the Apple one is
+    // present. Without this line all nine generated splash PNGs are dead.
+    'apple-mobile-web-app-capable': 'yes',
+  },
 }
 
 export const viewport: Viewport = {

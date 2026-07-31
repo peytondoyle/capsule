@@ -55,7 +55,7 @@ export default async function TimelinePage({
   const detail = activeLot === null ? null : await getObjectDetail(userId, activeLot)
 
   return (
-    <div data-surface="ledger" className="flex h-dvh overflow-hidden bg-bg text-ink">
+    <div data-surface="ledger" className="safe-t safe-x flex h-dvh overflow-hidden bg-bg text-ink">
       <TiltLayer />
       <Rail summary={summary} people={people} />
 

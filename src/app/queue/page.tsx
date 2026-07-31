@@ -33,7 +33,7 @@ export default async function QueuePage() {
 
   return (
     <div data-surface="ledger" className="min-h-dvh bg-bg text-ink">
-      <div className="mx-auto flex min-h-dvh max-w-[430px] flex-col px-5 pt-4">
+      <div className="safe-t safe-b mx-auto flex min-h-dvh max-w-[430px] flex-col px-5 pt-4">
         {items.length > 0 ? (
           <Filer
             items={items}

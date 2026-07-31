@@ -38,7 +38,7 @@ export default async function CabinetPage({
   const detail = activeLot === null ? null : await getObjectDetail(user.id, activeLot)
 
   return (
-    <div data-surface="cabinet" className="flex h-dvh flex-col overflow-hidden bg-bg text-ink">
+    <div data-surface="cabinet" className="safe-t safe-x flex h-dvh flex-col overflow-hidden bg-bg text-ink">
       <h1 className="sr-only">Cabinet</h1>
       <TiltLayer />
 
