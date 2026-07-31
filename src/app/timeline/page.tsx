@@ -22,6 +22,7 @@ import { getArchiveSummary, getDefaultLot, getObjectDetail, type ObjectDetail } 
 import { getCurrentUser } from '@/server/auth'
 import { listTimeline, searchObjects, type TimelineSort } from '@/server/objects'
 import { listPeopleWithCounts } from '@/server/people'
+import { TimelineKeys } from './keys'
 import { Rail } from './rail'
 import { Stream } from './stream'
 
@@ -57,6 +58,13 @@ export default async function TimelinePage({
   return (
     <div data-surface="ledger" className="safe-t safe-x flex h-dvh overflow-hidden bg-bg text-ink">
       <TiltLayer />
+      <TimelineKeys
+        lots={rows.map((row) => row.object.lotNo)}
+        activeLot={detail?.lotNo ?? null}
+        query={query}
+        sort={order}
+        editing={editing}
+      />
       <Rail summary={summary} people={people} />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -116,6 +124,7 @@ function Toolbar({
           name="q"
           defaultValue={query ?? ''}
           placeholder={`search ${countLine([total, 'object']).toLowerCase()}`}
+          title="Search — ⌘K or /"
           className="w-full bg-transparent outline-none placeholder:text-mute-2"
         />
       </form>
@@ -135,6 +144,7 @@ function Toolbar({
         )}
         <Link
           href="/accession"
+          title="Add photographs — N"
           className="mn rounded-md bg-ink px-[11px] py-1.5 text-[9px] font-medium tracking-[0.08em] text-bg"
         >
           + ADD OBJECT

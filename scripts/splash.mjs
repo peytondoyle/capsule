@@ -10,8 +10,12 @@ mkdirSync('public/splash', { recursive: true })
 
 // device-width x device-height @ ratio — the sizes Safari actually matches
 const DEVICES = [
+  // 16/17-class devices — without these, the phones most likely to install the
+  // app today matched no media query and got the white flash.
+  [1320, 2868, 3, 'iphone-16-pro-max'],
+  [1206, 2622, 3, 'iphone-16-pro'],
+  [1179, 2556, 3, 'iphone-16'],
   [1290, 2796, 3, 'iphone-15-pro-max'],
-  [1179, 2556, 3, 'iphone-15-pro'],
   [1170, 2532, 3, 'iphone-13'],
   [1284, 2778, 3, 'iphone-12-pro-max'],
   [1125, 2436, 3, 'iphone-x'],
@@ -43,4 +47,3 @@ for (const [w, h, ratio, name] of DEVICES) {
   )
 }
 console.log(links.length, 'splash screens')
-writeFileSync('public/splash/links.html', links.join('\n') + '\n')

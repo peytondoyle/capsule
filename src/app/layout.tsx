@@ -26,8 +26,11 @@ const plexMono = IBM_Plex_Mono({
  * a web page wearing an icon.
  */
 const SPLASH = [
+  [1320, 2868, 3, 'iphone-16-pro-max'],
+  [1206, 2622, 3, 'iphone-16-pro'],
   [1290, 2796, 3, 'iphone-15-pro-max'],
-  [1179, 2556, 3, 'iphone-15-pro'],
+  // also the 15 Pro and 15 — same logical size
+  [1179, 2556, 3, 'iphone-16'],
   [1170, 2532, 3, 'iphone-13'],
   [1284, 2778, 3, 'iphone-12-pro-max'],
   [1125, 2436, 3, 'iphone-x'],

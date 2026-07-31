@@ -45,6 +45,7 @@ export function Uploader({ ownerId }: { ownerId: string }) {
   const [items, setItems] = useState<Queued[]>([])
   const [, startTransition] = useTransition()
   const [batchId, setBatchId] = useState<string | null>(null)
+  const [dropping, setDropping] = useState(false)
 
   /**
    * Uploads a picker's worth of files and reports, **by index**, which of them
@@ -211,18 +212,78 @@ export function Uploader({ ownerId }: { ownerId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- drain once on mount
   }, [])
 
+  // Paste and drop are the desktop capture paths — a Mac archive gets fed
+  // screenshots and files as often as camera rolls. Window-level, so neither
+  // needs the hidden input focused; both funnel into handleFiles exactly as a
+  // picked FileList does.
+  //
+  // Through a ref, not the closure: handleFiles captures `batchId`, and a
+  // mount-time subscription would freeze the first render's null — every paste
+  // for the rest of the session would then mint a fresh batch.
+  const handleFilesRef = useRef(handleFiles)
+  handleFilesRef.current = handleFiles
+  useEffect(() => {
+    function fromItems(list: DataTransfer | null) {
+      const images = [...(list?.files ?? [])].filter((f) => f.type.startsWith('image/'))
+      if (images.length === 0) return null
+      const transfer = new DataTransfer()
+      for (const file of images) transfer.items.add(file)
+      return transfer.files
+    }
+    function onPaste(event: ClipboardEvent) {
+      const files = fromItems(event.clipboardData)
+      if (files) {
+        event.preventDefault()
+        void handleFilesRef.current(files)
+      }
+    }
+    function onDragOver(event: DragEvent) {
+      if (event.dataTransfer?.types.includes('Files')) {
+        event.preventDefault()
+        setDropping(true)
+      }
+    }
+    function onDragLeave(event: DragEvent) {
+      if (!event.relatedTarget) setDropping(false)
+    }
+    function onDrop(event: DragEvent) {
+      setDropping(false)
+      const files = fromItems(event.dataTransfer)
+      if (files) {
+        event.preventDefault()
+        void handleFilesRef.current(files)
+      }
+    }
+    window.addEventListener('paste', onPaste)
+    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('dragleave', onDragLeave)
+    window.addEventListener('drop', onDrop)
+    return () => {
+      window.removeEventListener('paste', onPaste)
+      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('dragleave', onDragLeave)
+      window.removeEventListener('drop', onDrop)
+    }
+  }, [])
+
   const done = items.filter((i) => i.status === 'done').length
   const failed = items.filter((i) => i.status === 'failed')
 
   return (
-    <div>
+    <div className="relative">
+      {dropping ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[14px] border-2 border-dashed border-accent bg-bg/85">
+          <span className="mn text-[10px] tracking-[0.18em] text-accent">DROP TO ADD</span>
+        </div>
+      ) : null}
       <input
         ref={inputRef}
         type="file"
         accept="image/*"
         multiple
-        // `capture` opens the camera directly on a phone, which is the whole
-        // point — most objects get photographed, not picked from a library.
+        // No `capture` attribute, deliberately: it is mutually exclusive with
+        // `multiple` on iOS, and batches matter more than skipping one tap.
+        // (An earlier comment here claimed capture was set. It never was.)
         className="sr-only"
         onChange={(event) => {
           void handleFiles(event.target.files)
