@@ -34,6 +34,7 @@ export async function getBoard(ownerId: string) {
         recto: {
           id: objectFaces.id,
           cutoutUrl: objectFaces.cutoutUrl,
+          thumbUrl: objectFaces.thumbUrl,
           width: objectFaces.width,
           height: objectFaces.height,
         },

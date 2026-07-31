@@ -29,7 +29,7 @@ export function Stream({
 
   return (
     <div className="px-6 pt-[26px]">
-      {years.map(({ year, rows: yearRows, months }) => {
+      {years.map(({ year, rows: yearRows, months }, yearIndex) => {
         const givers = new Set(yearRows.map((r) => r.giver).filter(Boolean))
         return (
           <section key={year}>
@@ -40,7 +40,7 @@ export function Stream({
               </span>
             </header>
 
-            {months.map(({ month, run }) => (
+            {months.map(({ month, run }, monthIndex) => (
               <div key={month}>
                 {month > 0 ? (
                   <div className="mn mt-4 mb-1.5 text-[8.5px] tracking-[0.14em] text-mute-3">
@@ -53,7 +53,11 @@ export function Stream({
                 )}
 
                 <ul className="flex flex-wrap items-start gap-[30px] px-1 pt-2 pb-[22px]">
-                  {run.map(({ object, recto, giver }) => {
+                  {run.map(({ object, recto, giver }, itemIndex) => {
+                    // The first run of the first year is the fold. Lazy-loading
+                    // what is already on screen costs a frame and buys nothing;
+                    // everything below it is the actual saving.
+                    const aboveFold = yearIndex === 0 && monthIndex === 0 && itemIndex < 12
                     const active = object.lotNo === activeLot
                     const aspect = aspectOf(recto?.width, recto?.height)
                     const width = cutoutWidth(object.silhouette as Silhouette, aspect)
@@ -76,9 +80,11 @@ export function Stream({
                             rotate={object.rotationDeg}
                             aspect={aspect}
                             src={recto?.cutoutUrl ?? undefined}
+                            thumbSrc={recto?.thumbUrl ?? undefined}
                             alt={object.title}
                             label={recto?.cutoutUrl ? undefined : (object.kind ?? undefined)}
                             state={active ? 'active' : 'idle'}
+                            eager={aboveFold}
                             interactive
                           />
                           <div className="mt-3">

@@ -33,6 +33,7 @@ export default async function BoardPage() {
           cutStyle: row.object.cutStyle,
           rotationDeg: row.object.rotationDeg,
           cutoutUrl: row.recto?.cutoutUrl ?? null,
+          thumbUrl: row.recto?.thumbUrl ?? null,
           faceW: row.recto?.width ?? null,
           faceH: row.recto?.height ?? null,
           giver: row.giver,

@@ -67,6 +67,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
                     rotate={object.rotationDeg}
                     aspect={aspect}
                     src={recto?.cutoutUrl ?? undefined}
+                    thumbSrc={recto?.thumbUrl ?? undefined}
                     alt={object.title}
                     label={recto?.cutoutUrl ? undefined : (object.kind ?? undefined)}
                     interactive

@@ -84,6 +84,7 @@ export async function listObjectsByPerson(ownerId: string, personId: string) {
       recto: {
         id: objectFaces.id,
         cutoutUrl: objectFaces.cutoutUrl,
+        thumbUrl: objectFaces.thumbUrl,
         width: objectFaces.width,
         height: objectFaces.height,
       },

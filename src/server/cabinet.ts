@@ -20,6 +20,7 @@ type ShelfObject = {
   cutStyle: string
   rotationDeg: number
   cutoutUrl: string | null
+  thumbUrl: string | null
   faceW: number | null
   faceH: number | null
 }
@@ -42,6 +43,7 @@ export async function getCabinet(ownerId: string) {
     cutStyle: objects.cutStyle,
     rotationDeg: objects.rotationDeg,
     cutoutUrl: objectFaces.cutoutUrl,
+    thumbUrl: objectFaces.thumbUrl,
     faceW: objectFaces.width,
     faceH: objectFaces.height,
   }

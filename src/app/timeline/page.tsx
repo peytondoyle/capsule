@@ -165,6 +165,7 @@ function Hero({ detail }: { detail: ObjectDetail }) {
       rotate={detail.rotationDeg}
       aspect={aspect}
       src={recto?.cutoutUrl ?? undefined}
+      eager
       alt={detail.title}
       label={recto?.cutoutUrl ? undefined : (detail.kind ?? undefined)}
       interactive

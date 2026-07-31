@@ -149,6 +149,33 @@ function Gallery({ surface, section }: { surface: SurfaceName; section?: Section
 
         ) : null}
 
+        {/* --- loading strategy -------------------------------------------- */}
+        {show('states') ? (
+        <div>
+          <SectionLabel className="mb-4">Loading · thumb vs full, lazy vs eager</SectionLabel>
+          <div className="flex flex-wrap items-end gap-8">
+            <div className="w-[124px]">
+              <Cutout
+                width={112}
+                silhouette="card"
+                src="/icons/icon-512.png"
+                thumbSrc="/icons/icon-192.png"
+                alt="grid cutout"
+              />
+              <Meta className="mt-3">grid · thumb, lazy</Meta>
+            </div>
+            <div className="w-[124px]">
+              <Cutout width={112} silhouette="card" src="/icons/icon-512.png" alt="hero cutout" eager />
+              <Meta className="mt-3">hero · full, eager</Meta>
+            </div>
+            <div className="w-[124px]">
+              <Cutout width={112} silhouette="card" src="/icons/icon-512.png" alt="no thumb yet" />
+              <Meta className="mt-3">no thumb · falls back</Meta>
+            </div>
+          </div>
+        </div>
+        ) : null}
+
         {/* --- states ----------------------------------------------------- */}
         {show('states') ? (
         <div>

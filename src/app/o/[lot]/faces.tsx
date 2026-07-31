@@ -59,6 +59,7 @@ export function Faces({
           rotate={rotate}
           aspect={aspect}
           src={face.cutoutUrl ?? undefined}
+        eager
           alt={title}
           label={face.cutoutUrl ? undefined : (ROLE_LABEL[face.role] ?? kind ?? undefined)}
           interactive

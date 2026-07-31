@@ -15,6 +15,24 @@ export type CutoutProps = {
   aspect?: number
   /** Alpha cutout URL. Absent until phase 6 has produced one. */
   src?: string | null
+  /**
+   * The 640px derivative, when the caller has it.
+   *
+   * Preferred over `src` at any rendered width the thumbnail can serve, which
+   * is every grid in the app — the derive has written one beside every cutout
+   * from the start, and until now nothing rendered it, so a Ledger of 500
+   * objects fetched 500 full-size images to draw them at 120px.
+   *
+   * Falls back to `src` on its own, so faces filed before thumb_url was
+   * persisted keep working untouched.
+   */
+  thumbSrc?: string | null
+  /**
+   * Render eagerly. The default is lazy, which is right for a long run of
+   * cutouts and wrong for the one hero the page is *about* — an Inspector
+   * hero that fades in after paint reads as slower than one that blocks.
+   */
+  eager?: boolean
   alt?: string
   /** Mono caption shown inside the placeholder, e.g. "boarding pass". */
   label?: string
@@ -47,9 +65,11 @@ export function Cutout({
   rotate = 0,
   aspect = 1.15,
   src,
+  thumbSrc,
   alt,
   label,
   state = 'idle',
+  eager = false,
   interactive = false,
   className,
   style,
@@ -114,12 +134,18 @@ export function Cutout({
             // the drop-shadow needs in order to trace the silhouette.
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={src}
+              // The 640px derivative wherever it will do, which is any grid —
+              // 640 covers every rendered width in the app except the Inspector
+              // hero and the /o/[lot] hero, which pass eager and no thumbSrc.
+              src={thumbSrc ?? src}
               alt={alt ?? label ?? ''}
               // The Board drags cutouts with pointer events. A native HTML5
               // image drag hijacks that: it releases pointer capture and fires
               // pointercancel instead of pointerup, so the drag never ends.
               draggable={false}
+              loading={eager ? 'eager' : 'lazy'}
+              decoding={eager ? 'sync' : 'async'}
+              fetchPriority={eager ? 'high' : 'auto'}
               width={faceWidth}
               height={faceHeight}
               style={{

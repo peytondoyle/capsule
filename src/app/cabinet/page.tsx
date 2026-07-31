@@ -132,6 +132,7 @@ export default async function CabinetPage({
                         rotate={object.rotationDeg}
                         aspect={aspect}
                         src={object.cutoutUrl ?? undefined}
+                        thumbSrc={object.thumbUrl ?? undefined}
                         alt={object.title}
                         label={object.cutoutUrl ? undefined : (object.kind ?? undefined)}
                         state={active ? 'active' : 'idle'}
@@ -168,6 +169,7 @@ export default async function CabinetPage({
                 rotate={detail.rotationDeg}
                 aspect={aspectOf(detail.faces[0]?.width, detail.faces[0]?.height)}
                 src={detail.faces[0]?.cutoutUrl ?? undefined}
+                eager
                 alt={detail.title}
                 label={
                   detail.faces.length > 1

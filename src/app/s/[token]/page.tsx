@@ -45,6 +45,7 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
             rotate={shared.rotationDeg}
             aspect={aspect}
             src={recto?.cutoutUrl ?? undefined}
+          eager
             alt={shared.title}
             label={recto?.cutoutUrl ? undefined : (shared.kind ?? undefined)}
           />

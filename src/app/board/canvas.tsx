@@ -22,6 +22,7 @@ type Item = {
   cutStyle: string
   rotationDeg: number
   cutoutUrl: string | null
+  thumbUrl: string | null
   faceW: number | null
   faceH: number | null
   giver: string | null
@@ -342,6 +343,7 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
                 rotate={item.rotationDeg}
                 aspect={aspect}
                 src={item.cutoutUrl ?? undefined}
+                thumbSrc={item.thumbUrl ?? undefined}
                 alt={item.title}
                 label={item.cutoutUrl ? undefined : (item.kind ?? undefined)}
                 state={dragging ? 'dragging' : 'idle'}
