@@ -430,6 +430,18 @@ export const intakeItems = pgTable(
 
     originalUrl: text('original_url'),
     cutoutUrl: text('cutout_url'),
+    /**
+     * The rest of what deriveFromOriginal produces.
+     *
+     * These existed on `object_faces` from the start but had nowhere to live in
+     * between, so /api/derive returned them to the browser and dropped them: the
+     * 640px thumbnail was written to Blob and paid for on every derive and then
+     * referenced by nothing, and every object rendered at a fallback aspect
+     * ratio because no face ever had real dimensions.
+     */
+    thumbUrl: text('thumb_url'),
+    width: integer('width'),
+    height: integer('height'),
     /** Four points from edge detection, or dragged by hand. */
     corners: jsonb('corners'),
     ocr: jsonb('ocr'),

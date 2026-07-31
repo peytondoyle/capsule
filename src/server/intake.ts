@@ -3,7 +3,7 @@ import 'server-only'
 import { and, asc, eq, inArray } from 'drizzle-orm'
 
 import { getDb } from './db'
-import { intakeBatches, intakeItems, objectFaces } from './db/schema'
+import { intakeBatches, intakeItems, objectFaces, objects } from './db/schema'
 import { createObject } from './objects'
 import { assertOwnedOriginalUrl } from './blob'
 import { silhouetteForKind } from '@/design/silhouettes'
@@ -155,6 +155,9 @@ export async function fileIntakeItem(
       status: intakeItems.status,
       originalUrl: intakeItems.originalUrl,
       cutoutUrl: intakeItems.cutoutUrl,
+      thumbUrl: intakeItems.thumbUrl,
+      width: intakeItems.width,
+      height: intakeItems.height,
     })
     .from(intakeItems)
     .innerJoin(intakeBatches, eq(intakeBatches.id, intakeItems.batchId))
@@ -191,6 +194,12 @@ export async function fileIntakeItem(
     role: 'recto',
     originalUrl: item.originalUrl,
     cutoutUrl: item.cutoutUrl,
+    // Carried across so the archive has real dimensions and a thumbnail to
+    // render. Still a snapshot of whatever the derive had produced by now —
+    // repairObjectFace is what closes the gap when it had produced nothing.
+    thumbUrl: item.thumbUrl,
+    width: item.width,
+    height: item.height,
   })
 
   await db
@@ -234,3 +243,39 @@ export async function listPendingIntake(ownerId: string, limit = 50) {
 }
 
 export type PendingIntake = Awaited<ReturnType<typeof listPendingIntake>>
+
+/**
+ * Writes a late derive through to the object it was already filed as.
+ *
+ * fileIntakeItem snapshots whatever URLs exist at filing time, and the derive is
+ * kicked off unawaited — so filing quickly produced an object whose photograph
+ * was unreachable for good. Nothing read intake_items again after filing, so the
+ * derive that eventually landed went nowhere.
+ *
+ * Owner-checked through the object, not trusted from the caller.
+ */
+export async function repairObjectFace(
+  ownerId: string,
+  objectId: string,
+  derived: { cutoutUrl: string; thumbUrl: string; width: number; height: number },
+) {
+  const db = getDb()
+  const [owned] = await db
+    .select({ id: objects.id })
+    .from(objects)
+    .where(and(eq(objects.id, objectId), eq(objects.ownerId, ownerId)))
+    .limit(1)
+  if (!owned) return null
+
+  const [row] = await db
+    .update(objectFaces)
+    .set({
+      cutoutUrl: derived.cutoutUrl,
+      thumbUrl: derived.thumbUrl,
+      width: derived.width,
+      height: derived.height,
+    })
+    .where(and(eq(objectFaces.objectId, objectId), eq(objectFaces.role, 'recto')))
+    .returning()
+  return row ?? null
+}

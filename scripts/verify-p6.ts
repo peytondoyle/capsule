@@ -2,9 +2,15 @@
 import { eq, inArray } from 'drizzle-orm'
 import { getDb } from '../src/server/db'
 import { intakeBatches, intakeItems, objectFaces, objects } from '../src/server/db/schema'
-import { addIntakeItem, createBatch, fileIntakeItem, listPendingIntake } from '../src/server/intake'
+import {
+  addIntakeItem,
+  createBatch,
+  fileIntakeItem,
+  listPendingIntake,
+  repairObjectFace,
+} from '../src/server/intake'
 import { deleteObject } from '../src/server/objects'
-import { deleteBlobs, intakePath, originalsToken } from '../src/server/blob'
+import { deleteBlobs, intakePath, originalsToken, thumbBesideCutout } from '../src/server/blob'
 import { upsertPerson } from '../src/server/people'
 import { deriveFromOriginal } from '../src/server/derive'
 import { put } from '@vercel/blob'
@@ -69,7 +75,13 @@ async function seedIntake(ownerId: string) {
   )
   await getDb()
     .update(intakeItems)
-    .set({ cutoutUrl: derived.cutoutUrl, status: 'segmented' })
+    .set({
+      cutoutUrl: derived.cutoutUrl,
+      thumbUrl: derived.thumbUrl,
+      width: derived.width,
+      height: derived.height,
+      status: 'segmented',
+    })
     .where(eq(intakeItems.id, item.id))
 
   return { derived, itemId: item.id, batchId: batch.id }
@@ -91,7 +103,11 @@ async function cleanup(ownerId: string) {
       .where(inArray(intakeItems.id, created.itemIds))
     await deleteBlobs({
       originals: rows.map((r) => r.originalUrl),
-      media: rows.map((r) => r.cutoutUrl),
+      // The gate's own probe writes a t640 beside every cutout, and blobs are
+      // not branched — so without this each run orphaned a thumbnail in the real
+      // media store, which the closing "left nothing behind" check compares
+      // pending-intake counts and cannot see.
+      media: rows.flatMap((r) => [r.cutoutUrl, thumbBesideCutout(r.cutoutUrl)]),
     })
   }
   if (created.batchIds.length) {
@@ -142,6 +158,14 @@ async function main() {
     item.originalUrl ?? '',
   )
   check('it has a public cutout', (item.cutoutUrl ?? '').includes('.public.'), item.cutoutUrl ?? '')
+  // The derive route used to return these to the browser and drop them, so the
+  // t640 was written to Blob on every derive and referenced by nothing, and no
+  // object ever had real dimensions.
+  check(
+    'the derive persists its thumbnail and dimensions',
+    Boolean(item.thumbUrl) && Boolean(item.width) && Boolean(item.height),
+    `${item.width}×${item.height} thumb=${item.thumbUrl ? 'yes' : 'no'}`,
+  )
 
   const dad = await upsertPerson(ownerId, 'Dad')
   const filed = await fileIntakeItem(ownerId, item.id, {
@@ -165,6 +189,37 @@ async function main() {
       (faces[0]!.originalUrl ?? '').includes('.private.') &&
       (faces[0]!.cutoutUrl ?? '').includes('.public.'),
   )
+  check(
+    'filing carries the thumbnail and dimensions onto the face',
+    Boolean(faces[0]?.thumbUrl) && Boolean(faces[0]?.width) && Boolean(faces[0]?.height),
+    `${faces[0]?.width}×${faces[0]?.height}`,
+  )
+
+  /* ---- the race that made objects permanently imageless ------------------ *
+   * An item is filable from the moment it is recorded, before any derive, and
+   * fileIntakeItem copies whatever URLs exist at that instant. Reproduce it
+   * exactly: blank the face, then land a derive, and prove the write-through
+   * repairs it. Without repairObjectFace this face stays empty for good,
+   * because nothing reads intake_items again once the item is filed.
+   */
+  await db
+    .update(objectFaces)
+    .set({ cutoutUrl: null, thumbUrl: null, width: null, height: null })
+    .where(eq(objectFaces.objectId, filed.objectId))
+  const landing = {
+    cutoutUrl: item.cutoutUrl!,
+    thumbUrl: item.thumbUrl!,
+    width: item.width!,
+    height: item.height!,
+  }
+  const repaired = await repairObjectFace(ownerId, filed.objectId, landing)
+  check(
+    'a derive that lands after filing repairs the face',
+    Boolean(repaired?.cutoutUrl) && Boolean(repaired?.thumbUrl) && Boolean(repaired?.width),
+    `${repaired?.width}×${repaired?.height}`,
+  )
+  const stolen = await repairObjectFace('user_does_not_exist', filed.objectId, landing)
+  check('another owner cannot repair this face', stolen === null)
 
   const [after] = await db.select().from(intakeItems).where(eq(intakeItems.id, item.id))
   check('the intake item is marked filed', after?.status === 'filed' && after?.objectId === filed.objectId)

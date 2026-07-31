@@ -2,7 +2,7 @@ import 'server-only'
 
 import { eq } from 'drizzle-orm'
 
-import { deleteBlobs } from './blob'
+import { deleteBlobs, thumbBesideCutout } from './blob'
 import { getDb } from './db'
 import {
   intakeBatches,
@@ -72,8 +72,12 @@ export async function deleteUser(id: string) {
   await deleteBlobs({
     originals: [...faces.map((f) => f.originalUrl), ...items.map((i) => i.originalUrl)],
     media: [
-      ...faces.flatMap((f) => [f.cutoutUrl, f.thumbUrl, f.maskUrl]),
-      ...items.map((i) => i.cutoutUrl),
+      // thumbBesideCutout as well as f.thumbUrl: the column is only populated
+      // for faces filed after /api/derive started persisting it, and a null is
+      // silently skipped — so without deriving the path too, every object filed
+      // before that keeps a public thumbnail forever after its owner is gone.
+      ...faces.flatMap((f) => [f.cutoutUrl, f.thumbUrl, thumbBesideCutout(f.cutoutUrl), f.maskUrl]),
+      ...items.flatMap((i) => [i.cutoutUrl, thumbBesideCutout(i.cutoutUrl)]),
     ],
   })
 

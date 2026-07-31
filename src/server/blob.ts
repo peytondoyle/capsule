@@ -120,6 +120,21 @@ export function assertOwnedOriginalUrl(ownerId: string, url: string) {
 }
 
 /**
+ * The 640px thumbnail that sits beside a cutout.
+ *
+ * deriveFromOriginal writes `<key>/cutout.webp` and `<key>/t640.webp` together,
+ * so one is derivable from the other. Every face written before thumb_url was
+ * persisted has a null there, and a null is skipped by deleteBlobs — which left
+ * a public, unauthenticated thumbnail of every object in the media store after
+ * the account that owned it was deleted.
+ */
+export function thumbBesideCutout(cutoutUrl: string | null) {
+  if (!cutoutUrl) return null
+  const derived = cutoutUrl.replace(/\/cutout\.webp(\?|$)/, '/t640.webp$1')
+  return derived === cutoutUrl ? null : derived
+}
+
+/**
  * Best-effort removal from both stores.
  *
  * Never throws: the caller is usually mid-delete, and a blob that outlives its

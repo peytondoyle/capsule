@@ -8,6 +8,7 @@ import { Cutout, MonoLabel, SectionLabel } from '@/design'
 import { recordUploadAction, startBatchAction } from '@/server/actions/intake'
 import { enqueueUpload, listQueued, removeQueued } from '@/lib/offline-queue'
 import { clientIntakePath } from '@/lib/blob-path'
+import { toUploadable } from '@/lib/heic'
 
 type Queued = {
   key: string
@@ -106,8 +107,20 @@ export function Uploader({ ownerId }: { ownerId: string }) {
             current.map((item) => (item.key === key ? { ...item, ...next } : item)),
           )
 
+        // EXIF off the original: the transcode drops it, and the capture date
+        // is the one thing here that cannot be re-derived.
         const exif = await readExif(file)
         patch({ status: 'uploading', taken: exif?.taken, previewUrl: URL.createObjectURL(file) })
+
+        // sharp cannot decode HEIC, so a HEIC that reaches Blob becomes an
+        // object with no image and nothing says so. Convert on the device that
+        // already has the codec, or refuse here where the user can see it.
+        const uploadable = await toUploadable(file)
+        if (!uploadable.ok) {
+          patch({ status: 'failed', error: uploadable.reason })
+          return
+        }
+        const outgoing = uploadable.file
 
         try {
           // Straight to Blob: the bytes never touch a function, which is the
@@ -119,10 +132,10 @@ export function Uploader({ ownerId }: { ownerId: string }) {
           // @vercel/blob puts the *client's* pathname into the issued token and
           // discards whatever onBeforeGenerateToken returns, so asking for the
           // wrong prefix here does not get quietly corrected — it 400s.
-          const blob = await upload(clientIntakePath(ownerId, file.name), file, {
+          const blob = await upload(clientIntakePath(ownerId, outgoing.name), outgoing, {
             access: 'private',
             handleUploadUrl: '/api/blob/upload',
-            contentType: file.type || undefined,
+            contentType: outgoing.type || undefined,
           })
 
           const itemId = await recordUploadAction(batch!, blob.url, exif ?? undefined)
@@ -153,7 +166,7 @@ export function Uploader({ ownerId }: { ownerId: string }) {
             // Unless they are already parked: a drain that loses connectivity
             // mid-flight would otherwise write a second row for the same photo
             // under a fresh key, and both would upload on the next visit.
-            if (!fromQueue) await enqueueUpload(file, exif?.taken)
+            if (!fromQueue) await enqueueUpload(outgoing, exif?.taken)
             patch({ status: 'queued' })
           } else {
             patch({

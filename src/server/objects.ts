@@ -343,10 +343,17 @@ export async function deleteObject(ownerId: string, objectId: string) {
     .from(objectFaces)
     .where(eq(objectFaces.objectId, objectId))
 
-  const { deleteBlobs } = await import('./blob')
+  const { deleteBlobs, thumbBesideCutout } = await import('./blob')
   await deleteBlobs({
     originals: faces.map((f) => f.originalUrl),
-    media: faces.flatMap((f) => [f.cutoutUrl, f.thumbUrl, f.maskUrl]),
+    // See thumbBesideCutout: thumb_url is null on every face filed before the
+    // derive route began persisting it, and deleteBlobs skips nulls.
+    media: faces.flatMap((f) => [
+      f.cutoutUrl,
+      f.thumbUrl,
+      thumbBesideCutout(f.cutoutUrl),
+      f.maskUrl,
+    ]),
   })
 
   await getDb()
