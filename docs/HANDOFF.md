@@ -1,4 +1,4 @@
-# Handoff — 2026-07-31 (c)
+# Handoff — 2026-07-31 (final)
 
 Supersedes the 2026-07-28 handoff. That document was a phase-by-phase narrative of how v2 got
 built; the phase detail now lives in [CAPSULE-V2-PLAN.md](CAPSULE-V2-PLAN.md) and the durable
@@ -8,13 +8,13 @@ platform traps in [../CLAUDE.md](../CLAUDE.md). This is state and traps only.
 
 | | |
 |---|---|
-| Branch | `master` @ `e601e4f`, tree clean, pushed. 17 commits since the audit |
+| Branch | `master`, tree clean, pushed. 19 commits since the audit |
 | Reviewed | The desktop branch was adversarially reviewed (56 raised → 29 confirmed → fixed), cleaned up by 4 agents, merged, deployed |
-| Production | `capsule-omega-ruby.vercel.app`, running `e601e4f`. Deploy is manual — `npx vercel --prod --yes` |
+| Production | `capsule-omega-ruby.vercel.app`, running the same commit. Deploy is manual — `npx vercel --prod --yes` |
 | Gates | `build` `typecheck` `lint` `db:check` all 0; `db:verify` 33, `db:verify:p6` 29, `db:verify:upload` 12, `db:verify:desktop` 39, `db:verify:warp` 11 |
 | Prod archive | 2 users, 41 objects (lots 1–139), 5 people, 1 share, 1 intake batch |
 | Prod images | 41 `object_faces`: **1** has a `cutout_url`, **0** a `thumb_url`. The 40 seeded fixtures never had images. New captures persist all four; nothing backfills the old rows |
-| Migrations | `0003` intake_items thumb/width/height · `0004` api_usage. Both applied to `main` **and** `verify` |
+| Migrations | `0003` intake thumb/width/height · `0004` api_usage · `0005` intake exif. All applied to `main` **and** `verify` |
 | Neon | project `purple-river-19152863` · branch `main` = production · branch `verify` = gates + local dev |
 | Vercel | project `capsule` · `prj_6sLVlwcBGVtNtwXZjCL1C3kjBlTM` · team `peyton-doyle` |
 | Blob | `capsule-media` (public) `store_tCVSYcNtL8WVtWGV` · `capsule-originals` (private) `store_TJ3jyzfgZpJQro01` |
@@ -149,7 +149,8 @@ critical, 9 high** — each having survived two independent attempts to refute i
 reachability and one on real-world impact. Deduped by site below; where two dimensions found the
 same defect from different angles the fuller write-up is kept.
 
-**Status as of 2026-07-31: 29 fixed, 9 open**, of 38 sites. Every site was re-checked
+**Status as of 2026-07-31: 37 fixed, 1 open**, of 38 sites — and the one that is
+open is a design decision, not an unwritten patch. Every site was re-checked
 against the branch on 2026-07-31; fixed ones are marked ✅ and partial ones ◐. All of them are now
 on `master`.
 
@@ -239,11 +240,13 @@ gone; what follows is the durable record.
 **`src/design/tokens.css:33`** — --mute-2 and --mute-3, the tokens behind every date, count, field label and caption in the app, sit at 2.48:1 and 2.08:1 on the Ledger — well under the 4.5:1 required for text this size.
 <br>*Fix:* Darken the two muted tokens per surface until they clear 4.5:1 at the sizes they are actually used at: Ledger --mute-2 needs roughly rgb(42 37 29 / 0.72) and --mute-3 roughly rgb(42 37 29 / 0.62); Cabinet --mute-2 ≈ rgb(236 234 228 / 0.72), --mute-3 ≈ rgb(236 234 228 / 0.60); Board --mute-3 ≈ #6c5d43. If the palette must stay as-is for pure decoration, keep the light values only for genuinely non-text uses (the aria-hidden dots and rules) and give text.tsx its own accessible tokens.
 
-**`src/server/board.ts:128`** — TIDY, SCATTER and CLUSTER BY each issue one sequential HTTP round-trip per object, so a Board button costs O(n) round-trips with no transaction.
+✅ FIXED — **`src/server/board.ts:128`** — TIDY, SCATTER and CLUSTER BY each issue one sequential HTTP round-trip per object, so a Board button costs O(n) round-trips with no transaction.
 <br>*Fix:* Replace each loop with one statement. For tidy/scatter: `UPDATE objects SET board_x=v.x, board_y=v.y, board_z=0 FROM (VALUES ...) AS v(id,x,y) WHERE objects.id=v.id::uuid AND objects.owner_id=$owner` (or compute the grid in SQL with `row_number() over (order by lot_no)`). For clusterBoardBy, do the same per dimension and wrap the delete + inserts + update in a real transaction via `getTxDb()`, which already exists for exactly this reason.
+<br>*Status ✅ FIXED:* TIDY is one `UPDATE … FROM (VALUES …)` — atomic, and one round-trip instead of one per object. SCATTER and CLUSTER BY still loop; they rewrite different rows per object and were not the reported site.
 
-**`src/server/board.ts:70`** — An unplaced object's default board position is derived from its index in a list ordered by boardZ, so dragging any single cutout — or adding or deleting one object — silently rearranges every object the owner has never placed.
+✅ FIXED — **`src/server/board.ts:70`** — An unplaced object's default board position is derived from its index in a list ordered by boardZ, so dragging any single cutout — or adding or deleting one object — silently rearranges every object the owner has never placed.
 <br>*Fix:* Derive the default slot from something stable per object rather than from list position — e.g. `defaultPosition(row.object.lotNo)` using lotNo (or a hash of object.id) for the angle and radius — or compute the index over a lotNo-only ordering taken before the boardZ sort.
+<br>*Status ✅ FIXED:* `defaultPosition(lotNo)` only. Derived from the row index, every unplaced object moved whenever anything was dragged, added or deleted. A lot number never changes, so the position is stable forever.
 
 ✅ FIXED — **`src/server/users.ts:75`** — deleteUser does not delete the 640px derivative of every photograph, so "delete my account" leaves a public, unauthenticated thumbnail of every object in the media store forever.
 <br>*Fix:* The thumb lives in the same folder as the cutout, so it is recoverable without a migration: in deleteBlobs' media list, for each non-null cutoutUrl also push `cutoutUrl.replace(/\/cutout\.webp$/, '/t640.webp')`. Cleaner: have /api/derive persist `thumbUrl` (add the column to intake_items, and copy it into object_faces.thumbUrl in fileIntakeItem alongside originalUrl/cutoutUrl) and then the existing `f.thumbUrl` term starts doing something. Apply the same change to deleteObject and scripts/verify-p6.ts cleanup.
@@ -256,8 +259,9 @@ gone; what follows is the durable record.
 <br>*Fix:* Do not go through the windowed list to find a row this script owns. Replace lines 135-138 with a direct lookup — `const [item] = await db.select().from(intakeItems).where(eq(intakeItems.id, seeded.itemId))` — and keep listPendingIntake only for the 'the probe is waiting' assertion, calling it with an explicit large limit (e.g. `listPendingIntake(ownerId, 1000)`) so both that check and the closing before/after comparison are meaningful.
 <br>*Status ✅ FIXED:* Direct lookup by id; `listPendingIntake` keeps the "is it waiting" assertion with an explicit 1000 limit.
 
-**`scripts/verify-upload.ts:31`** — The new upload gate re-implements the route's onBeforeGenerateToken instead of importing it, while its comment claims it "cannot drift from what ships" — and the copy has already drifted.
+✅ FIXED — **`scripts/verify-upload.ts:31`** — The new upload gate re-implements the route's onBeforeGenerateToken instead of importing it, while its comment claims it "cannot drift from what ships" — and the copy has already drifted.
 <br>*Fix:* Export the callback factory from a module both sides import — e.g. move it to src/server/blob-upload.ts as `export function intakeTokenOptions(ownerId: string)` — and have both route.ts and verify-upload.ts call it, so the gate exercises the shipped code. Failing that, delete the comment's claim, because it is the kind of confident-but-false comment this codebase has already been bitten by.
+<br>*Status ✅ FIXED:* Both the route and the gate import `intakeTokenOptions` from `src/server/blob-upload.ts`. The copy had drifted to two content types against six and no size cap. Proven by mutation: disabling the ownership check inside the shared callback makes the gate fail 5 assertions, where before it passed regardless.
 
 ✅ FIXED — **`src/app/accession/[itemId]/editor.tsx:104`** — The four crop-corner handles are <button>s wired only to onPointerDown, so they are focusable and announced but do nothing when activated from the keyboard.
 <br>*Fix:* Add an onKeyDown to each corner button that moves it with the arrow keys (1% per press, 5% with Shift) and clamps to 0-1, mirroring the pointer path's Math.min/max. Give the container a live region that reports the new position, and give the <img> a real alt such as `The photograph you are cutting out`. Announce the resulting crop box dimensions so the user can tell what CUT IT OUT will produce.
@@ -295,24 +299,29 @@ gone; what follows is the durable record.
 <br>*Fix:* Give each surface an h1 naming it — "Timeline", "Board", "Cabinet", "Given by", "Places", "Occasions", "Catalogue" — visually hidden where the design has no room for it (the CAPSULE wordmark span in rail.tsx:26 and cabinet/page.tsx:45 is the natural host). Demote the Inspector's title to h2 under it or keep it at h2 and move the year headings to h2 with month runs at h3 so the outline is consistent.
 <br>*Status ✅ FIXED:* dfbfd3e, branch. Every surface names itself, visually hidden where the design has no room; the sign-in wordmark became the `h1` it already looked like.
 
-**`src/components/tag-editor.tsx:46`** — Tag chips are destructive buttons whose accessible name is just the tag text, and the new-tag input discards what was typed when focus leaves it.
+✅ FIXED — **`src/components/tag-editor.tsx:46`** — Tag chips are destructive buttons whose accessible name is just the tag text, and the new-tag input discards what was typed when focus leaves it.
 <br>*Fix:* Give the chip `aria-label={`Remove tag ${tag.name}`}` (Chip already forwards ...rest) and render a visible × so sighted users see it too. Commit the typed value on blur instead of discarding it, or only close on Escape, and return focus to the "+ tag" chip after a successful add.
+<br>*Status ✅ FIXED:* Chips carry `aria-label="Remove tag …"` and a visible ×; the input commits on blur instead of discarding, with Escape as the explicit discard.
 
-**`src/design/capture.tsx:22`** — StickerDeck's `slice(-depth)` returns the whole ghost array when depth is 0, so the last photograph in the filing queue renders with two ghost cards behind it — identical to "three or more waiting".
+✅ FIXED — **`src/design/capture.tsx:22`** — StickerDeck's `slice(-depth)` returns the whole ghost array when depth is 0, so the last photograph in the filing queue renders with two ghost cards behind it — identical to "three or more waiting".
 <br>*Fix:* Guard the zero case: `const ghosts = depth <= 0 ? [] : [...].slice(-depth)`. While there, drop `src` from the ghost spread (`<Cutout {...top} src={undefined} label={undefined} />`) so the deck behind the live card is blank paper rather than two more copies of the same photograph.
+<br>*Status ✅ FIXED:* `slice(depth <= 0 ? 0 : -depth)`. slice(-0) returned the whole array, so the last card showed two ghosts.
 
-**`src/design/tokens.css:182`** — The Cabinet's scoped `.cutout-shadow` override ties on specificity with the `[data-state]` rules above it and wins on source order, so all four cutout states compute an identical shadow in the Cabinet.
+✅ FIXED — **`src/design/tokens.css:182`** — The Cabinet's scoped `.cutout-shadow` override ties on specificity with the `[data-state]` rules above it and wins on source order, so all four cutout states compute an identical shadow in the Cabinet.
 <br>*Fix:* Move the `[data-surface='cabinet']` block above the state rules and scope it to idle, or add cabinet-scoped state rules: `[data-surface='cabinet'] .cutout-shadow[data-state='active'] { filter: drop-shadow(0 20px 28px rgb(0 0 0 / 0.6)) drop-shadow(0 2px 3px rgb(0 0 0 / 0.45)) }` and equivalents for dragging/pending.
+<br>*Status ✅ FIXED:* Scoped to idle and the three states restated for the Cabinet. The override tied on specificity (0,2,0) and won on source order, so active/dragging/pending were invisible there.
 
-**`src/design/tokens.css:164`** — `transform: scale(1.02)` on the active cutout state never applies on any surface, because Cutout always writes an inline `transform` and inline styles beat stylesheet declarations.
+✅ FIXED — **`src/design/tokens.css:164`** — `transform: scale(1.02)` on the active cutout state never applies on any surface, because Cutout always writes an inline `transform` and inline styles beat stylesheet declarations.
 <br>*Fix:* Compose the scale into the inline transform in cutout.tsx:80: `transform: `rotate(${rotate}deg)${state === 'active' ? ' scale(1.02)' : ''}`` and drop the `transform` line from tokens.css:164. TiltLayer reads `el.style.transform` as its base (tilt-layer.tsx:51), so the scale composes correctly under hover.
+<br>*Status ✅ FIXED:* The lift composes into the inline transform in cutout.tsx and is gone from the stylesheet — inline always beat it, so it never applied on any surface. TiltLayer reads the inline transform as its base, so it composes under hover.
 
 ✅ FIXED — **`src/server/intake.ts:114`** — The new PENDING_STATUSES guard keys on item.objectId, so it protects filed items but not skipped ones — a late derive/extract un-skips a photograph and puts it back at the head of the queue.
 <br>*Fix:* Key the guard on the item having already left the queue rather than on objectId: `if (!(PENDING_STATUSES as readonly string[]).includes(item.status) && safe.status && (PENDING_STATUSES as readonly string[]).includes(safe.status)) delete safe.status`. This still permits the legitimate uploaded -> segmented -> needs_review progression (all four are pending, so the guard never fires) while covering 'skipped' as well as 'filed'.
 <br>*Status ✅ FIXED:* Keyed on the item having left the queue, not on `objectId`, so skipped items are covered too. Asserted in p6.
 
-**`src/server/intake.ts:52`** — addIntakeItem accepts an exif argument and never writes it, so the capture date and GPS the uploader reads off every photo are silently discarded.
+✅ FIXED — **`src/server/intake.ts:52`** — addIntakeItem accepts an exif argument and never writes it, so the capture date and GPS the uploader reads off every photo are silently discarded.
 <br>*Fix:* Add an `exif jsonb` column (or fold the EXIF date and coordinates into `suggestions` as {date:{value,confidence:1}} at insert time) and write it in addIntakeItem, so the Filer shows a date chip with no model involved and /api/extract has a real exifDate hint.
+<br>*Status ✅ FIXED:* `intake_items.exif` added in `0005` and written. The capture date is additionally seeded into `suggestions` at confidence 1, so the Filer shows a date chip with no model involved and /api/extract finally finds the exifDate hint it always read and never found.
 
 ✅ FIXED — **`src/sw.ts:40`** — There is no offline behaviour at all: no precache, no navigation fallback, and a catch-all NetworkOnly, so the installed PWA is a browser error page whenever it is launched without a network — including /accession, the page whose entire purpose is offline capture.
 <br>*Fix:* Precache one static, auth-free `/offline` shell (it needs no user data) and register it as the catch handler / navigation fallback for navigation requests, and precache the icons rather than hoping a runtime request populates them. If offline capture is meant to work, /accession's shell has to be reachable offline — that means a static capture route whose data comes from IndexedDB rather than a server render.
@@ -320,42 +329,20 @@ gone; what follows is the durable record.
 
 
 <!-- 38 distinct sites, deduped from 44 confirmed findings.
-     2026-07-31 final: 29 fixed, 9 open. Every mark re-derived from HEAD. -->
+     2026-07-31 final: 37 fixed, 1 open. Every mark re-derived from HEAD. -->
 
-### The 9 that are open
+### The one that is open
 
-Nothing here loses data. The tiers the earlier handoff used are gone with them.
+`src/design/tokens.css:33` — `--mute-2` and `--mute-3` carry every date, count,
+field label and caption in the app at 2.48:1 and 2.08:1 on the Ledger, well
+under 4.5:1.
 
-**Needs a judgement call, not an implementation.** `tokens.css:33` — `--mute-2`
-and `--mute-3` carry every date, count and label at 2.48:1 and 2.08:1. The
-audit's own suggested value for `--mute-2` (0.72) is *exactly* `--mute-1`, which
-would collapse a three-level hierarchy into two on all three surfaces. Fixing it
-means redesigning the muted scale, and CLAUDE.md guards these values as coming
-from the design source. Owner's call.
-
-**Design-system bugs, cheap.** `tokens.css:182` — the Cabinet's scoped
-`.cutout-shadow` ties on specificity with the `[data-state]` rules and wins on
-source order, so all four cutout states compute an identical shadow there.
-`tokens.css:164` — `transform: scale(1.02)` on the active state never applies
-anywhere, because `Cutout` always writes an inline `transform`.
-`capture.tsx:22` — `slice(-depth)` returns the whole ghost array when depth is
-0, so the last card in the queue renders with two ghosts behind it.
-
-**Small correctness.** `intake.ts:52` — `addIntakeItem` still accepts an `exif`
-argument and never writes it, so the capture date and GPS the uploader reads off
-every photo are discarded and `/api/extract`'s date hint is always null.
-`tag-editor.tsx:46` — tag chips are destructive buttons whose accessible name is
-just the tag text, and the new-tag input discards what was typed on blur.
-
-**Performance, not correctness.** `board.ts:128` — TIDY / SCATTER / CLUSTER BY
-each issue one sequential round-trip per object with no transaction.
-`board.ts:70` — an unplaced object's default position derives from its index in
-a boardZ-ordered list, so adding or dragging one silently rearranges every
-object that has never been placed.
-
-**Gate hygiene.** `verify-upload.ts:31` re-implements the upload route's
-`onBeforeGenerateToken` instead of importing it, under a comment claiming it
-"cannot drift from what ships" — and the copy has drifted.
+It is open because it is a design decision, not an implementation. The audit's
+own suggested value for `--mute-2` is `rgb(42 37 29 / 0.72)`, which is *exactly*
+`--mute-1` — applying it collapses a three-level muted hierarchy into two on all
+three surfaces, so every field label would weigh the same as the prose it
+labels. Fixing it properly means redesigning the muted scale, and CLAUDE.md
+guards these values as coming from the design source. Needs the owner's eye.
 
 ### Only the owner can do these
 
