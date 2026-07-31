@@ -2,7 +2,8 @@ import coreWebVitals from 'eslint-config-next/core-web-vitals'
 import typescript from 'eslint-config-next/typescript'
 
 const config = [
-  { ignores: ['.next/**', 'next-env.d.ts', 'public/sw.js'] },
+  // Both are esbuild output, not source — see build:sw and build:detect.
+  { ignores: ['.next/**', 'next-env.d.ts', 'public/sw.js', 'public/detect-worker.js'] },
   ...coreWebVitals,
   ...typescript,
   {

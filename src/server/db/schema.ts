@@ -476,6 +476,32 @@ export const shares = pgTable(
   (t) => [index('shares_owner_idx').on(t.ownerId, t.createdAt.desc())],
 )
 
+/**
+ * Per-owner call counters for the endpoints that cost money or CPU.
+ *
+ * In the database rather than an in-process map or a regional cache, because a
+ * serverless function has neither a process nor a region that outlives the
+ * request — an in-memory limiter on Vercel resets on every cold start and is
+ * per-instance besides, which is to say it is not a limiter.
+ *
+ * One row per owner per endpoint per hour window; the PK makes the increment an
+ * upsert and old rows are swept opportunistically.
+ */
+export const apiUsage = pgTable(
+  'api_usage',
+  {
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** 'extract' | 'derive' — plain text, so a new endpoint needs no migration. */
+    endpoint: text('endpoint').notNull(),
+    /** Unix hour: floor(epochMs / 3_600_000). */
+    window: integer('window').notNull(),
+    calls: integer('calls').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.ownerId, t.endpoint, t.window] })],
+)
+
 /** Only needed for the Ledger rail's "LAST ADDED / 2 DAYS AGO". */
 export const activity = pgTable(
   'activity',

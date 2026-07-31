@@ -1,6 +1,7 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
 import type { NextRequest } from 'next/server'
 
+import { MAX_ORIGINAL_BYTES } from '@/server/blob'
 import { clientIntakePath } from '@/lib/blob-path'
 import { getCurrentUser } from '@/server/auth'
 import { hasOriginalsStore, originalsToken } from '@/server/blob'
@@ -57,6 +58,13 @@ export async function POST(request: NextRequest) {
             'image/heif',
             'image/avif',
           ],
+          // The token itself refuses an oversized body, so nothing has to
+          // trust the client. Without it any signed-in user could park an
+          // arbitrarily large object in the private originals store and then
+          // replay it through /api/original, which streams it back with the
+          // store bearer attached server-side — a bandwidth amplifier.
+          // 50 MB clears a 48MP HEIC with room to spare.
+          maximumSizeInBytes: MAX_ORIGINAL_BYTES,
           addRandomSuffix: true,
           tokenPayload: JSON.stringify({ ownerId: user.id }),
         }

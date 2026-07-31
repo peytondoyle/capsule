@@ -154,10 +154,12 @@ export function CornerEditor({
       }
       if (res.ok) {
         // Re-extract against the corrected cutout; ignore 501 when no key.
+        // force: the pixels genuinely changed, so the stored suggestions are
+        // about a different crop and the cached answer would be wrong.
         void fetch('/api/extract', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ itemId }),
+          body: JSON.stringify({ itemId, force: true }),
         }).catch(() => {})
         router.push('/queue')
       }

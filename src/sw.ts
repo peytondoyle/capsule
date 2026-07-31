@@ -24,7 +24,9 @@ declare const self: ServiceWorkerGlobalScope
  * offline".
  */
 const OFFLINE_VERSION = 1
-const OFFLINE_CACHE = 'capsule-offline-shell'
+// In the cache name, so bumping the version really does orphan the old entry
+// rather than the comment merely claiming it would.
+const OFFLINE_CACHE = `capsule-offline-shell-v${OFFLINE_VERSION}`
 const OFFLINE_URL = '/offline'
 
 self.addEventListener('install', (event) => {

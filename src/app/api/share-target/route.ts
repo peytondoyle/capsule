@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation'
 
 import { getCurrentUser } from '@/server/auth'
 import { extensionOf, intakePath, originalsToken } from '@/server/blob'
-import { addIntakeItem, createBatch } from '@/server/intake'
+import { addIntakeItem, createBatch, updateIntakeItem } from '@/server/intake'
+import { deriveFromOriginal } from '@/server/derive'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -33,7 +34,31 @@ export async function POST(request: NextRequest) {
       file,
       { access: 'private', token, addRandomSuffix: true, contentType: file.type || undefined },
     )
-    await addIntakeItem(user.id, batch.id, { originalUrl: blob.url })
+    const item = await addIntakeItem(user.id, batch.id, { originalUrl: blob.url })
+
+    // Derive inline. The in-app uploader fires /api/derive from the browser
+    // afterwards; a share has no browser of its own to do that, so without this
+    // a shared photo filed as an object with no image at all — and the Filer
+    // will happily file it, since an item is queue-visible from the moment it
+    // is recorded. The bytes already came through this function (Vercel's
+    // ~4.5 MB body cap bounds them) and the route has maxDuration 60.
+    try {
+      const derived = await deriveFromOriginal(blob.url, {
+        ownerId: user.id,
+        key: intakePath(user.id, item.id, '').replace(/\/$/, ''),
+      })
+      await updateIntakeItem(user.id, item.id, {
+        cutoutUrl: derived.cutoutUrl,
+        thumbUrl: derived.thumbUrl,
+        width: derived.width,
+        height: derived.height,
+        status: 'segmented',
+      })
+    } catch {
+      // A failed derive leaves a filable item with no cutout, which the Filer
+      // already labels "not cut out yet" and the corner editor can repair.
+      // Losing the whole share because one photo would not decode is worse.
+    }
   }
 
   redirect('/queue')

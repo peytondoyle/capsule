@@ -10,6 +10,12 @@ import 'server-only'
  *   capsule-media     (public)   cutouts, masks, thumbs — the hot, CDN path
  */
 
+/**
+ * The largest original the archive accepts. A 48MP HEIC is ~15 MB, so this is
+ * generous; it exists to bound the private store, not to be reached.
+ */
+export const MAX_ORIGINAL_BYTES = 50 * 1024 * 1024
+
 export const MEDIA_TOKEN_ENV = 'BLOB_READ_WRITE_TOKEN'
 export const ORIGINALS_TOKEN_ENV = 'BLOB_ORIGINALS_READ_WRITE_TOKEN'
 

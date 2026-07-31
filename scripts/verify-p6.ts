@@ -1,7 +1,7 @@
 /** Phase 6 proof: the last stage of the pipeline, plus retry-safety. */
 import { eq, inArray } from 'drizzle-orm'
 import { getDb } from '../src/server/db'
-import { intakeBatches, intakeItems, objectFaces, objects } from '../src/server/db/schema'
+import { apiUsage, intakeBatches, intakeItems, objectFaces, objects } from '../src/server/db/schema'
 import {
   addIntakeItem,
   createBatch,
@@ -13,6 +13,7 @@ import {
 } from '../src/server/intake'
 import { deleteObject } from '../src/server/objects'
 import { deleteBlobs, intakePath, originalsToken, thumbBesideCutout } from '../src/server/blob'
+import { LIMITS, consume, peek } from '../src/server/limits'
 import { upsertPerson } from '../src/server/people'
 import { deriveFromOriginal } from '../src/server/derive'
 import { put } from '@vercel/blob'
@@ -289,6 +290,45 @@ async function main() {
     restored.length === before.length,
     `${before.length} pending before, ${restored.length} after`,
   )
+
+  /* ---- rate limiting ------------------------------------------------------ *
+   * Sign-up is public and /api/extract bills Anthropic per call, so the limiter
+   * is the only thing between an account anyone can create and an unbounded
+   * invoice. Proven against the real function and the real table.
+   */
+  console.log('\nRate limiting')
+  const probeWindow = Date.now()
+  let last = await consume(ownerId, 'extract', probeWindow)
+  check('the first call is allowed', last.ok && last.used === 1, `${last.used}/${last.limit}`)
+
+  for (let i = 1; i < LIMITS.extract; i++) last = await consume(ownerId, 'extract', probeWindow)
+  check('the call on the limit is still allowed', last.ok, `${last.used}/${last.limit}`)
+
+  const over = await consume(ownerId, 'extract', probeWindow)
+  check('the call past it is refused', !over.ok, `${over.used}/${over.limit}`)
+  check(
+    'refusal reports a usable retry-after',
+    over.resetIn > 0 && over.resetIn <= 3600,
+    `${over.resetIn}s`,
+  )
+
+  // Being refused must not hand back a free reset.
+  const refusedTwice = await consume(ownerId, 'extract', probeWindow)
+  check(
+    'a refused call still counts',
+    !refusedTwice.ok && refusedTwice.used > over.used,
+    `${refusedTwice.used}`,
+  )
+
+  // Window, endpoint and owner are all separate budgets.
+  const nextHour = await consume(ownerId, 'extract', probeWindow + 3_600_000)
+  check('the next hour starts clean', nextHour.ok && nextHour.used === 1)
+  const otherEndpoint = await consume(ownerId, 'derive', probeWindow)
+  check('a different endpoint has its own budget', otherEndpoint.ok && otherEndpoint.used === 1)
+  check('peek reads without spending', (await peek(ownerId, 'derive', probeWindow)) === 1)
+
+  await getDb().delete(apiUsage).where(eq(apiUsage.ownerId, ownerId))
+  check('probe rows cleaned up', (await peek(ownerId, 'extract', probeWindow)) === 0)
 
   console.log(`\n${failures === 0 ? 'all checks passed' : `${failures} FAILED`}\n`)
   return failures

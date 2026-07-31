@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server'
 import { getCurrentUser } from '@/server/auth'
 import { extractFromImage, hasExtraction } from '@/server/extract'
 import { getIntakeItem, updateIntakeItem } from '@/server/intake'
+import { consume, tooManyRequests } from '@/server/limits'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'extraction not configured' }, { status: 501 })
   }
 
-  const { itemId } = (await request.json()) as { itemId?: string }
+  const { itemId, force } = (await request.json()) as { itemId?: string; force?: boolean }
   if (!itemId) return Response.json({ error: 'itemId required' }, { status: 400 })
 
   const item = await getIntakeItem(user.id, itemId)
@@ -25,6 +26,19 @@ export async function POST(request: NextRequest) {
   if (!item || !source) {
     return Response.json({ error: 'derive the cutout first' }, { status: 409 })
   }
+
+  // Idempotent by default. Both callers fire this unawaited after a derive, and
+  // the corner editor fires it again on every re-cut — so without this a single
+  // item could bill Anthropic repeatedly for an answer already stored. `force`
+  // is how the re-cut asks for a genuine re-read of changed pixels.
+  const existing = item.suggestions as Record<string, unknown> | null
+  if (!force && existing && Object.keys(existing).length > 0) {
+    return Response.json({ suggestions: existing, cached: true })
+  }
+
+  // Counted only once the call is certain to reach the model.
+  const limit = await consume(user.id, 'extract')
+  if (!limit.ok) return tooManyRequests(limit)
 
   try {
     const exif = item.suggestions as { date?: { value?: string } } | null

@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 
 import { getCurrentUser } from '@/server/auth'
 import { deleteBlobs, thumbBesideCutout } from '@/server/blob'
+import { consume, tooManyRequests } from '@/server/limits'
 import { intakePath } from '@/server/blob'
 import { deriveFromOriginal, type Corner } from '@/server/derive'
 import { getIntakeItem, repairObjectFace, updateIntakeItem } from '@/server/intake'
@@ -31,6 +32,11 @@ export async function POST(request: NextRequest) {
   if (!item?.originalUrl) {
     return Response.json({ error: 'item not found' }, { status: 404 })
   }
+
+  // sharp decode + two WebP encodes + two Blob writes per call, and the route
+  // is reachable by anyone who can sign up.
+  const limit = await consume(user.id, 'derive')
+  if (!limit.ok) return tooManyRequests(limit)
 
   try {
     const derived = await deriveFromOriginal(

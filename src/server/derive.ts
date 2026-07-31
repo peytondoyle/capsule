@@ -3,7 +3,7 @@ import 'server-only'
 import { put } from '@vercel/blob'
 import sharp from 'sharp'
 
-import { assertOwnedOriginalUrl, mediaToken, originalsToken } from './blob'
+import { MAX_ORIGINAL_BYTES, assertOwnedOriginalUrl, mediaToken, originalsToken } from './blob'
 import { isSaneQuad, orderCorners, recoverAspect, warpPerspective } from './warp'
 
 /**
@@ -70,7 +70,16 @@ export async function deriveFromOriginal(
   // response.bytes(), not Buffer.from(arrayBuffer()): on Vercel's Node runtime
   // the body can be backed by a SharedArrayBuffer, which Buffer.from refuses
   // ("SharedArrayBuffer is not allowed"). bytes() copies into a plain Uint8Array.
+  const declared = Number(response.headers.get('content-length') ?? 0)
+  if (declared > MAX_ORIGINAL_BYTES) {
+    throw new Error('original is too large to derive')
+  }
+
   const input = Buffer.from(await response.bytes())
+  // Belt and braces: content-length can be absent or lie.
+  if (input.byteLength > MAX_ORIGINAL_BYTES) {
+    throw new Error('original is too large to derive')
+  }
 
   // `rotate()` with no argument applies the EXIF orientation — without it every
   // portrait phone photo lands on its side.
