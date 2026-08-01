@@ -19,9 +19,16 @@ Read it before touching anything structural.
 **All 12 phases built** and merged to `master`; production is live. The archive works end to
 end: sign in → photograph → cut → file → Ledger/Board/Cabinet → share.
 
-Still genuinely missing: the MAP tab, the Board hover card, web push, and a custom domain.
-The Board phone sheet and filter rail shipped 2026-08-01. CATALOGUE, CLUSTER BY and edge
-auto-detect are **not** deferred, whatever an older note says — all three are built.
+**2026-08-01 shipped:** the Board filter rail, phone sheet and hover card (phase 8 is now
+complete, no deferrals); phone layouts for Ledger / Cabinet / Catalogue; phone-only sign-in;
+web push end to end. CATALOGUE, CLUSTER BY and edge auto-detect are **not** deferred either,
+whatever an older note says.
+
+Still genuinely missing: **the MAP tab**, a **custom domain** (which also blocks moving Clerk
+off its development instance and fixes the hardcoded VAPID `subject`), the **install
+affordance UI**, the Cabinet's **verso flip animation**, and a **full axe / keyboard audit**.
+Web push is built but **has never delivered a notification** — there are zero subscriptions,
+so the daily cron is a live no-op until someone grants permission on an installed PWA.
 
 `/design` is the design-system gallery and the phase-3 gate — every primitive, every
 surface, every state. `?surface=ledger|board|cabinet` and `?section=…` isolate one at a time.
