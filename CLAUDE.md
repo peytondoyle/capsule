@@ -45,11 +45,22 @@ not on what the query returns.
   **nothing**. Every route and page guards itself with `getCurrentUser()`.
   **Sign-in is phone-only (SMS code) as of 2026-08-01** — email and Google are disabled in
   the instance config, by the owner's decision. The one instance serves dev *and* prod.
-- **Neon Postgres** + Drizzle ORM. **Not** a Vercel Marketplace resource any more — the
-  project was migrated into the personal Neon org on 2026-08-01, because Neon cannot
-  *transfer* a project out of a Vercel-managed org (unsupported as source or destination),
-  only a dump/restore into a fresh project moves it. Env vars are now plain Vercel env vars
-  that nothing syncs: **change a connection string and you must update them by hand.**
+- **Neon Postgres** + Drizzle ORM. The project was migrated into the personal Neon org on
+  2026-08-01, because Neon cannot *transfer* a project out of a Vercel-managed org
+  (unsupported as source **or** destination) — only a dump/restore into a fresh project
+  moves it. **Change a connection string and you must update Vercel by hand**
+  (`scripts/restore-vercel-env.sh`); nothing syncs them for you.
+- **Overwriting an integration's env var does not detach it.** Vercel's marketplace store
+  claims its variables **by name**, so `vercel env add --force` changes the value while the
+  store still owns the name — deleting the resource can still take all sixteen. The
+  reassuring `configurationId: null` on those records means nothing; the integration's own
+  rows report the same. Snapshot `vercel env ls` before any disconnect.
+- **A missing `DATABASE_URL` does not fail the build.** `src/server/db/index.ts` and
+  `pool.ts` construct their clients lazily, by design, so `next build` succeeds with no
+  database env at all: the deploy goes green in ~45s, aliases itself, and *then* every
+  authed page 500s. This is the third time a green gate has certified a dead feature here —
+  after a delete or an env change, check `vercel env ls` and `/api/health`, never the
+  build status.
 - **Vercel Blob** for originals + derivatives
 - **PWA** — installable, offline capture, share target
 - Single app at the repo root. **Not a monorepo.** No workspaces, no Turborepo.
