@@ -43,6 +43,13 @@
       "when": 1785524487915,
       "tag": "0005_watery_quasimodo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785591593616,
+      "tag": "0006_daily_vindicator",
+      "breakpoints": true
     }
   ]
 }

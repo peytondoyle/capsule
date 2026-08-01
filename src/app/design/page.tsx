@@ -25,6 +25,7 @@ import {
 } from '@/design'
 import { FilterRailDemo } from './filter-rail-demo'
 import { BoardHoverCardDemo } from './board-hover-card-demo'
+import { PushPermission } from '@/components/push-permission'
 
 export const metadata: Metadata = {
   title: 'Capsule — design system',
@@ -86,6 +87,7 @@ const SECTIONS = [
   'texture',
   'capture',
   'board-hover-card',
+  'push',
   'assemblies',
 ] as const
 type SectionName = (typeof SECTIONS)[number]
@@ -362,6 +364,16 @@ function Gallery({ surface, section }: { surface: SurfaceName; section?: Section
         <div>
           <SectionLabel className="mb-4">Board hover card</SectionLabel>
           <BoardHoverCardDemo />
+        </div>
+
+        ) : null}
+
+        {show('push') ? (
+        <div>
+          <SectionLabel className="mb-4">Unfiled reminders</SectionLabel>
+          <div className="max-w-[240px] border-t border-hair pt-2">
+            <PushPermission preview />
+          </div>
         </div>
 
         ) : null}

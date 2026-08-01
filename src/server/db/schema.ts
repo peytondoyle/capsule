@@ -485,6 +485,22 @@ export const shares = pgTable(
   (t) => [index('shares_owner_idx').on(t.ownerId, t.createdAt.desc())],
 )
 
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull().unique(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    userAgent: text('user_agent'),
+    createdAt,
+  },
+  (t) => [index('push_subscriptions_owner_idx').on(t.ownerId, t.createdAt.desc())],
+)
+
 /**
  * Per-owner call counters for the endpoints that cost money or CPU.
  *

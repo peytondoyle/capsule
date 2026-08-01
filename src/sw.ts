@@ -117,4 +117,29 @@ self.addEventListener('fetch', (event) => {
   }
 })
 
+self.addEventListener('push', (event) => {
+  const payload = event.data?.json() as { title?: string; body?: string; url?: string } | undefined
+  event.waitUntil(
+    self.registration.showNotification(payload?.title ?? 'Capsule', {
+      body: payload?.body,
+      data: { url: payload?.url ?? '/queue' },
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: 'capsule-unfiled',
+    }),
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const url = event.notification.data?.url ?? '/queue'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      const windows = clients as WindowClient[]
+      const match = windows.find((client) => new URL(client.url).pathname === url)
+      return match ? match.focus() : self.clients.openWindow(url)
+    }),
+  )
+})
+
 serwist.addEventListeners()

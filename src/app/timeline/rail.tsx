@@ -4,6 +4,7 @@ import type { ArchiveSummary } from '@/server/archive'
 import type { listPeopleWithCounts } from '@/server/people'
 import { agoLabel, countLine, initialsOf } from '@/lib/format'
 import { UnfiledBadge } from '@/components/badge'
+import { PushPermission } from '@/components/push-permission'
 
 type People = Awaited<ReturnType<typeof listPeopleWithCounts>>
 
@@ -113,6 +114,7 @@ export function Rail({ summary, people }: { summary: ArchiveSummary; people: Peo
       ) : null}
 
       <div className="mt-auto border-t border-hair px-[18px] py-3.5">
+        <PushPermission />
         <div className="mn text-[8.5px] leading-[1.6] tracking-[0.1em] text-mute-3">
           LAST ADDED
           <br />

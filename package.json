@@ -25,6 +25,7 @@
     "dev:verify": "node -e \"const u=process.env.DATABASE_URL_VERIFY;if(!u)throw new Error('DATABASE_URL_VERIFY not set');process.env.DATABASE_URL=u;process.env.DATABASE_URL_UNPOOLED=process.env.DATABASE_URL_UNPOOLED_VERIFY||u;const b=process.env.BLOB_READ_WRITE_TOKEN_VERIFY,o=process.env.BLOB_ORIGINALS_READ_WRITE_TOKEN_VERIFY;if(b)process.env.BLOB_READ_WRITE_TOKEN=b;if(o)process.env.BLOB_ORIGINALS_READ_WRITE_TOKEN=o;if(!b||!o)console.warn('\\\\n*** dev:verify: rows are branched but BLOBS ARE NOT \u2014 no *_VERIFY blob tokens set, so uploads and derives write into the PRODUCTION stores (as new, never-overwriting blobs). Create scratch stores and set BLOB_READ_WRITE_TOKEN_VERIFY / BLOB_ORIGINALS_READ_WRITE_TOKEN_VERIFY to isolate bytes too. ***\\\\n');require('child_process').spawn('npm',['run','dev'],{stdio:'inherit',env:process.env})\"",
     "db:verify:desktop": "NODE_OPTIONS='--conditions=react-server' dotenv -e .env.local -- tsx scripts/verify-desktop.ts",
     "db:verify:warp": "NODE_OPTIONS='--conditions=react-server' dotenv -e .env.local -- tsx scripts/verify-warp.ts",
+    "db:verify:push": "NODE_OPTIONS='--conditions=react-server' dotenv -e .env.local -- tsx scripts/verify-push.ts",
     "build:detect": "esbuild src/detect-worker.ts --bundle --minify --format=esm --outfile=public/detect-worker.js --external:./scanic-mlDetector.js"
   },
   "dependencies": {
@@ -39,13 +40,15 @@
     "react-dom": "^19.2.8",
     "scanic": "^1.5.1",
     "serwist": "^9.5.12",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@types/web-push": "^3.6.4",
     "dotenv-cli": "^11.0.0",
     "drizzle-kit": "^0.31.10",
     "esbuild": "^0.28.1",
