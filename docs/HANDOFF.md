@@ -22,9 +22,11 @@ platform traps in [../CLAUDE.md](../CLAUDE.md). This is state and traps only.
 
 ## Open task briefs
 
-- [TASK-board-hover-card.md](TASK-board-hover-card.md) — the last phase-8 deferral,
-  written to be handed to an agent cold. Presentation only; the data is already on the
-  client.
+- ~~[TASK-board-hover-card.md](TASK-board-hover-card.md)~~ — **done**, `aefc8ad`. Phase 8
+  is complete: filter rail, phone sheet and hover card all shipped. Kept for the traps it
+  records about the Board's transformed world layer.
+- [TASK-web-push.md](TASK-web-push.md) — next up. Touches the schema, the service worker
+  and a secret, so unlike the hover card it is **not** presentation-only.
 
 ## What changed — 2026-07-31
 
