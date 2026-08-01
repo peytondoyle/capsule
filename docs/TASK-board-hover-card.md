@@ -1,5 +1,14 @@
 # Task: the Board hover card
 
+> ## ✅ DONE — shipped 2026-08-01 as `aefc8ad`. Do not implement this again.
+> Kept for the traps in "The four traps" below, which are still the best reference for
+> anyone changing `src/app/board/canvas.tsx` — the transformed world layer and the pointer
+> hit-test break naive changes in ways the code does not advertise.
+>
+> One correction to what follows: this brief claimed the source contained `scale(1.06)` for
+> the `dragging` state. **It did not.** The code had `scale(1.02)` for `active` only; the
+> 1.06 drag lift was added as part of this task.
+
 Self-contained brief for an agent with no memory of prior sessions. Read
 [CLAUDE.md](../CLAUDE.md) first — the non-negotiable design rules and platform traps there
 apply to every line of this task. This is the **last deferred item from phase 8**; finishing

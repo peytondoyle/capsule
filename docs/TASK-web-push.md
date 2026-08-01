@@ -1,5 +1,13 @@
 # Task: web push
 
+> ## ✅ DONE — shipped 2026-08-01 as `347eac0`. Do not implement this again.
+> Migration `0006` is applied to both `verify` and `main`; VAPID keys and `CRON_SECRET` are
+> on all three Vercel targets; `db:verify:push` passes 3 checks including the 410 pruning.
+> **Delivery is still unproven** — there are zero subscriptions, so the cron is a live
+> no-op. That is the one piece left, and it needs the owner's installed PWA.
+>
+> Kept for the traps below, which remain accurate.
+
 Self-contained brief for an agent starting cold. Read [CLAUDE.md](../CLAUDE.md) first — the
 data-access rules and platform traps there are binding. Unlike the hover card, **this one
 touches the database, the service worker, and a secret**, so it is not presentation-only.
