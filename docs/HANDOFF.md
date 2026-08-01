@@ -15,7 +15,7 @@ platform traps in [../CLAUDE.md](../CLAUDE.md). This is state and traps only.
 | Prod archive | 2 users, 41 objects (lots 1–139), 5 people, 1 share, 1 intake batch |
 | Prod images | 41 `object_faces`: **1** has a `cutout_url`, **0** a `thumb_url`. The 40 seeded fixtures never had images. New captures persist all four; nothing backfills the old rows |
 | Migrations | `0003` intake thumb/width/height · `0004` api_usage · `0005` intake exif. All applied to `main` **and** `verify` |
-| Neon | project `old-math-03360848` in the **personal** org `org-restless-flower-66125015` · branch `main` = production · branch `verify` = gates + local dev. Migrated off the Vercel-managed org 2026-08-01; the old project was `purple-river-19152863`. |
+| Neon | project `old-math-03360848` in the **personal** org `org-restless-flower-66125015` · branch `main` = production · branch `verify` = gates + local dev. Migrated off the Vercel-managed org 2026-08-01 and the old project (`purple-river-19152863`) is **deleted** — there is no Marketplace resource behind this any more, so nothing syncs the Vercel env vars. Re-push them with `scripts/restore-vercel-env.sh`. Pre-migration dump: `backups/capsule-prod-2026-08-01.dump`. |
 | Vercel | project `capsule` · `prj_6sLVlwcBGVtNtwXZjCL1C3kjBlTM` · team `peyton-doyle` |
 | Blob | `capsule-media` (public) `store_tCVSYcNtL8WVtWGV` · `capsule-originals` (private) `store_TJ3jyzfgZpJQro01` |
 | Clerk | app `app_3H2m8Htunq84mjsLvOiAEnixExd` · **development instance** `unified-polecat-6.clerk.accounts.dev` |
