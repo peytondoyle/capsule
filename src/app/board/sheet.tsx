@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import Link from 'next/link'
 
 import { Chip, Cutout, Meta, SheetPhone, aspectOf, type CutStyle, type Silhouette } from '@/design'
@@ -40,10 +40,11 @@ export function BoardSheet({
   onPeel: () => void
   onClose: () => void
 }) {
-  const ref = useRef<HTMLDivElement>(null)
-
+  // No programmatic focus: the sheet opens from a touch, and focusing the
+  // container makes iOS draw its focus ring around the full-width wrapper —
+  // a hard dark line across the board. Escape works via the document
+  // listener for the iPad-with-keyboard case without moving focus at all.
   useEffect(() => {
-    ref.current?.focus()
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
@@ -62,13 +63,14 @@ export function BoardSheet({
 
   return (
     <div
-      ref={ref}
-      tabIndex={-1}
       role="dialog"
       aria-label={object.title}
-      className="fixed inset-x-0 bottom-0 z-30 mx-auto w-full max-w-[430px] translate-y-0 outline-none transition-transform duration-300 starting:translate-y-full motion-reduce:transition-none"
+      className="fixed inset-x-0 bottom-0 z-30 mx-auto w-full max-w-[430px] translate-y-0 transition-transform duration-300 starting:translate-y-full motion-reduce:transition-none"
     >
-      <SheetPhone height={296} className="pb-[env(safe-area-inset-bottom)]">
+      {/* Content-sized rather than the mockup's fixed 296px: with a story and
+          tags it lands at the mockup height anyway, and without them it hugs
+          instead of pinning the actions below an empty band. */}
+      <SheetPhone className="pb-[env(safe-area-inset-bottom)]">
         <div className="mt-4 flex items-center gap-3.5">
           <Cutout
             width={74}
@@ -105,7 +107,7 @@ export function BoardSheet({
             ) : null}
           </div>
         ) : null}
-        <div className="mt-auto mb-5 flex gap-2">
+        <div className="mt-5 mb-5 flex gap-2">
           <button
             onClick={onPeel}
             className="h-11 flex-1 rounded-[11px] border border-hair-strong text-[13px] font-medium"
