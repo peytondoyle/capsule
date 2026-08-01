@@ -20,6 +20,12 @@ platform traps in [../CLAUDE.md](../CLAUDE.md). This is state and traps only.
 | Blob | `capsule-media` (public) `store_tCVSYcNtL8WVtWGV` · `capsule-originals` (private) `store_TJ3jyzfgZpJQro01` |
 | Clerk | app `app_3H2m8Htunq84mjsLvOiAEnixExd` · **development instance** `unified-polecat-6.clerk.accounts.dev` |
 
+## Open task briefs
+
+- [TASK-board-hover-card.md](TASK-board-hover-card.md) — the last phase-8 deferral,
+  written to be handed to an agent cold. Presentation only; the data is already on the
+  client.
+
 ## What changed — 2026-07-31
 
 Seventeen commits. The audit list went from 38 open to 9, and none of the nine
