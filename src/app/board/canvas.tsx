@@ -22,6 +22,7 @@ import {
   type FilterGroup,
   type FilterSelection,
 } from './filter-rail'
+import { BOARD_HOVER_CARD_WIDTH, BoardHoverCard } from './hover-card'
 import { BoardSheet } from './sheet'
 
 type Item = {
@@ -130,6 +131,7 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
     })
   const [dragId, setDragId] = useState<string | null>(null)
   const [hoverCluster, setHoverCluster] = useState<string | null>(null)
+  const [canvasWidth, setCanvasWidth] = useState(0)
   const [sheetId, setSheetId] = useState<string | null>(null)
   const [peeledId, setPeeledId] = useState<string | null>(null)
   // The same "is this a phone" test TiltLayer uses. Once per mount is right:
@@ -237,6 +239,24 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
   }
 
   const sheetObject = sheetId ? (items.find((item) => item.id === sheetId) ?? null) : null
+  const draggedItem = dragId ? (visibleItems.find((item) => item.id === dragId) ?? null) : null
+  const draggedPos = draggedItem ? positions[draggedItem.id] : null
+  const draggedWidth = draggedItem
+    ? cutoutWidth(
+        draggedItem.silhouette as Silhouette,
+        aspectOf(draggedItem.faceW, draggedItem.faceH),
+        { min: 72, max: 160 },
+      )
+    : 0
+  const impliedTags = hoverCluster
+    ? (clusters.find((cluster) => cluster.id === hoverCluster)?.impliedTags ?? [])
+    : []
+  const draggedScreenX = draggedPos ? viewport.x + draggedPos.x * viewport.scale : 0
+  const hoverCardRight = draggedScreenX + draggedWidth * viewport.scale + 14
+  const hoverCardLeft =
+    canvasWidth > 0 && hoverCardRight + BOARD_HOVER_CARD_WIDTH > canvasWidth
+      ? draggedScreenX - BOARD_HOVER_CARD_WIDTH - 14
+      : hoverCardRight
 
   return (
     <>
@@ -258,6 +278,7 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
             z,
           }
           setDragId(id)
+          setCanvasWidth(event.currentTarget.clientWidth)
           // Grabbing a card is the move the peel was arming for.
           if (peeledId && peeledId !== id) setPeeledId(null)
           // Top of the pile while it travels, and it stays there.
@@ -445,6 +466,18 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
         })}
       </div>
 
+      {!coarse && draggedItem && draggedPos ? (
+        <BoardHoverCard
+          object={draggedItem}
+          impliedTags={impliedTags}
+          className="absolute max-sm:hidden"
+          style={{
+            left: hoverCardLeft,
+            top: viewport.y + draggedPos.y * viewport.scale + 6,
+          }}
+        />
+      ) : null}
+
       <FilterRail
         facets={facets}
         selected={filters}
@@ -467,6 +500,19 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
           })
         }
       />
+
+      {!coarse && dragId ? (
+        <div
+          className="mn pointer-events-none absolute top-5 right-5 rounded-[10px] border border-hair-strong px-3 py-2 text-[9px] tracking-[0.08em] max-sm:hidden"
+          style={{
+            background: 'color-mix(in srgb, var(--panel) 94%, transparent)',
+            color: 'var(--mute-2)',
+            boxShadow: '0 8px 22px rgb(var(--shadow-ink) / 0.12)',
+          }}
+        >
+          DRAGGING · 1 OBJECT
+        </div>
+      ) : null}
 
     </div>
 

@@ -24,6 +24,7 @@ import {
   type SurfaceName,
 } from '@/design'
 import { FilterRailDemo } from './filter-rail-demo'
+import { BoardHoverCardDemo } from './board-hover-card-demo'
 
 export const metadata: Metadata = {
   title: 'Capsule — design system',
@@ -84,6 +85,7 @@ const SECTIONS = [
   'fields',
   'texture',
   'capture',
+  'board-hover-card',
   'assemblies',
 ] as const
 type SectionName = (typeof SECTIONS)[number]
@@ -352,6 +354,14 @@ function Gallery({ surface, section }: { surface: SurfaceName; section?: Section
               </ScanFrame>
             </div>
           </div>
+        </div>
+
+        ) : null}
+
+        {show('board-hover-card') ? (
+        <div>
+          <SectionLabel className="mb-4">Board hover card</SectionLabel>
+          <BoardHoverCardDemo />
         </div>
 
         ) : null}
