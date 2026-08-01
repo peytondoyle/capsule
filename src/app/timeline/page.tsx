@@ -18,6 +18,7 @@ import { saveFieldsAction } from '@/server/actions/objects'
 import { Tags } from '@/components/tag-editor'
 import { countLine, lotLabel, receivedLabel } from '@/lib/format'
 import { timelineHref } from '@/lib/timeline'
+import { PhoneLotSheet } from '@/components/phone-lot-sheet'
 import { getArchiveSummary, getDefaultLot, getObjectDetail, type ObjectDetail } from '@/server/archive'
 import { getCurrentUser } from '@/server/auth'
 import { listTimeline, searchObjects, type TimelineSort } from '@/server/objects'
@@ -69,6 +70,7 @@ export default async function TimelinePage({
 
       <main className="flex min-w-0 flex-1 flex-col">
         <h1 className="sr-only">Timeline</h1>
+        <PhoneHeader summary={summary} />
         <Toolbar
           total={summary.objects}
           query={query}
@@ -85,13 +87,66 @@ export default async function TimelinePage({
       </main>
 
       {detail ? (
-        editing ? (
-          <DetailEdit detail={detail} query={query} sort={order} />
-        ) : (
-          <Detail detail={detail} query={query} sort={order} />
-        )
+        <div className="hidden shrink-0 lg:flex">
+          {editing ? (
+            <DetailEdit detail={detail} query={query} sort={order} />
+          ) : (
+            <Detail detail={detail} query={query} sort={order} />
+          )}
+        </div>
+      ) : null}
+
+      {/* On a phone the Inspector's job passes to the sheet — and only for a
+          lot the owner actually chose, never the default selection, or the
+          sheet would cover the stream on every first visit. */}
+      {detail && !Number.isNaN(requested) ? (
+        <PhoneLotSheet
+          detail={detail}
+          closeHref={timelineHref({ lot: null, q: query, sort: order })}
+        />
       ) : null}
     </div>
+  )
+}
+
+/**
+ * What the 198px rail collapses into below lg: the wordmark, the surface
+ * tabs, and the section nav as one quiet mono row.
+ */
+function PhoneHeader({ summary }: { summary: Awaited<ReturnType<typeof getArchiveSummary>> }) {
+  return (
+    <header className="shrink-0 border-b border-hair px-4 pt-3 pb-2 lg:hidden">
+      <div className="flex items-baseline gap-3">
+        <span className="mn text-[10.5px] font-semibold tracking-[0.22em]">CAPSULE</span>
+        <span className="mn text-[8.5px] tracking-[0.1em] text-mute-2">
+          {countLine([summary.objects, 'object'])}
+        </span>
+        <nav className="mn ml-auto flex gap-2 text-[8.5px] tracking-[0.14em]">
+          <span aria-current="page">LEDGER</span>
+          <Link href="/board" className="text-mute-3">
+            BOARD
+          </Link>
+          <Link href="/cabinet" className="text-mute-3">
+            CABINET
+          </Link>
+        </nav>
+      </div>
+      <nav className="mn mt-2 flex gap-4 overflow-x-auto text-[9px] tracking-[0.1em] text-mute-2">
+        {(
+          [
+            ['PEOPLE', '/people', summary.people, false],
+            ['PLACES', '/places', summary.places, false],
+            ['OCCASIONS', '/occasions', summary.occasions, false],
+            ['UNFILED', '/queue', summary.unfiled, true],
+          ] as const
+        ).map(([label, href, count, accent]) => (
+          <Link key={label} href={href} className="flex shrink-0 items-baseline gap-1.5">
+            {label}
+            <span className={accent && count > 0 ? 'text-accent' : 'text-mute-3'}>{count}</span>
+          </Link>
+        ))}
+      </nav>
+    </header>
   )
 }
 
@@ -113,7 +168,7 @@ function Toolbar({
   const sortHref = timelineHref({ lot: activeLot, q: query, sort: flipped })
 
   return (
-    <div className="flex h-14 shrink-0 items-center gap-3.5 border-b border-hair px-6">
+    <div className="flex h-14 shrink-0 items-center gap-3.5 border-b border-hair px-4 lg:px-6">
       <form action="/timeline" className="mn flex h-[30px] max-w-[330px] flex-1 items-center gap-2 rounded-[7px] border border-hair-strong bg-paper px-3 text-[10.5px]">
         {sort === 'oldest' ? <input type="hidden" name="sort" value="oldest" /> : null}
         <span aria-hidden className="opacity-50">
@@ -147,7 +202,7 @@ function Toolbar({
           title="Add photographs — N"
           className="mn rounded-md bg-ink px-[11px] py-1.5 text-[9px] font-medium tracking-[0.08em] text-bg"
         >
-          + ADD OBJECT
+          + ADD<span className="max-lg:hidden"> OBJECT</span>
         </Link>
       </div>
     </div>

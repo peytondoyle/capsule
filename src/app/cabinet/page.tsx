@@ -14,6 +14,7 @@ import {
   type CutStyle,
   type Silhouette,
 } from '@/design'
+import { PhoneLotSheet } from '@/components/phone-lot-sheet'
 import { countLine, lotLabel, receivedLabel } from '@/lib/format'
 import { getObjectDetail, getDefaultLot } from '@/server/archive'
 import { getCurrentUser } from '@/server/auth'
@@ -42,11 +43,11 @@ export default async function CabinetPage({
       <h1 className="sr-only">Cabinet</h1>
       <TiltLayer />
 
-      <header className="flex h-14 shrink-0 items-center gap-[18px] border-b border-hair px-[26px]">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-hair px-4 lg:gap-[18px] lg:px-[26px]">
         <span className="mn text-[10.5px] font-semibold tracking-[0.24em]">CAPSULE</span>
-        <span className="h-[18px] w-px bg-hair-strong" />
-        <nav className="flex gap-0.5">
-          <span className="mn rounded-md bg-[color-mix(in_srgb,var(--ink)_9%,transparent)] px-[11px] py-1.5 text-[9px] tracking-[0.11em]">
+        <span className="h-[18px] w-px bg-hair-strong max-lg:hidden" />
+        <nav className="flex min-w-0 gap-0.5 max-lg:overflow-x-auto">
+          <span className="mn shrink-0 rounded-md bg-[color-mix(in_srgb,var(--ink)_9%,transparent)] px-[11px] py-1.5 text-[9px] tracking-[0.11em]">
             CABINET
           </span>
           {[
@@ -58,7 +59,7 @@ export default async function CabinetPage({
             <Link
               key={name}
               href={href!}
-              className="mn rounded-md px-[11px] py-1.5 text-[9px] tracking-[0.11em] text-mute-2"
+              className="mn shrink-0 rounded-md px-[11px] py-1.5 text-[9px] tracking-[0.11em] text-mute-2"
             >
               {name}
             </Link>
@@ -66,7 +67,7 @@ export default async function CabinetPage({
         </nav>
         <form
           action="/timeline"
-          className="mn ml-auto flex h-[30px] min-w-[220px] items-center gap-2 rounded-[7px] border border-hair-strong px-[13px] text-[10.5px]"
+          className="mn ml-auto flex h-[30px] min-w-[220px] items-center gap-2 rounded-[7px] border border-hair-strong px-[13px] text-[10.5px] max-lg:hidden"
         >
           <span className="opacity-55">⌕</span>
           <input
@@ -78,7 +79,7 @@ export default async function CabinetPage({
         </form>
         <Link
           href="/accession"
-          className="mn rounded-[7px] px-[13px] py-[7px] text-[9px] font-semibold tracking-[0.11em]"
+          className="mn shrink-0 rounded-[7px] px-[13px] py-[7px] text-[9px] font-semibold tracking-[0.11em] max-lg:ml-auto"
           style={{ background: 'var(--btn)', color: 'var(--btn-ink)' }}
         >
           + ACCESSION
@@ -87,7 +88,7 @@ export default async function CabinetPage({
 
       <div className="flex min-h-0 flex-1">
         <main
-          className="min-w-0 flex-1 overflow-y-auto px-[30px] pt-[34px]"
+          className="min-w-0 flex-1 overflow-y-auto px-4 pt-[26px] lg:px-[30px] lg:pt-[34px]"
           style={{
             background:
               'radial-gradient(90% 60% at 50% -10%, rgb(255 247 228 / 0.07), transparent 70%)',
@@ -159,6 +160,7 @@ export default async function CabinetPage({
         </main>
 
         {detail ? (
+          <div className="hidden shrink-0 lg:flex">
           <Inspector
             width={344}
             hero={
@@ -250,8 +252,14 @@ export default async function CabinetPage({
               </div>
             ) : null}
           </Inspector>
+          </div>
         ) : null}
       </div>
+
+      {/* Phone: the lit-vitrine sheet, only for an explicitly chosen lot. */}
+      {detail && !Number.isNaN(requested) ? (
+        <PhoneLotSheet detail={detail} closeHref="/cabinet" lotStyle="lot" />
+      ) : null}
     </div>
   )
 }

@@ -24,7 +24,7 @@ export default async function CataloguePage() {
   return (
     <div data-surface="cabinet" className="safe-t safe-x flex h-dvh flex-col overflow-hidden bg-bg text-ink">
       <h1 className="sr-only">Catalogue</h1>
-      <header className="flex h-14 shrink-0 items-center gap-[18px] border-b border-hair px-[26px]">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-hair px-4 lg:gap-[18px] lg:px-[26px]">
         <span className="mn text-[10.5px] font-semibold tracking-[0.24em]">CAPSULE</span>
         <span className="h-[18px] w-px bg-hair-strong" />
         <nav className="flex gap-0.5">
@@ -49,27 +49,34 @@ export default async function CataloguePage() {
         </span>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-[26px] py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-[26px] lg:py-6">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-hair-strong">
               {(
                 [
-                  ['Lot', false],
-                  ['Object', false],
-                  ['Given by', false],
-                  ['Accessioned', false],
-                  ['Provenance', false],
-                  ['Material', false],
+                  // The middle three give way on a phone: a catalogue is legible
+                  // at LOT · OBJECT · DATE · KEPT, and /o/[lot] has the rest.
+                  ['Lot', false, false],
+                  ['Object', false, false],
+                  ['Given by', false, true],
+                  ['Accessioned', false, false],
+                  ['Provenance', false, true],
+                  ['Material', false, true],
                   // The retention column had no header at all. It gets a real
                   // one, hidden — the design has no room for a seventh label.
-                  ['Kept', true],
+                  ['Kept', true, false],
                 ] as const
-              ).map(([label, hidden]) => (
+              ).map(([label, hidden, phoneHidden]) => (
                 <th
                   key={label}
                   scope="col"
-                  className="mn pb-2.5 text-[8.5px] font-normal tracking-[0.14em] uppercase text-mute-3"
+                  className={[
+                    'mn pb-2.5 text-[8.5px] font-normal tracking-[0.14em] uppercase text-mute-3',
+                    phoneHidden ? 'max-lg:hidden' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
                 >
                   <span className={hidden ? 'sr-only' : undefined}>{label}</span>
                 </th>
@@ -87,12 +94,12 @@ export default async function CataloguePage() {
                     {row.title}
                   </Link>
                 </td>
-                <td className="py-2.5 pr-6 text-[12px] text-mute-1">{row.giver ?? em()}</td>
+                <td className="py-2.5 pr-6 text-[12px] text-mute-1 max-lg:hidden">{row.giver ?? em()}</td>
                 <td className="mn py-2.5 pr-6 text-[10.5px] whitespace-nowrap text-mute-1">
                   {receivedLabel(row.receivedAt, row.receivedPrecision) || em()}
                 </td>
-                <td className="py-2.5 pr-6 text-[12px] text-mute-1">{row.placeName ?? em()}</td>
-                <td className="mn py-2.5 pr-6 text-[10px] uppercase text-mute-2">
+                <td className="py-2.5 pr-6 text-[12px] text-mute-1 max-lg:hidden">{row.placeName ?? em()}</td>
+                <td className="mn py-2.5 pr-6 text-[10px] uppercase text-mute-2 max-lg:hidden">
                   {row.material ?? row.kind?.replace('_', ' ') ?? em()}
                 </td>
                 <td className="py-2.5">
