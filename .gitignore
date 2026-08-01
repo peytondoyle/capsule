@@ -36,6 +36,11 @@ coverage/
 test-results/
 playwright-report/
 
+# Database dumps and credential backups — these hold real data and live
+# connection strings. Never commit them.
+backups/
+*.dump
+
 # Misc
 *.pem
 Thumbs.db
