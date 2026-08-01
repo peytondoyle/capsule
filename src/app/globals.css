@@ -25,9 +25,9 @@
   --color-ok: #5b8c5a;
   --color-hair: rgb(42 37 29 / 0.09);
   --color-hair-strong: rgb(42 37 29 / 0.14);
-  --color-mute-1: rgb(42 37 29 / 0.72);
-  --color-mute-2: rgb(42 37 29 / 0.42);
-  --color-mute-3: rgb(42 37 29 / 0.35);
+  --color-mute-1: rgb(42 37 29 / 0.87);
+  --color-mute-2: rgb(42 37 29 / 0.76);
+  --color-mute-3: rgb(42 37 29 / 0.67);
 }
 
 html {

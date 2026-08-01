@@ -149,8 +149,9 @@ critical, 9 high** — each having survived two independent attempts to refute i
 reachability and one on real-world impact. Deduped by site below; where two dimensions found the
 same defect from different angles the fuller write-up is kept.
 
-**Status as of 2026-07-31: 37 fixed, 1 open**, of 38 sites — and the one that is
-open is a design decision, not an unwritten patch. Every site was re-checked
+**Status as of 2026-08-01: all 38 fixed.** The last one — the muted-token
+contrast — was a design decision, and the owner made it (compress the scale;
+see the tokens.css item below). Every site was re-checked
 against the branch on 2026-07-31; fixed ones are marked ✅ and partial ones ◐. All of them are now
 on `master`.
 
@@ -237,8 +238,9 @@ gone; what follows is the durable record.
 <br>*Fix:* Add `thumbUrl` to the `recto`/`face` projections in board.ts:36 and cabinet.ts:44, and render `thumbUrl ?? cutoutUrl` in Stream, SearchResults, cabinet shelves and the Board (keep `cutoutUrl` for the single Inspector hero and /o/[lot], which go up to 280px). In cutout.tsx add `loading="lazy"` and `decoding="async"` to the `<img>`, with an opt-out prop so the first row and the Inspector hero stay eager. Together this takes the /timeline first paint at n=500 from ~100 MB to roughly the ~25-30 visible thumbs (~1-1.5 MB).
 <br>*Status ✅ FIXED:* `thumbSrc` preferred in every grid, lazy by default, `eager` on the four heroes and the first row. 4.2x smaller on document-like content; 6.25x fewer pixels regardless.
 
-**`src/design/tokens.css:33`** — --mute-2 and --mute-3, the tokens behind every date, count, field label and caption in the app, sit at 2.48:1 and 2.08:1 on the Ledger — well under the 4.5:1 required for text this size.
+✅ FIXED — **`src/design/tokens.css:33`** — --mute-2 and --mute-3, the tokens behind every date, count, field label and caption in the app, sit at 2.48:1 and 2.08:1 on the Ledger — well under the 4.5:1 required for text this size.
 <br>*Fix:* Darken the two muted tokens per surface until they clear 4.5:1 at the sizes they are actually used at: Ledger --mute-2 needs roughly rgb(42 37 29 / 0.72) and --mute-3 roughly rgb(42 37 29 / 0.62); Cabinet --mute-2 ≈ rgb(236 234 228 / 0.72), --mute-3 ≈ rgb(236 234 228 / 0.60); Board --mute-3 ≈ #6c5d43. If the palette must stay as-is for pure decoration, keep the light values only for genuinely non-text uses (the aria-hidden dots and rules) and give text.tsx its own accessible tokens.
+<br>*Status ✅ FIXED:* 2026-08-01, owner's call: compress the whole scale rather than collapse it. The audit's fear was overstated — the true 4.5:1 floor is alpha 0.64 on the Ledger (worst ground: panel) and 0.50 on the Cabinet, not 0.72 — so three distinct compliant steps fit. Ledger 0.87/0.76/0.67 (worst 4.93:1), Board #4a3f2c/#5a4c35/#6c5d43 (4.83:1 — the old mute-2 became mute-3), Cabinet 0.75/0.62/0.52 (4.78:1). Verified rendered, not just declared: computed styles on /design show the new values on all three surfaces, and a live mute-3 text node measures rgba(236,234,228,0.52).
 
 ✅ FIXED — **`src/server/board.ts:128`** — TIDY, SCATTER and CLUSTER BY each issue one sequential HTTP round-trip per object, so a Board button costs O(n) round-trips with no transaction.
 <br>*Fix:* Replace each loop with one statement. For tidy/scatter: `UPDATE objects SET board_x=v.x, board_y=v.y, board_z=0 FROM (VALUES ...) AS v(id,x,y) WHERE objects.id=v.id::uuid AND objects.owner_id=$owner` (or compute the grid in SQL with `row_number() over (order by lot_no)`). For clusterBoardBy, do the same per dimension and wrap the delete + inserts + update in a real transaction via `getTxDb()`, which already exists for exactly this reason.
@@ -329,20 +331,15 @@ gone; what follows is the durable record.
 
 
 <!-- 38 distinct sites, deduped from 44 confirmed findings.
-     2026-07-31 final: 37 fixed, 1 open. Every mark re-derived from HEAD. -->
+     2026-08-01 final: 38 fixed, 0 open. Every mark re-derived from HEAD. -->
 
-### The one that is open
+### All 38 closed
 
-`src/design/tokens.css:33` — `--mute-2` and `--mute-3` carry every date, count,
-field label and caption in the app at 2.48:1 and 2.08:1 on the Ledger, well
-under 4.5:1.
-
-It is open because it is a design decision, not an implementation. The audit's
-own suggested value for `--mute-2` is `rgb(42 37 29 / 0.72)`, which is *exactly*
-`--mute-1` — applying it collapses a three-level muted hierarchy into two on all
-three surfaces, so every field label would weigh the same as the prose it
-labels. Fixing it properly means redesigning the muted scale, and CLAUDE.md
-guards these values as coming from the design source. Needs the owner's eye.
+The last one open — the muted-token contrast at `src/design/tokens.css:33` —
+was a design decision, and the owner made it on 2026-08-01: redesign all three
+mute values per surface rather than collapse the hierarchy. Details in the
+Medium item above. The composed pages deserve the owner's eye at desktop width,
+but the tokens are compliant and rendering.
 
 ### Only the owner can do these
 

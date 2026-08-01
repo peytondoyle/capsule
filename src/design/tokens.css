@@ -29,9 +29,12 @@
   --hair: rgb(42 37 29 / 0.09);
   --hair-strong: rgb(42 37 29 / 0.14);
 
-  --mute-1: rgb(42 37 29 / 0.72);
-  --mute-2: rgb(42 37 29 / 0.42);
-  --mute-3: rgb(42 37 29 / 0.35);
+  /* All three mute steps clear 4.5:1 on bg, panel and paper (worst 4.93:1,
+     scripts in the 2026-07-28 audit closeout). Keep the ordering ink > 1 > 2 > 3
+     and re-check contrast before touching these. */
+  --mute-1: rgb(42 37 29 / 0.87);
+  --mute-2: rgb(42 37 29 / 0.76);
+  --mute-3: rgb(42 37 29 / 0.67);
 
   /* placeholder hatch, used until a cutout has been generated */
   --fill-a: #dfd8c9;
@@ -67,9 +70,10 @@
   --hair: rgb(90 74 50 / 0.14);
   --hair-strong: rgb(90 74 50 / 0.24);
 
+  /* 7.78:1 / 6.29:1 / 4.83:1 on bg — the old --mute-2 became --mute-3. */
   --mute-1: #4a3f2c;
-  --mute-2: #6c5d43;
-  --mute-3: #8a7a5c;
+  --mute-2: #5a4c35;
+  --mute-3: #6c5d43;
 
   --fill-a: #ddd5c4;
   --fill-b: #e9e2d3;
@@ -106,9 +110,10 @@
   --hair: rgb(255 255 255 / 0.07);
   --hair-strong: rgb(255 255 255 / 0.12);
 
+  /* 8.54:1 / 6.24:1 / 4.78:1 on panel, the lighter (worse) dark ground. */
   --mute-1: rgb(236 234 228 / 0.75);
-  --mute-2: rgb(236 234 228 / 0.4);
-  --mute-3: rgb(236 234 228 / 0.3);
+  --mute-2: rgb(236 234 228 / 0.62);
+  --mute-3: rgb(236 234 228 / 0.52);
 
   --fill-a: #c9c1b0;
   --fill-b: #d8d1c1;

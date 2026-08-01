@@ -27,9 +27,9 @@ older note says — all three are built.
 surface, every state. `?surface=ledger|board|cabinet` and `?section=…` isolate one at a time.
 
 **Read [docs/HANDOFF.md](docs/HANDOFF.md) first.** It has the live resource ids and the per-site
-status of the 2026-07-28 adversarial audit: **37 of 38 fixed as of 2026-07-31**, each mark
-re-derived from the tree rather than remembered. The one still open is the muted-token contrast,
-which is a design decision rather than an unwritten patch.
+status of the 2026-07-28 adversarial audit: **all 38 fixed as of 2026-08-01**, each mark
+re-derived from the tree rather than remembered. The last one closed was the muted-token
+contrast — a design decision: the muted scale was compressed, not collapsed (see tokens.css).
 
 Two habits that doc records because they cost real time here: **a grep is not a fix** — a status
 re-check twice reported a defect gone on the strength of a string match and was wrong both times —
