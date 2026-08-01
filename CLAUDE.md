@@ -45,7 +45,11 @@ not on what the query returns.
   **nothing**. Every route and page guards itself with `getCurrentUser()`.
   **Sign-in is phone-only (SMS code) as of 2026-08-01** — email and Google are disabled in
   the instance config, by the owner's decision. The one instance serves dev *and* prod.
-- **Neon Postgres** + Drizzle ORM (via Vercel Marketplace)
+- **Neon Postgres** + Drizzle ORM. **Not** a Vercel Marketplace resource any more — the
+  project was migrated into the personal Neon org on 2026-08-01, because Neon cannot
+  *transfer* a project out of a Vercel-managed org (unsupported as source or destination),
+  only a dump/restore into a fresh project moves it. Env vars are now plain Vercel env vars
+  that nothing syncs: **change a connection string and you must update them by hand.**
 - **Vercel Blob** for originals + derivatives
 - **PWA** — installable, offline capture, share target
 - Single app at the repo root. **Not a monorepo.** No workspaces, no Turborepo.
