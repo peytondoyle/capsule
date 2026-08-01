@@ -19,9 +19,9 @@ Read it before touching anything structural.
 **All 12 phases built** and merged to `master`; production is live. The archive works end to
 end: sign in → photograph → cut → file → Ledger/Board/Cabinet → share.
 
-Still genuinely missing: the MAP tab, the Board phone sheet and filter rail, web push, and a
-custom domain. CATALOGUE, CLUSTER BY and edge auto-detect are **not** deferred, whatever an
-older note says — all three are built.
+Still genuinely missing: the MAP tab, the Board hover card, web push, and a custom domain.
+The Board phone sheet and filter rail shipped 2026-08-01. CATALOGUE, CLUSTER BY and edge
+auto-detect are **not** deferred, whatever an older note says — all three are built.
 
 `/design` is the design-system gallery and the phase-3 gate — every primitive, every
 surface, every state. `?surface=ledger|board|cabinet` and `?section=…` isolate one at a time.

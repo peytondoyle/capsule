@@ -8,9 +8,11 @@ import {
   collections,
   objectFaces,
   objectPeople,
+  objectTags,
   objects,
   people,
   places,
+  tags,
 } from './db/schema'
 import { assertOwned } from './objects'
 import { attachTag } from './objects'
@@ -27,7 +29,7 @@ import { attachTag } from './objects'
 export async function getBoard(ownerId: string) {
   const db = getDb()
 
-  const [rows, clusters] = await Promise.all([
+  const [rows, tagRows, clusters] = await Promise.all([
     db
       .select({
         object: objects,
@@ -38,6 +40,7 @@ export async function getBoard(ownerId: string) {
           width: objectFaces.width,
           height: objectFaces.height,
         },
+        place: places.name,
         giver: sql<string | null>`(
           select p.name from ${objectPeople} op
           join people p on p.id = op.person_id
@@ -50,8 +53,15 @@ export async function getBoard(ownerId: string) {
         objectFaces,
         and(eq(objectFaces.objectId, objects.id), eq(objectFaces.role, 'recto')),
       )
+      .leftJoin(places, eq(places.id, objects.placeId))
       .where(eq(objects.ownerId, ownerId))
       .orderBy(asc(objects.boardZ), asc(objects.lotNo)),
+    db
+      .select({ objectId: objectTags.objectId, name: tags.name })
+      .from(objectTags)
+      .innerJoin(tags, eq(tags.id, objectTags.tagId))
+      .innerJoin(objects, eq(objects.id, objectTags.objectId))
+      .where(eq(objects.ownerId, ownerId)),
     db
       .select({
         collection: collections,
@@ -65,9 +75,17 @@ export async function getBoard(ownerId: string) {
       .orderBy(asc(collections.sortOrder)),
   ])
 
+  const tagsByObject = new Map<string, string[]>()
+  for (const row of tagRows) {
+    const list = tagsByObject.get(row.objectId)
+    if (list) list.push(row.name)
+    else tagsByObject.set(row.objectId, [row.name])
+  }
+
   return {
     items: rows.map((row) => ({
       ...row,
+      tags: tagsByObject.get(row.object.id) ?? [],
       x: row.object.boardX ?? defaultPosition(row.object.lotNo).x,
       y: row.object.boardY ?? defaultPosition(row.object.lotNo).y,
       z: row.object.boardZ,

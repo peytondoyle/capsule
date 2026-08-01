@@ -23,6 +23,7 @@ import {
   TiltLayer,
   type SurfaceName,
 } from '@/design'
+import { FilterRailDemo } from './filter-rail-demo'
 
 export const metadata: Metadata = {
   title: 'Capsule — design system',
@@ -358,7 +359,7 @@ function Gallery({ surface, section }: { surface: SurfaceName; section?: Section
         {/* --- assemblies -------------------------------------------------- */}
         {show('assemblies') ? (
         <div>
-          <SectionLabel className="mb-4">Inspector · sheet</SectionLabel>
+          <SectionLabel className="mb-4">Inspector · sheet · filter rail</SectionLabel>
           <div className="flex flex-wrap items-start gap-8">
             <div className="flex overflow-hidden rounded-[10px] border border-hair">
               <Inspector
@@ -441,6 +442,8 @@ function Gallery({ surface, section }: { surface: SurfaceName; section?: Section
                 </div>
               </SheetPhone>
             </div>
+
+            <FilterRailDemo />
           </div>
         </div>
         ) : null}

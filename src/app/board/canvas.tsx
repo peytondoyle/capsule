@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 import { Cutout, aspectOf, cutoutWidth, type CutStyle, type Silhouette } from '@/design'
+import type { DatePrecision } from '@/lib/format'
 import {
   clusterByAction,
   dropOnClusterAction,
@@ -12,6 +13,16 @@ import {
   scatterBoardAction,
   tidyBoardAction,
 } from '@/server/actions/board'
+import {
+  FILTER_GROUPS,
+  FilterRail,
+  emptySelection,
+  toggled,
+  type Facets,
+  type FilterGroup,
+  type FilterSelection,
+} from './filter-rail'
+import { BoardSheet } from './sheet'
 
 type Item = {
   id: string
@@ -26,6 +37,11 @@ type Item = {
   faceW: number | null
   faceH: number | null
   giver: string | null
+  placeName: string | null
+  receivedAt: string | null
+  receivedPrecision: DatePrecision
+  story: string | null
+  tags: string[]
   x: number
   y: number
   z: number
@@ -114,6 +130,59 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
     })
   const [dragId, setDragId] = useState<string | null>(null)
   const [hoverCluster, setHoverCluster] = useState<string | null>(null)
+  const [sheetId, setSheetId] = useState<string | null>(null)
+  const [peeledId, setPeeledId] = useState<string | null>(null)
+  // The same "is this a phone" test TiltLayer uses. Once per mount is right:
+  // a pointer type does not change mid-session, and re-checking per event
+  // would make a tap mean different things frames apart.
+  const [coarse] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches,
+  )
+
+  const [filters, setFilters] = useState<FilterSelection>(emptySelection)
+  const facetOf = (item: Item): Record<FilterGroup, string | null> => ({
+    people: item.giver,
+    places: item.placeName,
+    years: item.receivedAt ? item.receivedAt.slice(0, 4) : 'undated',
+    kinds: item.kind,
+  })
+  const visibleItems = items.filter((item) => {
+    const values = facetOf(item)
+    return FILTER_GROUPS.every(({ key }) => {
+      const picked = filters[key]
+      if (picked.size === 0) return true
+      const value = values[key]
+      return value !== null && picked.has(value)
+    })
+  })
+  const facets: Facets = (() => {
+    const counts: Record<FilterGroup, Map<string, number>> = {
+      people: new Map(),
+      places: new Map(),
+      years: new Map(),
+      kinds: new Map(),
+    }
+    for (const item of items) {
+      const values = facetOf(item)
+      for (const { key } of FILTER_GROUPS) {
+        const value = values[key]
+        if (value !== null) counts[key].set(value, (counts[key].get(value) ?? 0) + 1)
+      }
+    }
+    const byCount = (a: [string, number], b: [string, number]) =>
+      b[1] - a[1] || a[0].localeCompare(b[0])
+    // Years read as a timeline, newest first; the undated pile goes last.
+    const byYear = (a: [string, number], b: [string, number]) =>
+      a[0] === 'undated' ? 1 : b[0] === 'undated' ? -1 : b[0].localeCompare(a[0])
+    return Object.fromEntries(
+      FILTER_GROUPS.map(({ key }) => [
+        key,
+        [...counts[key].entries()]
+          .sort(key === 'years' ? byYear : byCount)
+          .map(([value, count]) => ({ value, count })),
+      ]),
+    ) as Facets
+  })()
 
   const saveViewport = (next: Viewport) => {
     setViewport(next)
@@ -167,7 +236,10 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
     )
   }
 
+  const sheetObject = sheetId ? (items.find((item) => item.id === sheetId) ?? null) : null
+
   return (
+    <>
     <div
       className="relative h-full w-full touch-none overflow-hidden select-none"
       onPointerDown={(event) => {
@@ -186,6 +258,8 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
             z,
           }
           setDragId(id)
+          // Grabbing a card is the move the peel was arming for.
+          if (peeledId && peeledId !== id) setPeeledId(null)
           // Top of the pile while it travels, and it stays there.
           setPositions((p) => ({ ...p, [id]: { ...p[id]!, z } }))
         } else {
@@ -195,6 +269,10 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
           // never fires — which is what made SCATTER, TIDY, CLUSTER BY, FIT and
           // "+ ADD" all inert — and it would pan the board under the thumb too.
           if (target.closest?.('button, a')) return
+          // A press on the empty board dismisses the sheet and puts a peeled
+          // card back down.
+          setSheetId(null)
+          setPeeledId(null)
           pan.current = {
             startX: event.clientX,
             startY: event.clientY,
@@ -225,7 +303,15 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
       }}
       onPointerUp={(event) => {
         if (drag.current) {
-          const { id, z } = drag.current
+          const { id, z, startX, startY } = drag.current
+          // A press that never travelled is a tap, not a drag. On a phone it
+          // opens the sheet; the z bump is abandoned so looking at an object
+          // is not a write.
+          if (coarse && Math.hypot(event.clientX - startX, event.clientY - startY) < 6) {
+            cancelDrag()
+            setSheetId(id)
+            return
+          }
           const pos = positions[id]!
           const settled = { x: Math.round(pos.x), y: Math.round(pos.y), z }
           // Snap the override to the integers the server will store, or the
@@ -237,6 +323,7 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
           drag.current = null
           setDragId(null)
           setHoverCluster(null)
+          if (peeledId === id) setPeeledId(null)
           startTransition(async () => {
             // The same numbers the override holds, so the next revalidate
             // matches it and retires it instead of pinning a stale position.
@@ -319,21 +406,26 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
           </div>
         ))}
 
-        {items.map((item) => {
+        {visibleItems.map((item) => {
           const pos = positions[item.id]!
           const aspect = aspectOf(item.faceW, item.faceH)
           const width = cutoutWidth(item.silhouette as Silhouette, aspect, { min: 72, max: 160 })
           const dragging = dragId === item.id
+          const peeled = peeledId === item.id
           return (
             <div
               key={item.id}
               data-board-id={item.id}
-              className="absolute cursor-grab"
+              className="absolute cursor-grab transition-transform duration-300 motion-reduce:transition-none"
               style={{
                 left: pos.x,
                 top: pos.y,
                 zIndex: pos.z,
                 cursor: dragging ? 'grabbing' : 'grab',
+                // The peel: up off the board and slightly askew, with the
+                // dragging shadow's bloom. The rotation lives on the wrapper so
+                // it composes with the cutout's own persisted rotation.
+                transform: peeled ? 'translateY(-14px) rotate(2.5deg)' : undefined,
               }}
             >
               <Cutout
@@ -346,15 +438,24 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
                 thumbSrc={item.thumbUrl ?? undefined}
                 alt={item.title}
                 label={item.cutoutUrl ? undefined : (item.kind ?? undefined)}
-                state={dragging ? 'dragging' : 'idle'}
+                state={dragging || peeled ? 'dragging' : 'idle'}
               />
             </div>
           )
         })}
       </div>
 
+      <FilterRail
+        facets={facets}
+        selected={filters}
+        onToggle={(group, value) => setFilters((f) => toggled(f, group, value))}
+        onClear={() => setFilters(emptySelection())}
+        className="absolute top-[calc(max(1.25rem,env(safe-area-inset-top))+118px)] left-[max(1.25rem,env(safe-area-inset-left))] max-sm:hidden"
+      />
+
       <Toolbar
         total={items.length}
+        shown={visibleItems.length}
         scale={viewport.scale}
         onFit={() => saveViewport({ x: 0, y: 0, scale: 0.62 })}
         onTidy={() => startTransition(async () => tidyBoardAction())}
@@ -366,7 +467,22 @@ export function BoardCanvas({ items, clusters }: { items: Item[]; clusters: Clus
           })
         }
       />
+
     </div>
+
+    {/* A sibling of the canvas, not a child: presses inside the sheet must
+        not reach the pan handler, which dismisses on any board press. */}
+    {sheetObject ? (
+      <BoardSheet
+        object={sheetObject}
+        onPeel={() => {
+          setSheetId(null)
+          setPeeledId(sheetObject.id)
+        }}
+        onClose={() => setSheetId(null)}
+      />
+    ) : null}
+    </>
   )
 }
 
@@ -374,6 +490,7 @@ type Dimension = 'person' | 'place' | 'year' | 'kind'
 
 function Toolbar({
   total,
+  shown,
   scale,
   onFit,
   onTidy,
@@ -381,6 +498,7 @@ function Toolbar({
   onClusterBy,
 }: {
   total: number
+  shown: number
   scale: number
   onFit: () => void
   onTidy: () => void
@@ -388,6 +506,7 @@ function Toolbar({
   onClusterBy: (dimension: Dimension) => void
 }) {
   const [open, setOpen] = useState(false)
+  const filtered = shown < total
   return (
     <>
       <div
@@ -399,7 +518,10 @@ function Toolbar({
         }}
       >
         <span className="flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] font-semibold tracking-[-0.01em]">
-          Everything <span className="mn text-[9px]" style={{ color: 'var(--mute-3)' }}>{total}</span>
+          {filtered ? 'Filtered' : 'Everything'}{' '}
+          <span className="mn text-[9px]" style={{ color: 'var(--mute-3)' }}>
+            {filtered ? `${shown} OF ${total}` : total}
+          </span>
         </span>
         <span className="h-5 w-px bg-hair-strong" />
         <button onClick={onScatter} className="mn rounded-lg px-2.5 py-2 text-[9px] tracking-[0.08em]" style={{ color: 'var(--mute-2)' }}>
