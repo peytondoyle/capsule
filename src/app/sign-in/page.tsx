@@ -27,6 +27,15 @@ function messageOf(error: unknown, fallback: string): string {
   return fallback
 }
 
+/** Clerk wants E.164. Strip the formatting people type; a bare ten-digit
+ *  number is assumed to be US rather than rejected. */
+function e164(raw: string) {
+  const digits = raw.replace(/[^\d+]/g, '')
+  if (digits.startsWith('+')) return digits
+  if (digits.length === 10) return `+1${digits}`
+  return `+${digits}`
+}
+
 export default function SignInPage() {
   const router = useRouter()
   const { signIn } = useSignIn()
@@ -34,7 +43,7 @@ export default function SignInPage() {
 
   const [step, setStep] = useState<Step>('identify')
   const [mode, setMode] = useState<Mode>('sign-in')
-  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -50,17 +59,17 @@ export default function SignInPage() {
     else router.push(url)
   }
 
-  async function submitEmail(event: React.FormEvent<HTMLFormElement>) {
+  async function submitPhone(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const address = email.trim()
-    if (!address || busy) return
+    const number = e164(phone.trim())
+    if (!number || busy) return
 
     setBusy(true)
     setError(null)
 
     // One field, either outcome: try to sign in, and fall through to sign-up
-    // when Clerk says it has never seen this address.
-    const signInAttempt = await signIn.emailCode.sendCode({ emailAddress: address })
+    // when Clerk says it has never seen this number.
+    const signInAttempt = await signIn.phoneCode.sendCode({ phoneNumber: number })
     if (!signInAttempt.error) {
       setMode('sign-in')
       setStep('code')
@@ -69,19 +78,19 @@ export default function SignInPage() {
     }
 
     if (!codesOf(signInAttempt.error).includes('form_identifier_not_found')) {
-      setError(messageOf(signInAttempt.error, 'That address did not work.'))
+      setError(messageOf(signInAttempt.error, 'That number did not work.'))
       setBusy(false)
       return
     }
 
-    const created = await signUp.create({ emailAddress: address })
+    const created = await signUp.create({ phoneNumber: number })
     if (created.error) {
       setError(messageOf(created.error, 'Could not start a new archive.'))
       setBusy(false)
       return
     }
 
-    const sent = await signUp.verifications.sendEmailCode()
+    const sent = await signUp.verifications.sendPhoneCode()
     if (sent.error) {
       setError(messageOf(sent.error, 'Could not send a code.'))
       setBusy(false)
@@ -102,7 +111,7 @@ export default function SignInPage() {
     setError(null)
 
     if (mode === 'sign-in') {
-      const { error: verifyError } = await signIn.emailCode.verifyCode({ code: value })
+      const { error: verifyError } = await signIn.phoneCode.verifyCode({ code: value })
       if (verifyError) {
         setError(messageOf(verifyError, 'That code did not match.'))
         setBusy(false)
@@ -110,7 +119,7 @@ export default function SignInPage() {
       }
       if (signIn.status === 'complete') await signIn.finalize({ navigate })
     } else {
-      const { error: verifyError } = await signUp.verifications.verifyEmailCode({ code: value })
+      const { error: verifyError } = await signUp.verifications.verifyPhoneCode({ code: value })
       if (verifyError) {
         setError(messageOf(verifyError, 'That code did not match.'))
         setBusy(false)
@@ -122,29 +131,14 @@ export default function SignInPage() {
     setBusy(false)
   }
 
-  async function continueWithGoogle() {
-    if (busy) return
-    setBusy(true)
-    setError(null)
-    const { error: ssoError } = await signIn.sso({
-      strategy: 'oauth_google',
-      redirectUrl: '/',
-      redirectCallbackUrl: '/sign-in/sso-callback',
-    })
-    if (ssoError) {
-      setError(messageOf(ssoError, 'Google sign-in could not start.'))
-      setBusy(false)
-    }
-  }
-
   async function resend() {
     if (busy) return
     setBusy(true)
     setError(null)
     const { error: resendError } =
       mode === 'sign-in'
-        ? await signIn.emailCode.sendCode({ emailAddress: email.trim() })
-        : await signUp.verifications.sendEmailCode()
+        ? await signIn.phoneCode.sendCode()
+        : await signUp.verifications.sendPhoneCode()
     if (resendError) setError(messageOf(resendError, 'Could not send another code.'))
     setBusy(false)
   }
@@ -175,68 +169,51 @@ export default function SignInPage() {
           <h1 className="mn text-[10.5px] font-semibold tracking-[0.22em]">CAPSULE</h1>
           <p className="mx-auto mt-3 max-w-[27ch] text-pretty text-[13px] leading-relaxed text-mute-1">
             {step === 'identify'
-              ? 'An archive of the objects people gave you. No password — we send a code.'
+              ? 'An archive of the objects people gave you. No password — we text a code.'
               : mode === 'sign-up'
-                ? 'Starting a new archive. Check your mail for a six-digit code.'
-                : 'Welcome back. Check your mail for a six-digit code.'}
+                ? 'Starting a new archive. Check your messages for a six-digit code.'
+                : 'Welcome back. Check your messages for a six-digit code.'}
           </p>
         </div>
 
         <hr className="my-8 border-0 border-t border-hair-strong" />
 
         {step === 'identify' ? (
-          <>
-            <form onSubmit={submitEmail}>
-              <label
-                htmlFor="email"
-                className="mn block text-[9px] tracking-[0.14em] text-mute-2"
-              >
-                EMAIL
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                autoComplete="email"
-                autoFocus
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@example.com"
-                className="mt-2 w-full border-0 border-b border-hair-strong bg-transparent pb-2 text-[15px] outline-none placeholder:text-mute-3 focus:border-ink"
-              />
+          <form onSubmit={submitPhone}>
+            <label
+              htmlFor="phone"
+              className="mn block text-[9px] tracking-[0.14em] text-mute-2"
+            >
+              PHONE
+            </label>
+            <input
+              id="phone"
+              name="phone"
+              type="tel"
+              required
+              autoComplete="tel"
+              inputMode="tel"
+              autoFocus
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="+1 555 123 4567"
+              className="mt-2 w-full border-0 border-b border-hair-strong bg-transparent pb-2 text-[15px] outline-none placeholder:text-mute-3 focus:border-ink"
+            />
 
-              {error ? (
-                <p role="alert" className="mn mt-3 text-[9.5px] leading-relaxed tracking-[0.06em] text-accent">
-                  {error.toUpperCase()}
-                </p>
-              ) : null}
-
-              <button
-                type="submit"
-                disabled={busy}
-                className="mn mt-6 h-11 w-full rounded-[9px] bg-ink text-[10px] font-medium tracking-[0.14em] text-bg transition-opacity duration-300 disabled:opacity-45"
-              >
-                {busy ? 'SENDING…' : 'CONTINUE'}
-              </button>
-            </form>
-
-            <div className="my-6 flex items-center gap-3">
-              <span className="h-px flex-1 bg-hair-strong" />
-              <span className="mn text-[8.5px] tracking-[0.14em] text-mute-3">OR</span>
-              <span className="h-px flex-1 bg-hair-strong" />
-            </div>
+            {error ? (
+              <p role="alert" className="mn mt-3 text-[9.5px] leading-relaxed tracking-[0.06em] text-accent">
+                {error.toUpperCase()}
+              </p>
+            ) : null}
 
             <button
-              type="button"
-              onClick={continueWithGoogle}
+              type="submit"
               disabled={busy}
-              className="flex h-11 w-full items-center justify-center gap-2.5 rounded-[9px] border border-hair-strong bg-white text-[13px] font-medium transition-colors duration-300 hover:border-ink disabled:opacity-45"
+              className="mn mt-6 h-11 w-full rounded-[9px] bg-ink text-[10px] font-medium tracking-[0.14em] text-bg transition-opacity duration-300 disabled:opacity-45"
             >
-              <GoogleMark />
-              Continue with Google
+              {busy ? 'SENDING…' : 'CONTINUE'}
             </button>
-          </>
+          </form>
         ) : (
           <form onSubmit={submitCode}>
             <label
@@ -259,7 +236,7 @@ export default function SignInPage() {
               className="mn mt-2 w-full border-0 border-b border-hair-strong bg-transparent pb-2 text-center text-[22px] tracking-[0.42em] outline-none placeholder:text-ink/20 focus:border-ink"
             />
             <p className="mn mt-3 text-[9px] tracking-[0.08em] text-mute-2">
-              SENT TO {email.toUpperCase()}
+              SENT TO {e164(phone.trim())}
             </p>
 
             {error ? (
@@ -290,7 +267,7 @@ export default function SignInPage() {
                 onClick={startOver}
                 className="mn text-[9px] tracking-[0.1em] text-mute-2 underline decoration-hair-strong underline-offset-4"
               >
-                DIFFERENT EMAIL
+                DIFFERENT NUMBER
               </button>
             </div>
           </form>
@@ -300,28 +277,5 @@ export default function SignInPage() {
         <div id="clerk-captcha" className="mt-6 empty:mt-0" />
       </div>
     </main>
-  )
-}
-
-function GoogleMark() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 18 18" aria-hidden="true">
-      <path
-        fill="#4285F4"
-        d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62Z"
-      />
-      <path
-        fill="#34A853"
-        d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.81.54-1.84.86-3.05.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.34A9 9 0 0 0 9 18Z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M3.97 10.72a5.41 5.41 0 0 1 0-3.44V4.94H.96a9 9 0 0 0 0 8.12l3.01-2.34Z"
-      />
-      <path
-        fill="#EA4335"
-        d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.94l3.01 2.34C4.68 5.16 6.66 3.58 9 3.58Z"
-      />
-    </svg>
   )
 }

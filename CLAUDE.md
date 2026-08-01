@@ -43,6 +43,8 @@ not on what the query returns.
 - **Clerk** auth — `src/proxy.ts`, not the repo root (Next 16 renamed `middleware.ts` →
   `proxy.ts`). It is a bare `clerkMiddleware()`: it attaches the auth context and gates
   **nothing**. Every route and page guards itself with `getCurrentUser()`.
+  **Sign-in is phone-only (SMS code) as of 2026-08-01** — email and Google are disabled in
+  the instance config, by the owner's decision. The one instance serves dev *and* prod.
 - **Neon Postgres** + Drizzle ORM (via Vercel Marketplace)
 - **Vercel Blob** for originals + derivatives
 - **PWA** — installable, offline capture, share target

@@ -2,8 +2,10 @@ import coreWebVitals from 'eslint-config-next/core-web-vitals'
 import typescript from 'eslint-config-next/typescript'
 
 const config = [
-  // Both are esbuild output, not source — see build:sw and build:detect.
-  { ignores: ['.next/**', 'next-env.d.ts', 'public/sw.js', 'public/detect-worker.js'] },
+  // Build output and imported design-source exports, not source — see
+  // build:sw and build:detect; docs/design-directions is the Claude Design
+  // capture (Capsule.dc.html and its runtime).
+  { ignores: ['.next/**', 'next-env.d.ts', 'public/sw.js', 'public/detect-worker.js', 'docs/design-directions/**'] },
   ...coreWebVitals,
   ...typescript,
   {
