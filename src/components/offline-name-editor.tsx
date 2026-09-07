@@ -8,7 +8,7 @@ export function OfflineNameEditor({ entity, id, initialName, review, onSave, onD
   entity: TaxonomyEntity
   id: string
   initialName: string
-  review?: { archiveName: string | null; rejected: boolean; nameTaken: boolean }
+  review?: { archiveName: string | null; rejected: boolean; nameTaken: boolean; pending?: boolean }
   onSave: (name: string) => Promise<void>
   onDiscard: () => Promise<void>
   onClose: () => void
@@ -33,8 +33,8 @@ export function OfflineNameEditor({ entity, id, initialName, review, onSave, onD
   return <main data-surface="ledger" className="safe-t safe-b min-h-dvh bg-bg text-ink"><div className="mx-auto max-w-[620px] px-6 pb-10">
     <nav className="flex min-h-14 items-center border-b border-hair"><button type="button" className={buttonClass} disabled={saving} onClick={() => { if (!dirty || window.confirm('Leave without saving this name?')) onClose() }}>BACK TO ARCHIVE</button></nav>
     <h1 className="mt-8 text-[27px] font-semibold tracking-tight">{review ? 'Review this name.' : `Rename this ${entity}.`}</h1>
-    <p className="mt-3 text-[14px] leading-relaxed text-mute-2">{review ? review.archiveName === null ? 'This entry was removed from the archive. Save your local name before discarding the rename.' : review.nameTaken ? 'That name is already used in your archive. Choose a different name or keep the archive name.' : review.rejected ? 'The archive could not accept this rename. Save your local name before discarding it.' : 'This name changed elsewhere. Keep the archive name or save the name you want to use.' : 'The new name will appear on every linked object. It is saved on this device before syncing.'}</p>
-    {review ? <dl className="mt-6 grid gap-5 border-t border-hair pt-4 sm:grid-cols-2">{[['ON THIS DEVICE', initialName], ['IN THE ARCHIVE', review.archiveName ?? 'Removed']].map(([label, value]) => <div key={label}><dt className="mn text-[9px] tracking-[0.1em] text-mute-2">{label}</dt><dd className="mt-2 break-words text-[16px]">{value}</dd></div>)}</dl> : null}
+    <p className="mt-3 text-[14px] leading-relaxed text-mute-2">{review ? review.archiveName === null ? review.pending ? 'This new entry could not be renamed. It may have been linked to an existing archive entry. Save your local name, discard this rename, then reopen the archive entry.' : 'This entry was removed from the archive. Save your local name before discarding the rename.' : review.nameTaken ? 'That name is already used in your archive. Choose a different name or keep the archive name.' : review.rejected ? 'The archive could not accept this rename. Save your local name before discarding it.' : 'This name changed elsewhere. Keep the archive name or save the name you want to use.' : 'The new name will appear on every linked object. It is saved on this device before syncing.'}</p>
+    {review ? <dl className="mt-6 grid gap-5 border-t border-hair pt-4 sm:grid-cols-2">{[['ON THIS DEVICE', initialName], ['IN THE ARCHIVE', review.archiveName ?? (review.pending ? 'Unavailable' : 'Removed')]].map(([label, value]) => <div key={label}><dt className="mn text-[9px] tracking-[0.1em] text-mute-2">{label}</dt><dd className="mt-2 break-words text-[16px]">{value}</dd></div>)}</dl> : null}
     <form className="mt-6" onSubmit={event => { event.preventDefault(); void save() }}>
       {!unavailable ? <label className="grid gap-2"><span className="mn text-[9px] tracking-[0.1em]">NAME</span><input value={name} onChange={event => setName(event.target.value)} required maxLength={250} disabled={saving} className="min-h-11 w-full border-b border-hair-strong bg-transparent px-1 text-[16px] focus-visible:outline-2 focus-visible:outline-accent" /></label> : null}
       {error ? <p role="alert" className="mt-4 text-[13px] text-accent">{error}</p> : null}

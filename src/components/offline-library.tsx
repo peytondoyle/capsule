@@ -304,7 +304,7 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
     if (deleting.review) await resolveTaxonomyDeletion(ownerId, deleting.review.entry.operationId, deleting.review.token, false)
     await changed()
   }} />
-  if (nameEditing) return <OfflineNameEditor entity={nameEditing.entity} id={nameEditing.id} initialName={nameEditing.name} review={nameEditing.review ? { archiveName: nameEditing.review.remote ? textValue(nameEditing.review.remote.name) : null, rejected: nameEditing.review.rejected, nameTaken: nameEditing.review.reason === 'name_taken' } : undefined} onClose={() => setNameEditing(undefined)} onSave={async name => {
+  if (nameEditing) return <OfflineNameEditor entity={nameEditing.entity} id={nameEditing.id} initialName={nameEditing.name} review={nameEditing.review ? { archiveName: nameEditing.review.remote ? textValue(nameEditing.review.remote.name) : null, rejected: nameEditing.review.rejected, nameTaken: nameEditing.review.reason === 'name_taken', pending: nameEditing.review.pending } : undefined} onClose={() => setNameEditing(undefined)} onSave={async name => {
     if (localOwner() !== ownerId) throw new Error('Sign in to this account to rename its entries.')
     if (nameEditing.review) await resolveTaxonomyName(ownerId, nameEditing.entity, nameEditing.id, nameEditing.review.token, name)
     else await saveTaxonomyName(ownerId, nameEditing.entity, nameEditing.id, nameEditing.name, name)
@@ -339,10 +339,11 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
           <p className="mn mt-2 text-[9px] tracking-[0.1em] text-mute-2">{entryStats?.objectCount ?? 0} LINKED {(entryStats?.objectCount ?? 0) === 1 ? 'OBJECT' : 'OBJECTS'}{entry.localOnly ? ' · SAVED ON DEVICE' : ''}</p>
           {directory === 'people' && entry.note ? <p className="mt-4 max-w-prose whitespace-pre-wrap break-words text-[14px] leading-relaxed">{textValue(entry.note)}</p> : null}
           {directory === 'places' && entry.kind ? <p className="mt-3 text-[14px]">{textValue(entry.kind).replaceAll('_', ' ')}</p> : null}
-          {directoryEntity ? entry.localOnly ? <p className="mt-3 text-[13px] text-mute-2">Sync this new entry before renaming it.</p> : <>
+          {directoryEntity ? <>
+            {entry.localOnly ? <p className="mt-3 text-[13px] text-mute-2">This new entry is saved on this device. Name changes sync after its object links.</p> : null}
             {taxonomyEdits(operations, directoryEntity, entry.id).length ? <p className="mn mt-3 text-[9px] tracking-[0.1em] text-accent">NAME SAVED ON DEVICE</p> : null}
             <button type="button" className={`${buttonClass} mt-2`} onClick={() => openName(directoryEntity, entry.id)}>{nameReviews.some(review => review.entity === directoryEntity && review.id === entry.id) ? 'REVIEW NAME' : 'RENAME'}</button>
-            <button type="button" className={`${buttonClass} mt-2`} disabled={taxonomyEdits(operations, directoryEntity, entry.id).length > 0} onClick={() => { const base = taxonomyDeletionBase(snapshot!, directoryEntity, entry.id); if (base) setDeleting({ entity: directoryEntity, id: entry.id, base, review: null }) }}>REMOVE ENTRY</button>
+            <button type="button" className={`${buttonClass} mt-2`} disabled={!!entry.localOnly || taxonomyEdits(operations, directoryEntity, entry.id).length > 0} onClick={() => { const base = taxonomyDeletionBase(snapshot!, directoryEntity, entry.id); if (base) setDeleting({ entity: directoryEntity, id: entry.id, base, review: null }) }}>REMOVE ENTRY</button>
             {taxonomyEdits(operations, directoryEntity, entry.id).length ? <p className="mt-2 text-[13px] text-mute-2">Sync or review the saved rename before removing this entry.</p> : null}
           </> : null}
         </> : snapshot ? <p className="mt-3 text-[14px] text-mute-2">It may have been removed or not yet saved here. Refresh the archive while connected, or return to the index.</p> : null}

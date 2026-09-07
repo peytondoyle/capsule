@@ -83,7 +83,7 @@ try {
     for (const filter of [`person:${ids.person}`, `place:${ids.place}`, `occasion:${ids.occasion}`]) assert.equal(searchArchive(projected, '', filter).length, 1)
   })
 
-  await check('local duplicate names, empty/long values, new local entries and foreign owners are refused', async () => {
+  await check('local duplicate names, empty/long values and foreign owners are refused; pending names append safely', async () => {
     const owner = 'validation', saved = snapshot(owner)
     await store.replaceSnapshot(owner, saved)
     for (const entity of ['person', 'place', 'occasion']) {
@@ -94,8 +94,11 @@ try {
     assert.equal((await store.listOperations(owner)).length, 0)
     const record = (await local(owner)).records[0]
     await store.saveObjectChanges(owner, id(1), record, { givenBy: [{ id: id(40), name: 'Local friend', create: true }] })
-    await assert.rejects(store.saveTaxonomyName(owner, 'person', id(40), 'Local friend', 'Rename local'), /Sync this entry/)
-    await assert.rejects(store.saveTaxonomyName(owner, 'person', ids.person, 'Friend', 'LOCAL FRIEND'), /already exists/)
+    const creator = (await store.listOperations(owner))[0]
+    await store.saveTaxonomyName(owner, 'person', id(40), 'Local friend', 'Rename local')
+    assert.deepEqual((await store.listOperations(owner))[0], creator)
+    assert.equal((await local(owner)).records[0].givenBy[0].name, 'Rename local')
+    await assert.rejects(store.saveTaxonomyName(owner, 'person', ids.person, 'Friend', 'RENAME LOCAL'), /already exists/)
     const foreign = { ownerId: 'foreign', sequence: 99, operationId: id(99), createdAt: 1, mutation: { type: 'taxonomy.upsert', entity: 'person', id: ids.person, values: { name: 'Intruder' } } }
     assert.equal(projectArchive(saved, [foreign]).people[0].name, 'Friend')
     assert.equal(reviewTaxonomyName(await store.readArchive(owner), [{ ...foreign, response: { outcome: 'conflict' } }], 'person', ids.person), null)

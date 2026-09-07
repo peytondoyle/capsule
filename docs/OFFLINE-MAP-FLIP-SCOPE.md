@@ -595,3 +595,18 @@ is one transaction. Missing lock support, invalid/missing archive or account cha
 cleanup, and interrupted deletion rolls back. The control reports busy, empty, error and
 removed-count/size states. `scripts/verify-offline-storage.mjs` proves these behaviors with
 actual IndexedDB and concurrent writes. No new migration, dependency or remote operation.
+
+### 2026-09-07 — pending-entry names
+
+People, Places and Occasions created by queued object-link edits can now be renamed
+before sync. Each rename appends a new operation after existing edits; original creation
+requests and IDs remain unchanged, including after lost acknowledgements. Projected names
+appear on linked objects immediately. Deletion remains disabled until the entry persists.
+
+If creation matches an existing server entry under another ID, the pending rename stops
+for review rather than renaming that existing identity. Recovery copy distinguishes an
+unavailable pending identity from a confirmed deletion. Conflicting creator edits stop
+before dependent renames. `scripts/verify-pending-taxonomy.mjs` proves ordering, repeated
+names, stale/owner/rollback guards, byte-identical retries, alias safety and creator-conflict
+handling through actual client/IndexedDB/server code and synthetic local PostgreSQL.
+No new server protocol, migration, dependency or Blob operation.

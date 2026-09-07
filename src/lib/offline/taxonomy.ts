@@ -34,5 +34,13 @@ export function reviewTaxonomyName(archive: LocalArchive, entries: OutboxEntry[]
   const remote = archive.refreshedAt > (stopped.responseAt ?? Infinity) || !conflict ? saved : conflict.current
   const local = projectTaxonomyNames(archive.snapshot, edits)[taxonomyKind[entity]].find(row => row.id === id)
   const revision = Number(remote?.revision ?? conflict?.revision ?? 1)
-  return { edits, remote, local, revision, rejected: stopped.response?.outcome === 'rejected', reason: stopped.response?.reason, token: JSON.stringify({ ids: edits.map(entry => entry.operationId), remote, revision, response: stopped.response }) }
+  return { edits, remote, local, revision, pending: edits.some(entry => entry.baseRecord?.localOnly === true), rejected: stopped.response?.outcome === 'rejected', reason: stopped.response?.reason, token: JSON.stringify({ ids: edits.map(entry => entry.operationId), remote, revision, response: stopped.response }) }
+}
+
+export function pendingTaxonomyCreator(entries: OutboxEntry[], entity: TaxonomyEntity, id: string) {
+  const fields = entity === 'person' ? ['givenBy', 'depicted', 'mentioned'] : entity === 'place' ? ['atPlace'] : ['onOccasion']
+  return entries.some(entry => entry.mutation.type === 'object.patch' && fields.some(field => {
+    const value = entry.mutation.type === 'object.patch' ? entry.mutation.patch.changes[field] : undefined
+    return Array.isArray(value) && value.some(ref => ref?.id === id && ref.create === true)
+  }))
 }

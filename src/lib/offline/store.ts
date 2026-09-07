@@ -3,7 +3,7 @@ import type { SyncMutation, SyncRequest, SyncResponse, SyncSnapshot } from './ty
 import { archiveAssets, mediaKey, validSnapshot, referencedMediaKeys, MEDIA_REFERENCE_LOCK } from './media'
 import { isLinkField, linkChoices, projectLinks, sameField, type LinkReference } from './links'
 import { objectEdits, projectArchive, reviewObject, validObjectChanges } from './edits'
-import { reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
+import { pendingTaxonomyCreator, reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from './taxonomy-delete'
 
 const DATABASE = 'capsule-archive'
@@ -191,7 +191,7 @@ export function saveTaxonomyName(ownerId: string, entity: TaxonomyEntity, id: st
     const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
     if (taxonomyEdits(entries, entity, id).some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))) throw new Error('Review this name’s conflicting changes before renaming it again.')
     const projected = projectArchive(archive.snapshot, entries), current = projected[taxonomyKind[entity]].find(row => row.id === id)
-    if (!current || !archive.snapshot[taxonomyKind[entity]].some(row => row.id === id) || current.localOnly) throw new Error('Sync this entry before renaming it, or refresh if it was removed.')
+    if (!current || (!archive.snapshot[taxonomyKind[entity]].some(row => row.id === id) && !(current.localOnly && pendingTaxonomyCreator(entries, entity, id)))) throw new Error('Sync this entry before renaming it, or refresh if it was removed.')
     if (current.name !== expectedName) throw new Error('This name changed in another tab. Keep your text and reopen the entry before saving.')
     assertAvailableName(projected, entity, id, value)
     if (current.name === value) return

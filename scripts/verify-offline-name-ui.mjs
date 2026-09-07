@@ -16,6 +16,8 @@ try {
   assert.match(text(duplicate), /already used/i); assert.match(text(duplicate), /KEEP ARCHIVE NAME/); assert.match(duplicate, /SAVE LOCAL NAME/)
   const removed = render({ ...base, review: { archiveName: null, rejected: true, nameTaken: false } })
   assert.doesNotMatch(removed, /<input/); assert.match(text(removed), /DISCARD LOCAL RENAME/); assert.match(removed, /download=/)
+  const pending = render({ ...base, review: { archiveName: null, rejected: false, nameTaken: false, pending: true } })
+  assert.match(text(pending), /linked to an existing archive entry/); assert.doesNotMatch(text(pending), /was removed/); assert.match(text(pending), /Unavailable/); assert.match(pending, /SAVE LOCAL NAME/); assert.doesNotMatch(pending, /<input/)
   const hostile = '"><scr' + 'ipt>alert(1)</scr' + 'ipt>'
   const escaped = render({ ...base, initialName: hostile, review: { archiveName: hostile, rejected: false, nameTaken: false } })
   assert.doesNotMatch(escaped, /<script>/); assert.ok(text(escaped).includes(hostile)); assert.match(escaped, /<label/); assert.match(escaped, /type="submit"/)
