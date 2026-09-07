@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 
 import { isLinkField, singleLink, referenceIds, validReferences } from '@/lib/offline/links'
 import { canWriteLinks, linkBaseline, readObjectLinks, writeObjectLinks } from './sync-links'
@@ -153,6 +153,11 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
     if (Object.hasOwn(mutation.values, 'note')) {
       if (mutation.entity !== 'person' || !(mutation.base.note === null || typeof mutation.base.note === 'string') || !(mutation.values.note === null || typeof mutation.values.note === 'string' && mutation.values.note.length <= 20000)) return rejected
     } else if (typeof mutation.base.name !== 'string' || typeof mutation.values.name !== 'string' || !mutation.values.name.trim() || mutation.values.name.length > 250) return rejected
+  } else if (mutation.type === 'occasion.merge') {
+    if (!uuid(mutation.id) || !uuid(mutation.targetId) || mutation.id === mutation.targetId || !record(mutation.base)) return rejected
+    for (const base of [mutation.base.source, mutation.base.target]) {
+      if (!record(base) || !revision(base.revision) || !record(base.metadata) || typeof base.metadata.name !== 'string' || !Object.hasOwn(base.metadata, 'createdAt') || !Array.isArray(base.links) || !base.links.every(uuid)) return rejected
+    }
   } else if (mutation.type === 'taxonomy.delete') {
     if (typeof mutation.entity !== 'string' || !['person', 'place', 'occasion'].includes(mutation.entity) || !uuid(mutation.id) || !revision(mutation.baseRevision) || !record(mutation.base) || !record(mutation.base.metadata) || !Array.isArray(mutation.base.links) || !mutation.base.links.every(link => typeof link === 'string')) return rejected
   } else return rejected
@@ -211,6 +216,29 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
         await db.delete(objects).where(and(eq(objects.id, id), eq(objects.ownerId, ownerId)))
         const deletedAt = new Date()
         await db.insert(syncEntities).values({ ownerId, entity: 'object', entityId: id, revision: currentRevision + 1, deletedAt }).onConflictDoUpdate({ target: [syncEntities.ownerId, syncEntities.entity, syncEntities.entityId], set: { revision: currentRevision + 1, deletedAt, updatedAt: deletedAt } })
+        response = { operationId, outcome: 'applied' }
+      }
+    } else if (mutation.type === 'occasion.merge') {
+      const ids = [mutation.id, mutation.targetId].sort()
+      const rows = await db.select().from(occasions).where(and(eq(occasions.ownerId, ownerId), inArray(occasions.id, ids))).orderBy(asc(occasions.id)).for('update')
+      const states = await db.select().from(syncEntities).where(and(eq(syncEntities.ownerId, ownerId), eq(syncEntities.entity, 'occasion'), inArray(syncEntities.entityId, ids)))
+      const linked = await db.select({ id: objects.id, occasionId: objects.occasionId }).from(objects).where(and(eq(objects.ownerId, ownerId), inArray(objects.occasionId, ids))).orderBy(asc(objects.id)).for('update')
+      const source = rows.find(row => row.id === mutation.id), target = rows.find(row => row.id === mutation.targetId)
+      const sourceRevision = states.find(row => row.entityId === mutation.id)?.revision ?? 1
+      const targetRevision = states.find(row => row.entityId === mutation.targetId)?.revision ?? 1
+      const matches = (row: typeof source, expected: typeof mutation.base.source, currentRevision: number) => !!row && currentRevision === expected.revision && !states.find(state => state.entityId === row.id)?.deletedAt && JSON.stringify(deletionBase('occasion', row, linked.filter(link => link.occasionId === row.id).map(link => link.id))) === JSON.stringify(deletionBase('occasion', expected.metadata, expected.links))
+      if (!matches(source, mutation.base.source, sourceRevision) || !matches(target, mutation.base.target, targetRevision)) {
+        response = { operationId, outcome: 'conflict', conflict: { entity: 'occasion', id: mutation.id, revision: sourceRevision, current: source ? { ...source, revision: sourceRevision } : null, fields: ['source', 'target', 'links'] } }
+      } else {
+        const moved = linked.filter(row => row.occasionId === mutation.id)
+        if (moved.length) {
+          await db.update(objects).set({ occasionId: mutation.targetId, updatedAt: new Date() }).where(and(eq(objects.ownerId, ownerId), inArray(objects.id, moved.map(row => row.id))))
+          for (const row of moved) await db.insert(syncEntities).values({ ownerId, entity: 'object', entityId: row.id, revision: 2 }).onConflictDoUpdate({ target: [syncEntities.ownerId, syncEntities.entity, syncEntities.entityId], set: { revision: sql`${syncEntities.revision} + 1`, updatedAt: new Date() } })
+        }
+        await db.delete(occasions).where(and(eq(occasions.id, mutation.id), eq(occasions.ownerId, ownerId)))
+        const deletedAt = new Date()
+        await db.insert(syncEntities).values({ ownerId, entity: 'occasion', entityId: mutation.id, revision: sourceRevision + 1, deletedAt }).onConflictDoUpdate({ target: [syncEntities.ownerId, syncEntities.entity, syncEntities.entityId], set: { revision: sourceRevision + 1, deletedAt, updatedAt: deletedAt } })
+        await db.insert(syncEntities).values({ ownerId, entity: 'occasion', entityId: mutation.targetId, revision: targetRevision + 1 }).onConflictDoUpdate({ target: [syncEntities.ownerId, syncEntities.entity, syncEntities.entityId], set: { revision: targetRevision + 1, updatedAt: deletedAt } })
         response = { operationId, outcome: 'applied' }
       }
     } else if (mutation.type === 'taxonomy.delete') {

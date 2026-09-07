@@ -12,9 +12,11 @@ import { archiveIndex, indexObjectIds } from '@/lib/offline/indexes'
 import { offlineHref, readOfflineLocation, type OfflineLocation } from '@/lib/offline/navigation'
 import { OfflineObjectEditor } from './offline-object-editor'
 import { OfflineConflictReview } from './offline-conflict-review'
+import { OfflineOccasionMerge } from './offline-occasion-merge'
 import { OfflineNoteEditor } from './offline-note-editor'
 import { OfflineNameEditor } from './offline-name-editor'
 import { OfflineTaxonomyDelete } from './offline-taxonomy-delete'
+import { occasionMergeBase, occasionMerges, reviewOccasionMerge } from '@/lib/offline/taxonomy-merge'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from '@/lib/offline/taxonomy-delete'
 import { personNote, reviewPersonNote, reviewTaxonomyName, taxonomyEdits, taxonomyKind, type TaxonomyEntity } from '@/lib/offline/taxonomy'
 import { objectEdits, projectArchive, reviewObject } from '@/lib/offline/edits'
@@ -22,7 +24,7 @@ import { linkedNames, searchArchive, textValue, type ArchiveRecord } from '@/lib
 import { mediaKey } from '@/lib/offline/media'
 import { prepareArchive, type PreparationProgress } from '@/lib/offline/prepare'
 import { localOwner, offlineShellReady } from '@/lib/offline/session'
-import { savePersonNote, resolvePersonNote, reclaimArchiveMedia, listOperations, mediaAvailability, readLibrary, readMedia, readPreparation, resolveObjectChanges, resolveTaxonomyName, resolveTaxonomyDeletion, saveObjectChanges, saveTaxonomyName, saveTaxonomyDeletion, type LocalArchive, type OutboxEntry } from '@/lib/offline/store'
+import { saveOccasionMerge, resolveOccasionMerge, savePersonNote, resolvePersonNote, reclaimArchiveMedia, listOperations, mediaAvailability, readLibrary, readMedia, readPreparation, resolveObjectChanges, resolveTaxonomyName, resolveTaxonomyDeletion, saveObjectChanges, saveTaxonomyName, saveTaxonomyDeletion, type LocalArchive, type OutboxEntry } from '@/lib/offline/store'
 import { syncArchive } from '@/lib/offline/sync'
 import type { SyncSnapshot } from '@/lib/offline/types'
 
@@ -150,6 +152,7 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
   const [editRecord, setEditRecord] = useState<ArchiveRecord>()
   const [nameEditing, setNameEditing] = useState<{ entity: TaxonomyEntity; id: string; name: string; review: ReturnType<typeof reviewTaxonomyName> }>()
   const [noteEditing, setNoteEditing] = useState<{ id: string; note: string | null; review: ReturnType<typeof reviewPersonNote> }>()
+  const [merging, setMerging] = useState<{ id: string; snapshot: SyncSnapshot; review: ReturnType<typeof reviewOccasionMerge> }>()
   const [deleting, setDeleting] = useState<{ entity: TaxonomyEntity; id: string; base: NonNullable<ReturnType<typeof taxonomyDeletionBase>>; review: ReturnType<typeof reviewTaxonomyDeletion> }>()
   const [preparing, setPreparing] = useState(false)
   const [progress, setProgress] = useState<PreparationProgress>()
@@ -303,6 +306,23 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
   })).values()]
   const pendingPhotos = photos.filter(photo => !photo.itemId && !photo.dismissed)
   const deletions = taxonomyDeletions(operations)
+  const merges = occasionMerges(operations)
+  if (merging) {
+    const mutation = merging.review?.entry.mutation
+    const saved = mutation?.type === 'occasion.merge' ? mutation : null
+    const source = saved?.base.source ?? occasionMergeBase(merging.snapshot, merging.id)!
+    const destinations = saved ? [{ id: saved.targetId, base: saved.base.target }] : merging.snapshot.occasions.filter(row => row.id !== merging.id && !row.localOnly && !taxonomyEdits(operations, 'occasion', row.id).length && !occasionMerges(operations, row.id).length).map(row => ({ id: row.id, base: occasionMergeBase(merging.snapshot, row.id)! }))
+    return <OfflineOccasionMerge id={merging.id} source={source} destinations={destinations} review={merging.review && saved ? { targetId: saved.targetId, source: merging.review.source, target: merging.review.target, refreshed: merging.review.refreshed, canRetry: !!merging.review.source && !!merging.review.target && merging.review.entry.response?.outcome === 'conflict' } : undefined} linkLabel={id => { const object = merging.snapshot.records.find(row => row.id === id); return object ? `Lot ${String(object.lotNo).padStart(4, '0')} · ${textValue(object.title)}` : id }} onClose={() => setMerging(undefined)} onMerge={async (targetId, expected) => {
+      if (localOwner() !== ownerId) throw new Error('Sign in to this account to merge its occasions.')
+      if (merging.review) await resolveOccasionMerge(ownerId, merging.review.entry.operationId, merging.review.token, true)
+      else await saveOccasionMerge(ownerId, merging.id, targetId, expected)
+      await changed()
+    }} onKeep={async () => {
+      if (localOwner() !== ownerId) throw new Error('Sign in to this account to review its changes.')
+      if (merging.review) await resolveOccasionMerge(ownerId, merging.review.entry.operationId, merging.review.token, false)
+      await changed()
+    }} />
+  }
   if (deleting) return <OfflineTaxonomyDelete entity={deleting.entity} id={deleting.id} base={deleting.base} current={deleting.review?.base} review={!!deleting.review} refreshed={deleting.review?.refreshed ?? true} canRetry={!deleting.review || !!deleting.review.current && deleting.review.entry.response?.outcome === 'conflict'} linkLabel={link => {
     const [id, role] = link.split(':'), object = visible?.snapshot.records.find(row => row.id === id)
     return `${object ? `Lot ${String(object.lotNo).padStart(4, '0')} · ${textValue(object.title)}` : id}${role ? ` · ${role.replaceAll('_', ' ')}` : ''}`
@@ -347,6 +367,12 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
     <nav aria-label="Saved archive sections" className="flex flex-wrap gap-x-3 border-b border-hair">{(['objects', 'people', 'places', 'occasions'] as const).map(section => <button key={section} type="button" className={`${buttonClass} ${route.section === section ? 'font-semibold text-accent' : 'text-mute-2'}`} aria-current={route.section === section ? 'page' : undefined} disabled={!!editRecord} onClick={() => location.assign(offlineHref({ section }))}>{section === 'objects' ? 'OBJECTS' : indexLabels[section].toUpperCase()}</button>)}</nav>
     {operations.length || pendingPhotos.length ? <div className="mt-4 border-b border-hair pb-3"><p className="mn text-[9px] tracking-[0.1em]">{operations.length + pendingPhotos.length} SAVED CHANGES ON DEVICE</p><button type="button" disabled={syncing || preparing || reclaiming} className={buttonClass} onClick={() => { void sync() }}>{syncing ? 'SYNCING…' : 'SYNC SAVED EDITS'}</button>{reviews.map((id) => <button key={id} type="button" disabled={!!editRecord} className={buttonClass} onClick={() => openObject(id)}>REVIEW LOT {String(snapshot?.records.find((record) => record.id === id)?.lotNo ?? '—')}</button>)}{nameReviews.map(({ entity, id }) => <button key={`${entity}:${id}`} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openName(entity, id)}>REVIEW NAME · {textValue(snapshot?.[taxonomyKind[entity]].find(row => row.id === id)?.name) || entity.toUpperCase()}</button>)}</div> : null}
     {noteReviews.map(id => <button key={id} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openNote(id)}>REVIEW NOTE · {textValue(snapshot?.people.find(row => row.id === id)?.name) || 'PERSON'}</button>)}
+    {merges.map(operation => {
+      const mutation = operation.mutation
+      if (mutation.type !== 'occasion.merge') return null
+      const review = visible ? reviewOccasionMerge(visible, operations, operation.operationId) : null
+      return <div key={operation.operationId} className="mt-3 border-b border-hair pb-2"><p className="break-words text-[13px]">{String(mutation.base.source.metadata.name)} → {String(mutation.base.target.metadata.name)} · {review ? 'Merge needs review' : 'Merge saved on device; waiting for sync'}</p>{review && snapshot ? <button type="button" disabled={!!editRecord} className={buttonClass} onClick={() => setMerging({ id: mutation.id, snapshot, review })}>REVIEW MERGE</button> : null}<a className={`${buttonClass} inline-flex items-center`} href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(mutation, null, 2))}`} download={`capsule-occasion-${mutation.id}-merge.json`}>SAVE ENTRIES AND LINKS</a><a href={offlineHref({ section: 'occasions', entry: mutation.targetId })} className={`${buttonClass} inline-flex items-center`}>OPEN DESTINATION</a></div>
+    })}
     {deletions.map(operation => {
       const mutation = operation.mutation
       if (mutation.type !== 'taxonomy.delete') return null
@@ -365,9 +391,10 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
           {directoryEntity ? <>
             {entry.localOnly ? <p className="mt-3 text-[13px] text-mute-2">This new entry is saved on this device. Name changes sync after its object links.</p> : null}
             {taxonomyEdits(operations, directoryEntity, entry.id, 'name').length ? <p className="mn mt-3 text-[9px] tracking-[0.1em] text-accent">NAME SAVED ON DEVICE</p> : null}
-            <button type="button" className={`${buttonClass} mt-2`} onClick={() => openName(directoryEntity, entry.id)}>{nameReviews.some(review => review.entity === directoryEntity && review.id === entry.id) ? 'REVIEW NAME' : 'RENAME'}</button>
+            <button type="button" className={`${buttonClass} mt-2`} disabled={directoryEntity === 'occasion' && occasionMerges(operations, entry.id).length > 0} onClick={() => openName(directoryEntity, entry.id)}>{nameReviews.some(review => review.entity === directoryEntity && review.id === entry.id) ? 'REVIEW NAME' : 'RENAME'}</button>
             {directory === 'people' ? <><button type="button" className={`${buttonClass} mt-2`} disabled={!!entry.localOnly} onClick={() => openNote(entry.id)}>{noteReviews.includes(entry.id) ? 'REVIEW NOTE' : 'EDIT NOTE'}</button>{taxonomyEdits(operations, 'person', entry.id, 'note').length ? <p className="mn mt-3 text-[9px] tracking-[0.1em] text-accent">NOTE SAVED ON DEVICE</p> : null}</> : null}
-            <button type="button" className={`${buttonClass} mt-2`} disabled={!!entry.localOnly || taxonomyEdits(operations, directoryEntity, entry.id).length > 0} onClick={() => { const base = taxonomyDeletionBase(snapshot!, directoryEntity, entry.id); if (base) setDeleting({ entity: directoryEntity, id: entry.id, base, review: null }) }}>REMOVE ENTRY</button>
+            <button type="button" className={`${buttonClass} mt-2`} disabled={!!entry.localOnly || taxonomyEdits(operations, directoryEntity, entry.id).length > 0 || directoryEntity === 'occasion' && occasionMerges(operations, entry.id).length > 0} onClick={() => { const base = taxonomyDeletionBase(snapshot!, directoryEntity, entry.id); if (base) setDeleting({ entity: directoryEntity, id: entry.id, base, review: null }) }}>REMOVE ENTRY</button>
+            {directoryEntity === 'occasion' ? <><button type="button" className={`${buttonClass} mt-2`} disabled={!!entry.localOnly || taxonomyEdits(operations, 'occasion', entry.id).length > 0 || occasionMerges(operations, entry.id).length > 0} onClick={() => setMerging({ id: entry.id, snapshot: snapshot!, review: null })}>MERGE OCCASION</button>{occasionMerges(operations, entry.id).length ? <p className="mt-2 text-[13px] text-mute-2">Sync or review the saved merge before changing this entry.</p> : null}</> : null}
             {taxonomyEdits(operations, directoryEntity, entry.id).length ? <p className="mt-2 text-[13px] text-mute-2">Sync or review the saved changes before removing this entry.</p> : null}
           </> : null}
         </> : snapshot ? <p className="mt-3 text-[14px] text-mute-2">It may have been removed or not yet saved here. Refresh the archive while connected, or return to the index.</p> : null}

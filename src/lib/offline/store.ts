@@ -4,6 +4,7 @@ import { archiveAssets, mediaKey, validSnapshot, referencedMediaKeys, MEDIA_REFE
 import { isLinkField, linkChoices, projectLinks, sameField, type LinkReference } from './links'
 import { objectEdits, projectArchive, reviewObject, validObjectChanges } from './edits'
 import { personNote, reviewPersonNote, pendingTaxonomyCreator, reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
+import { occasionMergeBase, occasionMerges, reviewOccasionMerge } from './taxonomy-merge'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from './taxonomy-delete'
 
 const DATABASE = 'capsule-archive'
@@ -130,6 +131,7 @@ export function saveObjectChanges(ownerId: string, id: string, expected: Record<
     for (const field of fields) if (isLinkField(field)) {
       const choices = linkChoices(projected, field)
       const entity = field === 'atPlace' ? 'place' : field === 'onOccasion' ? 'occasion' : ['givenBy', 'depicted', 'mentioned'].includes(field) ? 'person' : null
+      if (entity === 'occasion' && (changes[field] as LinkReference[]).some(ref => occasionMerges(entries).some(entry => entry.mutation.type === 'occasion.merge' && entry.mutation.id === ref.id))) throw new Error('This occasion is being merged. Choose its destination instead.')
       if (entity && (changes[field] as LinkReference[]).some(ref => taxonomyDeletions(entries).some(entry => entry.mutation.type === 'taxonomy.delete' && entry.mutation.entity === entity && entry.mutation.id === ref.id) || archive.snapshot.tombstones.some(row => row.entity === entity && row.id === ref.id))) throw new Error('This entry was removed. Choose another name or create a new entry.')
       if ((changes[field] as LinkReference[]).some(ref => !ref.create && !choices.some(choice => choice.id === ref.id))) throw new Error('Choose people, tags, and collections from this archive or add a new name.')
     }
@@ -189,6 +191,7 @@ export function saveTaxonomyName(ownerId: string, entity: TaxonomyEntity, id: st
     const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
     if (!archive) throw new Error('Prepare this archive before renaming its entries offline.')
     const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (entity === 'occasion' && occasionMerges(entries, id).length) throw new Error('Sync or review this occasion’s saved merge first.')
     if (taxonomyEdits(entries, entity, id, 'name').some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))) throw new Error('Review this name’s conflicting changes before renaming it again.')
     const projected = projectArchive(archive.snapshot, entries), current = projected[taxonomyKind[entity]].find(row => row.id === id)
     if (!current || (!archive.snapshot[taxonomyKind[entity]].some(row => row.id === id) && !(current.localOnly && pendingTaxonomyCreator(entries, entity, id)))) throw new Error('Sync this entry before renaming it, or refresh if it was removed.')
@@ -266,11 +269,53 @@ export function resolvePersonNote(ownerId: string, id: string, token: string, ch
   })
 }
 
+function assertMergeEntries(archive: LocalArchive, entries: OutboxEntry[], id: string, targetId: string) {
+  if (id === targetId) throw new Error('Choose a different destination occasion.')
+  for (const key of [id, targetId]) {
+    const row = archive.snapshot.occasions.find(row => row.id === key)
+    if (!row || row.localOnly || archive.snapshot.tombstones.some(row => row.entity === 'occasion' && row.id === key)) throw new Error('Choose two occasions already saved in the archive.')
+    if (taxonomyEdits(entries, 'occasion', key).length || occasionMerges(entries, key).length || taxonomyDeletions(entries).some(entry => entry.mutation.type === 'taxonomy.delete' && entry.mutation.entity === 'occasion' && entry.mutation.id === key)) throw new Error('Sync or review these occasions’ saved changes before merging.')
+  }
+}
+
+export function saveOccasionMerge(ownerId: string, id: string, targetId: string, expected: string) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare this archive before merging occasions offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    assertMergeEntries(archive, entries, id, targetId)
+    const snapshot = projectArchive(archive.snapshot, entries)
+    const base = { source: occasionMergeBase(snapshot, id)!, target: occasionMergeBase(snapshot, targetId)! }
+    if (JSON.stringify(base) !== expected) throw new Error('These occasions or their links changed in another tab. Reopen the merge before confirming.')
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), baseRecord: snapshot.occasions.find(row => row.id === id), mutation: { type: 'occasion.merge', id, targetId, base } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+
+export function resolveOccasionMerge(ownerId: string, operationId: string, token: string, merge: boolean) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (!archive) throw new Error('The local archive could not be found.')
+    const review = reviewOccasionMerge(archive, entries, operationId)
+    if (!review || review.token !== token || review.entry.mutation.type !== 'occasion.merge') throw new Error('This merge review changed in another tab. Reopen it before choosing.')
+    if (!review.refreshed) throw new Error('Sync saved edits to refresh both occasions before reviewing this merge.')
+    if (merge) {
+      if (review.entry.response?.outcome !== 'conflict' || !review.source || !review.target) throw new Error('This merge cannot be retried. Keep the archive entries and choose again.')
+      assertMergeEntries(archive, entries.filter(entry => entry.operationId !== operationId), review.entry.mutation.id, review.entry.mutation.targetId)
+    }
+    await result(outbox.delete([ownerId, operationId]))
+    if (merge) await result(outbox.add({ ...review.entry, operationId: crypto.randomUUID(), createdAt: Date.now(), response: undefined, responseAt: undefined, mutation: { ...review.entry.mutation, base: { source: review.source!, target: review.target! } } }))
+  })
+}
+
 export function saveTaxonomyDeletion(ownerId: string, entity: TaxonomyEntity, id: string, expected: string) {
   return transact(['archives', 'outbox'], 'readwrite', async tx => {
     const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
     if (!archive) throw new Error('Prepare this archive before removing its entries offline.')
     const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (entity === 'occasion' && occasionMerges(entries, id).length) throw new Error('Sync or review this occasion’s saved merge first.')
     if (taxonomyEdits(entries, entity, id).length) throw new Error('Sync or review this entry’s saved changes before removing it.')
     const snapshot = projectArchive(archive.snapshot, entries), current = snapshot[taxonomyKind[entity]].find(row => row.id === id)
     if (!current || current.localOnly || !archive.snapshot[taxonomyKind[entity]].some(row => row.id === id)) throw new Error('Sync this entry before removing it, or refresh if it was already removed.')
