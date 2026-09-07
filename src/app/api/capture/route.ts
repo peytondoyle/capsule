@@ -16,8 +16,8 @@ export async function POST(request: Request) {
     return json({ error: 'invalid request' }, 400)
   }
   try {
-    assertCaptureInput(body.captureId, body.name, body.exif)
-    return body.action === 'status' ? json(await captureStatus(user.id, body.captureId, body.name)) : body.action === 'finish' ? json(await finishCapture(user.id, body.captureId, body.name, body.exif)) : json({ error: 'invalid request' }, 400)
+    assertCaptureInput(body.captureId, body.name, body.exif, body.original)
+    return body.action === 'status' ? json(await captureStatus(user.id, body.captureId, body.name, body.original)) : body.action === 'finish' ? json(await finishCapture(user.id, body.captureId, body.name, body.exif, body.original)) : json({ error: 'invalid request' }, 400)
   } catch (error) {
     return json({ error: error instanceof CaptureInputError ? 'invalid request' : 'capture unavailable' }, error instanceof CaptureInputError ? 400 : 503)
   }

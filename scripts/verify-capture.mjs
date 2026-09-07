@@ -9,7 +9,7 @@ import { transformSync } from 'esbuild'
 const require = createRequire(import.meta.url)
 const { Pool } = require('pg'), { drizzle } = require('drizzle-orm/node-postgres'), orm = require('drizzle-orm')
 const port = Number(process.env.CAPSULE_TEST_PG_PORT); assert.ok(port)
-const connection = { host: '/private/tmp', port, user: userInfo().username }, admin = new Pool({ ...connection, database: 'postgres' })
+const connection = { host: process.env.CAPSULE_TEST_PG_SOCKET ?? '/private/tmp', port, user: userInfo().username }, admin = new Pool({ ...connection, database: 'postgres' })
 const database = `capsule_capture_${process.pid}`; let pool
 function load(file, dependencies) { const sandboxModule = { exports: {} }; vm.runInNewContext(transformSync(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code, { module: sandboxModule, exports: sandboxModule.exports, Date, URL, Response, require(name) { assert.ok(name in dependencies, `Unexpected ${name}`); return dependencies[name] } }); return sandboxModule.exports }
 try {
@@ -19,7 +19,7 @@ try {
   class BlobNotFoundError extends Error {}
   let mode = 'present', seen = []
   const blob = { BlobNotFoundError, head: async (path) => { seen.push(path); if (mode === 'missing') throw new BlobNotFoundError(); if (mode === 'broken') throw new Error('network'); return { url: mode === 'wrong-path' ? 'https://store.private.blob.vercel-storage.com/other' : `https://store.private.blob.vercel-storage.com/${path}` } } }
-  const capture = load('src/server/capture.ts', { 'server-only': {}, '@vercel/blob': blob, 'drizzle-orm': orm, '@/lib/blob-path': load('src/lib/blob-path.ts', {}), './blob': { originalsToken: () => 'token', assertOwnedOriginalUrl: (_owner, url) => { if (!url.includes('store.private')) throw new Error('host'); return url } }, './db/pool': { getTxDb: () => db }, './db/schema': schema })
+  const capture = load('src/server/capture.ts', { 'server-only': {}, './capture-original': {}, '@vercel/blob': blob, 'drizzle-orm': orm, '@/lib/blob-path': load('src/lib/blob-path.ts', {}), './blob': { originalsToken: () => 'token', assertOwnedOriginalUrl: (_owner, url) => { if (!url.includes('store.private')) throw new Error('host'); return url } }, './db/pool': { getTxDb: () => db }, './db/schema': schema })
   const owner = 'capture-owner', id = randomUUID(), name = 'photo.jpg'; await db.insert(schema.users).values({ id: owner })
   mode = 'missing'; assert.equal(JSON.stringify(await capture.captureStatus(owner, id, name)), JSON.stringify({ status: 'missing' })); assert.equal((await db.select().from(schema.intakeItems)).length, 0)
   mode = 'present'; assert.equal(JSON.stringify(await capture.captureStatus(owner, id, name)), JSON.stringify({ status: 'uploaded' })); assert.equal((await db.select().from(schema.intakeItems)).length, 0)

@@ -560,3 +560,24 @@ This is one functional management slice. Merge, standalone creation/tags/metadat
 pending-entry renames, collection management, remaining archive layouts, Map, HEIC backup,
 and storage recovery remain. Claude owns restyling and installed-device acceptance.
 No new migration, hosted database access, push, or deployment is part of this slice.
+
+### 2026-09-07 — HEIC original backup
+
+Converted captures now upload untouched camera bytes to a separate immutable private
+capture path. The JPEG remains the processing source. Status/finish verify the raw byte
+length and SHA-256 before local sync acknowledgement; mismatches retain the local copy
+and never overwrite the existing backup. Sync also backs up converted originals retained
+by the previous pipeline, including retained face captures, without refiling them.
+
+`GET /api/capture/[captureId]/original` returns the untouched bytes as an authenticated,
+owner-checked attachment with private/no-store headers. A missing backup returns 404;
+it does not silently substitute the JPEG. Capture views show backup receipts and a
+backup download link. The route is also usable by capture ID without local storage;
+a general per-face online download affordance is not part of this slice.
+
+Proof: `scripts/verify-heic-backup.mjs` runs actual capture sync, IndexedDB, server logic
+and routes against synthetic local PostgreSQL and in-memory Blob transport. It verifies
+byte identity, distinct JPEG/raw paths, upload token restrictions, lost-response retry,
+backfill, owner isolation, mismatch retention and account switching. Real HEIC decoding
+on installed devices remains Peyton/Claude acceptance. No live Blob proof is claimed.
+No new migration or dependency. Local original reclamation is a separate next slice.

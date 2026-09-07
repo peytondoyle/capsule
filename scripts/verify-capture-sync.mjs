@@ -108,9 +108,10 @@ try {
   defaults()
   await queue.enqueueUpload('heic', file('untouched HEIC', 'camera.HEIC', 'image/heic'))
   globalThis.testConvert = async () => ({ ok: true, converted: true, file: file('converted JPEG', 'camera.jpg') })
-  server(async (body) => response(body.action === 'status' ? { status: 'missing' } : { status: 'recorded', itemId: body.captureId }))
+  server(async (body) => response(body.action === 'status' ? { status: 'missing', original: null } : { status: 'recorded', itemId: body.captureId, original: body.original }))
   await drainCaptures('heic', options)
-  assert.equal(await uploads[0].bytes.text(), 'converted JPEG')
+  assert.equal(await uploads[0].bytes.text(), 'untouched HEIC')
+  assert.equal(await uploads[1].bytes.text(), 'converted JPEG')
   assert.equal((await pending('heic')).length, 0)
   assert.equal(await (await queue.listRetainedOriginals('heic'))[0].bytes.text(), 'untouched HEIC')
 

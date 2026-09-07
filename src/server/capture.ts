@@ -3,9 +3,10 @@ import 'server-only'
 import { BlobNotFoundError, head } from '@vercel/blob'
 import { and, eq, sql } from 'drizzle-orm'
 
-import type { CaptureExif, CaptureResponse } from '@/lib/capture-types'
-import { clientCapturePath, safeUploadName } from '@/lib/blob-path'
-import { assertOwnedOriginalUrl, originalsToken } from './blob'
+import type { CaptureExif, CaptureResponse, CaptureOriginal } from '@/lib/capture-types'
+import { clientCapturePath, safeUploadName, isClientCapturePath } from '@/lib/blob-path'
+import { assertOwnedOriginalUrl, originalsToken, MAX_ORIGINAL_BYTES } from './blob'
+import { confirmCaptureOriginal, readCaptureOriginal } from './capture-original'
 import { getTxDb } from './db/pool'
 import { intakeBatches, intakeItems } from './db/schema'
 
@@ -19,8 +20,9 @@ function validDate(value: unknown) {
   return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
 }
 
-export function assertCaptureInput(captureId: string, name: string, exif?: CaptureExif) {
+export function assertCaptureInput(captureId: string, name: string, exif?: CaptureExif, original?: CaptureOriginal) {
   if (typeof captureId !== 'string' || typeof name !== 'string' || !uuid.test(captureId) || !name || name === '.' || name === '..' || safeUploadName(name) !== name || name.length > 200) throw new CaptureInputError('invalid capture')
+  if (original !== undefined && (!original || typeof original !== 'object' || Array.isArray(original) || typeof original.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(original.sha256) || !Number.isSafeInteger(original.size) || original.size < 1 || original.size > MAX_ORIGINAL_BYTES)) throw new CaptureInputError('invalid camera original')
   if (exif !== undefined && (exif === null || typeof exif !== 'object' || Array.isArray(exif))) throw new CaptureInputError('invalid exif')
   if (exif && ((exif.taken !== undefined && !validDate(exif.taken)) || (exif.lat !== undefined && (typeof exif.lat !== 'number' || !Number.isFinite(exif.lat) || exif.lat < -90 || exif.lat > 90)) || (exif.lng !== undefined && (typeof exif.lng !== 'number' || !Number.isFinite(exif.lng) || exif.lng < -180 || exif.lng > 180)))) throw new CaptureInputError('invalid exif')
 }
@@ -39,19 +41,21 @@ async function uploaded(ownerId: string, captureId: string, name: string) {
   } catch (error) { if (error instanceof BlobNotFoundError) return null; throw error }
 }
 
-export async function captureStatus(ownerId: string, captureId: string, name: string): Promise<CaptureResponse> {
+export async function captureStatus(ownerId: string, captureId: string, name: string, original?: CaptureOriginal): Promise<CaptureResponse> {
   const item = await exists(ownerId, captureId)
   if (item) {
     if (!item.originalUrl || new URL(item.originalUrl).pathname !== `/${clientCapturePath(ownerId, captureId, name)}`) throw new CaptureInputError('capture name mismatch')
-    return { status: 'recorded', itemId: item.id }
+    return { status: 'recorded', itemId: item.id, ...(original ? { original: await confirmCaptureOriginal(ownerId, captureId, original) } : {}) }
   }
-  return (await uploaded(ownerId, captureId, name)) ? { status: 'uploaded' } : { status: 'missing' }
+  return { status: (await uploaded(ownerId, captureId, name)) ? 'uploaded' : 'missing', ...(original ? { original: await confirmCaptureOriginal(ownerId, captureId, original) } : {}) }
 }
 
-export async function finishCapture(ownerId: string, captureId: string, name: string, exif?: CaptureExif): Promise<CaptureResponse> {
+export async function finishCapture(ownerId: string, captureId: string, name: string, exif?: CaptureExif, original?: CaptureOriginal): Promise<CaptureResponse> {
   const originalUrl = await uploaded(ownerId, captureId, name)
   if (!originalUrl) return { status: 'missing' }
-  return getTxDb().transaction(async (db) => {
+  const backup = original ? await confirmCaptureOriginal(ownerId, captureId, original) : undefined
+  if (original && !backup) return { status: 'uploaded', original: null }
+  const result = await getTxDb().transaction<CaptureResponse>(async (db) => {
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${ownerId}), hashtext(${captureId}))`)
     const [existing] = await db.select({ id: intakeItems.id, originalUrl: intakeItems.originalUrl }).from(intakeItems).innerJoin(intakeBatches, eq(intakeBatches.id, intakeItems.batchId)).where(and(eq(intakeItems.id, captureId), eq(intakeBatches.ownerId, ownerId))).limit(1).for('update', { of: intakeItems })
     if (existing) {
@@ -64,4 +68,15 @@ export async function finishCapture(ownerId: string, captureId: string, name: st
     await db.insert(intakeItems).values({ id: captureId, batchId: batch.id, originalUrl, exif: exif ?? null, suggestions, status: 'uploaded' })
     return { status: 'recorded', itemId: captureId }
   })
+  return { ...result, ...(original ? { original: backup } : {}) }
+}
+
+export async function downloadCaptureOriginal(ownerId: string, captureId: string) {
+  if (!uuid.test(captureId)) return null
+  const item = await exists(ownerId, captureId)
+  if (!item?.originalUrl) return null
+  assertOwnedOriginalUrl(ownerId, item.originalUrl)
+  const pathname = new URL(item.originalUrl).pathname.slice(1)
+  if (!isClientCapturePath(ownerId, pathname) || pathname.split('/')[3] !== captureId) return null
+  return readCaptureOriginal(ownerId, captureId)
 }

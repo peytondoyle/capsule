@@ -139,7 +139,7 @@ function OfflineApp() {
   }
 
   const visiblePhotos = photos.filter((photo) => photo.ownerId === ownerId)
-  const pending = visiblePhotos.filter((photo) => !photo.itemId && !photo.dismissed && !photo.captureConflict && (!photo.draft || photo.readyToFile)).length
+  const pending = visiblePhotos.filter((photo) => !photo.dismissed && ((!photo.itemId && !photo.captureConflict && (!photo.draft || photo.readyToFile)) || (photo.itemId && photo.prepared?.converted && !photo.originalBackup))).length
   if (ownerId && reviewing?.ownerId === ownerId) return <OfflineCaptureReview photo={reviewing} busy={reviewBusy} error={reviewError} onClose={() => setReviewing(null)} onResolve={copy => { void (async () => {
     setReviewBusy(true); setReviewError('')
     try {
@@ -190,7 +190,8 @@ function OfflineApp() {
               {visiblePhotos.map((photo) => <li key={photo.key} className="w-[140px]">
                 <Cutout width={112} src={photo.previewUrl} alt={photo.name} label={photo.previewUrl ? undefined : photo.name} rotate={-2} />
                 {photo.draft?.title ? <p className="mt-3 break-words text-[14px]">{photo.draft.title}</p> : null}
-                <p className="mn mt-3 text-[8.5px] leading-relaxed tracking-[0.08em] text-mute-2">{photo.dismissed ? 'FILING DISCARDED · COPY RETAINED' : photo.captureConflict ? 'FILING NEEDS REVIEW' : photo.filed ? `LOT ${String(photo.filed.lotNo).padStart(4, '0')} · FILED` : photo.itemId ? 'JPEG UPLOADED · ORIGINAL HERE' : photo.syncStarted ? 'WAITING FOR CONFIRMATION' : photo.readyToFile ? 'READY TO FILE' : photo.draft ? 'DRAFT ON DEVICE' : 'SAVED ON DEVICE'}</p>
+                <p className="mn mt-3 text-[8.5px] leading-relaxed tracking-[0.08em] text-mute-2">{photo.dismissed ? 'FILING DISCARDED · COPY RETAINED' : photo.captureConflict ? 'FILING NEEDS REVIEW' : photo.filed ? `LOT ${String(photo.filed.lotNo).padStart(4, '0')} · FILED` : photo.itemId ? (photo.originalBackup ? 'ORIGINAL BACKED UP · COPY HERE' : 'JPEG UPLOADED · ORIGINAL HERE') : photo.syncStarted ? 'WAITING FOR CONFIRMATION' : photo.readyToFile ? 'READY TO FILE' : photo.draft ? 'DRAFT ON DEVICE' : 'SAVED ON DEVICE'}</p>
+                {photo.filed && photo.prepared?.converted ? <p className="mt-2 text-[12px] text-mute-2">{photo.originalBackup ? 'Camera original backed up. Local copy retained.' : 'Camera original still needs backup.'}</p> : null}
                 {photo.captureConflict && !photo.dismissed ? <button type="button" className="mn inline-flex min-h-11 items-center text-[8.5px] tracking-[0.08em] underline" onClick={() => { setReviewError(''); setReviewing(photo) }}>REVIEW FILING</button> : null}
                 {!photo.dismissed && !photo.captureConflict && !photo.syncStarted && !photo.itemId ? <button type="button" className="mn inline-flex min-h-11 items-center text-[8.5px] tracking-[0.08em] underline" onClick={() => { void (async () => {
                   try {
@@ -200,6 +201,7 @@ function OfflineApp() {
                   } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not open this draft.') }
                 })() }}>CUT & FILE</button> : null}
                 <a href={photo.downloadUrl} download={photo.name} className="mn inline-flex min-h-11 items-center text-[8.5px] tracking-[0.08em] underline">SAVE ORIGINAL</a>
+                {photo.originalBackup && photo.itemId ? <a href={`/api/capture/${photo.itemId}/original`} className="mn inline-flex min-h-11 items-center text-[8.5px] tracking-[0.08em] underline">DOWNLOAD BACKUP</a> : null}
                 {photo.draftUrl ? <a href={photo.draftUrl} download={`${photo.name}.json`} className="mn inline-flex min-h-11 items-center text-[8.5px] tracking-[0.08em] underline">SAVE DETAILS</a> : null}
                 {photo.filed ? <a href={`/o/${photo.filed.lotNo}`} className="mn inline-flex min-h-11 items-center text-[8.5px] tracking-[0.08em] underline">OPEN FILED OBJECT</a> : null}
               </li>)}

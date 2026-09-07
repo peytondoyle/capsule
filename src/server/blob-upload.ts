@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { MAX_ORIGINAL_BYTES } from './blob'
-import { clientIntakePath, isClientCapturePath } from '@/lib/blob-path'
+import { clientIntakePath, isClientCapturePath, isClientCaptureOriginalPath } from '@/lib/blob-path'
 
 /**
  * The `onBeforeGenerateToken` callback for client uploads — the single copy.
@@ -25,7 +25,7 @@ export function intakeTokenOptions(ownerId: string) {
     // so refusing here is what keeps a caller out of another owner's prefix —
     // and out of the store root, which is where every upload landed while this
     // code believed it was rewriting the path.
-    const capture = isClientCapturePath(ownerId, pathname)
+    const capture = isClientCapturePath(ownerId, pathname) || isClientCaptureOriginalPath(ownerId, pathname)
     if (!capture && pathname !== clientIntakePath(ownerId, pathname)) {
       throw new Error('upload path is not this owner’s intake prefix')
     }

@@ -35,3 +35,13 @@ export function isClientCapturePath(ownerId: string, pathname: string) {
   const [captureId, name, ...rest] = pathname.slice(prefix.length).split('/')
   return Boolean(!rest.length && captureId && name && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(captureId) && name !== '.' && name !== '..' && pathname === clientCapturePath(ownerId, captureId, name))
 }
+
+export function clientCaptureOriginalPath(ownerId: string, captureId: string) {
+  return `${intakePrefix(ownerId)}captures/${captureId}/camera-original/original.heic`
+}
+
+export function isClientCaptureOriginalPath(ownerId: string, pathname: string) {
+  const prefix = `${intakePrefix(ownerId)}captures/`
+  const id = pathname.startsWith(prefix) ? (pathname.slice(prefix.length).split('/')[0] ?? '') : ''
+  return isClientCapturePath(ownerId, clientCapturePath(ownerId, id, 'photo.jpg')) && pathname === clientCaptureOriginalPath(ownerId, id)
+}
