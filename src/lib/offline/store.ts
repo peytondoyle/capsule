@@ -4,7 +4,7 @@ import { archiveAssets, mediaKey, validSnapshot, referencedMediaKeys, MEDIA_REFE
 import { isLinkField, linkChoices, projectLinks, sameField, type LinkReference } from './links'
 import { objectEdits, projectArchive, reviewObject, validObjectChanges } from './edits'
 import { personNote, reviewPersonNote, pendingTaxonomyCreator, reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
-import { reviewShelfName, shelfEdits } from './shelves'
+import { reviewShelfName, shelfCreations, shelfEdits } from './shelves'
 import { occasionMergeBase, occasionMerges, reviewOccasionMerge } from './taxonomy-merge'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from './taxonomy-delete'
 
@@ -131,6 +131,7 @@ export function saveObjectChanges(ownerId: string, id: string, expected: Record<
     }
     for (const field of fields) if (isLinkField(field)) {
       const choices = linkChoices(projected, field)
+      if (field === 'inCollections' && (changes[field] as LinkReference[]).some(ref => shelfCreations(entries, ref.id).length)) throw new Error('Sync this new shelf before adding objects to it.')
       const entity = field === 'atPlace' ? 'place' : field === 'onOccasion' ? 'occasion' : ['givenBy', 'depicted', 'mentioned'].includes(field) ? 'person' : null
       if (entity === 'occasion' && (changes[field] as LinkReference[]).some(ref => occasionMerges(entries).some(entry => entry.mutation.type === 'occasion.merge' && entry.mutation.id === ref.id))) throw new Error('This occasion is being merged. Choose its destination instead.')
       if (entity && (changes[field] as LinkReference[]).some(ref => taxonomyDeletions(entries).some(entry => entry.mutation.type === 'taxonomy.delete' && entry.mutation.entity === entity && entry.mutation.id === ref.id) || archive.snapshot.tombstones.some(row => row.entity === entity && row.id === ref.id))) throw new Error('This entry was removed. Choose another name or create a new entry.')
@@ -270,6 +271,29 @@ export function resolvePersonNote(ownerId: string, id: string, token: string, ch
   })
 }
 
+export function createShelf(ownerId: string, name: string) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const value = taxonomyName(name)
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare this archive before creating shelves offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), mutation: { type: 'collection.create', id: crypto.randomUUID(), values: { name: value } } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+
+export function discardShelfCreation(ownerId: string, operationId: string) {
+  return transact(['outbox'], 'readwrite', async tx => {
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    const entry = entries.find(entry => entry.operationId === operationId)
+    if (!entry || entry.mutation.type !== 'collection.create' || entry.response?.outcome !== 'rejected') throw new Error('This shelf creation changed. Reopen it before discarding.')
+    const id = entry.mutation.id
+    if (entries.some(other => other.operationId !== operationId && (other.mutation.type === 'collection.upsert' && other.mutation.id === id || other.mutation.type === 'object.patch' && Array.isArray(other.mutation.patch.changes.inCollections) && other.mutation.patch.changes.inCollections.some(ref => ref?.id === id)))) throw new Error('Pending edits still use this shelf. Save your pending work before resolving those edits.')
+    await result(outbox.delete([ownerId, operationId]))
+  })
+}
+
 export function saveShelfName(ownerId: string, id: string, expectedName: string, name: string) {
   return transact(['archives', 'outbox'], 'readwrite', async tx => {
     const value = taxonomyName(name)
@@ -278,7 +302,7 @@ export function saveShelfName(ownerId: string, id: string, expectedName: string,
     const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
     if (shelfEdits(entries, id).some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))) throw new Error('Review this shelf’s conflicting name before renaming it again.')
     const current = projectArchive(archive.snapshot, entries).collections.find(row => row.id === id)
-    if (!current || current.localOnly || current.kind !== 'shelf' || !archive.snapshot.collections.some(row => row.id === id) || archive.snapshot.tombstones.some(row => row.entity === 'collection' && row.id === id)) throw new Error('Choose a shelf already saved in the archive.')
+    if (!current || current.localOnly || current.pendingCreation || current.kind !== 'shelf' || !archive.snapshot.collections.some(row => row.id === id) || archive.snapshot.tombstones.some(row => row.entity === 'collection' && row.id === id)) throw new Error('Choose a shelf already saved in the archive.')
     if (current.name !== expectedName) throw new Error('This shelf name changed in another tab. Keep your text and reopen it before saving.')
     if (current.name === value) return
     const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), baseRecord: current, mutation: { type: 'collection.upsert', id, baseRevision: current.revision, base: { name: current.name }, values: { name: value } } }

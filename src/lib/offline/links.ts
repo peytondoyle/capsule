@@ -11,14 +11,14 @@ export const sameField = (field: string, a: unknown, b: unknown) => JSON.stringi
 export const validReferences = (value: unknown, limit = 200): value is LinkReference[] => Array.isArray(value) && value.length <= limit && value.every(ref => ref && typeof ref === 'object' && typeof ref.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref.id) && typeof ref.name === 'string' && !!ref.name.trim() && ref.name.length <= 250 && (ref.create === undefined || ref.create === true)) && new Set(value.map(ref => ref.id)).size === value.length
 
 export function linkChoices(snapshot: SyncSnapshot, field: LinkField): LinkReference[] {
-  const rows = field === 'atPlace' ? snapshot.places : field === 'onOccasion' ? snapshot.occasions : field === 'tagged' ? snapshot.tags : field === 'inCollections' ? snapshot.collections.filter(row => row.kind !== 'smart') : snapshot.people
+  const rows = field === 'atPlace' ? snapshot.places : field === 'onOccasion' ? snapshot.occasions : field === 'tagged' ? snapshot.tags : field === 'inCollections' ? snapshot.collections.filter(row => row.kind !== 'smart' && !row.pendingCreation) : snapshot.people
   return rows.map(row => ({ id: row.id, name: String(row.name), ...(row.localOnly ? { create: true as const } : {}) }))
 }
 
 export function withObjectLinks(snapshot: SyncSnapshot): SyncSnapshot {
   const people = new Map(linkChoices(snapshot, 'givenBy').map(ref => [ref.id, ref]))
   const tags = new Map(linkChoices(snapshot, 'tagged').map(ref => [ref.id, ref]))
-  const collections = new Map(linkChoices(snapshot, 'inCollections').map(ref => [ref.id, ref]))
+  const collections = new Map(snapshot.collections.filter(row => row.kind !== 'smart').map(row => [row.id, { id: row.id, name: String(row.name), ...(row.localOnly ? { create: true as const } : {}) }]))
   const places = new Map(linkChoices(snapshot, 'atPlace').map(ref => [ref.id, ref]))
   const occasions = new Map(linkChoices(snapshot, 'onOccasion').map(ref => [ref.id, ref]))
   const grouped = new Map<string, Record<LinkField, LinkReference[]>>()

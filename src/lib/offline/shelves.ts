@@ -5,10 +5,19 @@ export function shelfEdits(entries: OutboxEntry[], id: string) {
   return entries.filter(entry => entry.mutation.type === 'collection.upsert' && entry.mutation.id === id && Object.hasOwn(entry.mutation.values, 'name')).sort((a, b) => a.sequence - b.sequence)
 }
 
+export function shelfCreations(entries: OutboxEntry[], id?: string) {
+  return entries.filter(entry => entry.mutation.type === 'collection.create' && (!id || entry.mutation.id === id))
+}
+
 export function projectShelfNames(snapshot: SyncSnapshot, entries: OutboxEntry[]): SyncSnapshot {
   const collections = new Map(snapshot.collections.map(row => [row.id, row]))
   for (const entry of [...entries].sort((a, b) => a.sequence - b.sequence)) {
     const mutation = entry.mutation
+    if (entry.ownerId === snapshot.ownerId && mutation.type === 'collection.create') {
+      const current = collections.get(mutation.id)
+      collections.set(mutation.id, { ...(current ?? { id: mutation.id, revision: 1, name: mutation.values.name, kind: 'shelf', sortOrder: 0, impliedTags: [], rule: null, boardX: null, boardY: null, boardW: null, boardH: null, localOnly: true }), pendingCreation: true })
+      continue
+    }
     if (entry.ownerId !== snapshot.ownerId || mutation.type !== 'collection.upsert' || !mutation.id || typeof mutation.values.name !== 'string') continue
     const current = collections.get(mutation.id) ?? entry.baseRecord
     if (current) collections.set(mutation.id, { ...current, name: mutation.values.name })

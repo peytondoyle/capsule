@@ -153,6 +153,8 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
     if (Object.hasOwn(mutation.values, 'note')) {
       if (mutation.entity !== 'person' || !(mutation.base.note === null || typeof mutation.base.note === 'string') || !(mutation.values.note === null || typeof mutation.values.note === 'string' && mutation.values.note.length <= 20000)) return rejected
     } else if (typeof mutation.base.name !== 'string' || typeof mutation.values.name !== 'string' || !mutation.values.name.trim() || mutation.values.name.length > 250) return rejected
+  } else if (mutation.type === 'collection.create') {
+    if (!uuid(mutation.id) || !record(mutation.values) || Object.keys(mutation.values).length !== 1 || typeof mutation.values.name !== 'string' || !mutation.values.name.trim() || mutation.values.name.length > 250) return rejected
   } else if (mutation.type === 'collection.upsert') {
     if (!uuid(mutation.id) || !revision(mutation.baseRevision) || !record(mutation.base) || typeof mutation.base.name !== 'string' || !record(mutation.values) || Object.keys(mutation.values).length !== 1 || typeof mutation.values.name !== 'string' || !mutation.values.name.trim() || mutation.values.name.length > 250) return rejected
   } else if (mutation.type === 'occasion.merge') {
@@ -219,6 +221,17 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
         const deletedAt = new Date()
         await db.insert(syncEntities).values({ ownerId, entity: 'object', entityId: id, revision: currentRevision + 1, deletedAt }).onConflictDoUpdate({ target: [syncEntities.ownerId, syncEntities.entity, syncEntities.entityId], set: { revision: currentRevision + 1, deletedAt, updatedAt: deletedAt } })
         response = { operationId, outcome: 'applied' }
+      }
+    } else if (mutation.type === 'collection.create') {
+      const [state] = await db.select().from(syncEntities).where(and(eq(syncEntities.ownerId, ownerId), eq(syncEntities.entity, 'collection'), eq(syncEntities.entityId, mutation.id))).limit(1)
+      const [mapping] = await db.select().from(syncClientIds).where(and(eq(syncClientIds.ownerId, ownerId), eq(syncClientIds.entity, 'collection'), eq(syncClientIds.clientId, mutation.id))).limit(1)
+      if (!state && !mapping) {
+        const [created] = await db.insert(collections).values({ id: mutation.id, ownerId, name: mutation.values.name.trim(), kind: 'shelf' }).onConflictDoNothing({ target: collections.id }).returning({ id: collections.id })
+        if (created) {
+          await db.insert(syncEntities).values({ ownerId, entity: 'collection', entityId: mutation.id, revision: 1 })
+          await db.insert(syncClientIds).values({ ownerId, entity: 'collection', clientId: mutation.id, serverId: mutation.id })
+          response = { operationId, outcome: 'applied' }
+        }
       }
     } else if (mutation.type === 'collection.upsert') {
       const id = mutation.id!, name = (mutation.values.name as string).trim()
