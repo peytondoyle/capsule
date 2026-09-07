@@ -15,19 +15,20 @@ import { OfflineConflictReview } from './offline-conflict-review'
 import { OfflineShelfOrder } from './offline-shelf-order'
 import { OfflineShelves } from './offline-shelves'
 import { OfflineOccasionMerge } from './offline-occasion-merge'
+import { OfflineCoordinateEditor } from './offline-coordinate-editor'
 import { OfflineNoteEditor } from './offline-note-editor'
 import { OfflineNameEditor } from './offline-name-editor'
 import { OfflineTaxonomyDelete } from './offline-taxonomy-delete'
 import { reviewShelfName, shelfCreations, shelfOrders } from '@/lib/offline/shelves'
 import { occasionMergeBase, occasionMerges, reviewOccasionMerge } from '@/lib/offline/taxonomy-merge'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from '@/lib/offline/taxonomy-delete'
-import { personNote, reviewPersonNote, reviewTaxonomyName, taxonomyEdits, taxonomyKind, type TaxonomyEntity } from '@/lib/offline/taxonomy'
+import { placeCoordinates, reviewPlaceCoordinates, type PlaceCoordinates, personNote, reviewPersonNote, reviewTaxonomyName, taxonomyEdits, taxonomyKind, type TaxonomyEntity } from '@/lib/offline/taxonomy'
 import { objectEdits, projectArchive, reviewObject } from '@/lib/offline/edits'
 import { linkedNames, searchArchive, textValue, type ArchiveRecord } from '@/lib/offline/library'
 import { mediaKey } from '@/lib/offline/media'
 import { prepareArchive, type PreparationProgress } from '@/lib/offline/prepare'
 import { localOwner, offlineShellReady } from '@/lib/offline/session'
-import { saveShelfOrder, discardShelfOrder, createShelf, discardShelfCreation, saveShelfName, resolveShelfName, saveOccasionMerge, resolveOccasionMerge, savePersonNote, resolvePersonNote, reclaimArchiveMedia, listOperations, mediaAvailability, readLibrary, readMedia, readPreparation, resolveObjectChanges, resolveTaxonomyName, resolveTaxonomyDeletion, saveObjectChanges, saveTaxonomyName, saveTaxonomyDeletion, type LocalArchive, type OutboxEntry } from '@/lib/offline/store'
+import { savePlaceCoordinates, resolvePlaceCoordinates, saveShelfOrder, discardShelfOrder, createShelf, discardShelfCreation, saveShelfName, resolveShelfName, saveOccasionMerge, resolveOccasionMerge, savePersonNote, resolvePersonNote, reclaimArchiveMedia, listOperations, mediaAvailability, readLibrary, readMedia, readPreparation, resolveObjectChanges, resolveTaxonomyName, resolveTaxonomyDeletion, saveObjectChanges, saveTaxonomyName, saveTaxonomyDeletion, type LocalArchive, type OutboxEntry } from '@/lib/offline/store'
 import { syncArchive } from '@/lib/offline/sync'
 import type { SyncSnapshot } from '@/lib/offline/types'
 
@@ -154,6 +155,7 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
   const [selectedId, setSelectedId] = useState<string | undefined>(route.objectId)
   const [editRecord, setEditRecord] = useState<ArchiveRecord>()
   const [nameEditing, setNameEditing] = useState<{ entity: TaxonomyEntity; id: string; name: string; review: ReturnType<typeof reviewTaxonomyName> }>()
+  const [coordinateEditing, setCoordinateEditing] = useState<{ id: string; name: string; initial: PlaceCoordinates; count: number; review: ReturnType<typeof reviewPlaceCoordinates> }>()
   const [noteEditing, setNoteEditing] = useState<{ id: string; note: string | null; review: ReturnType<typeof reviewPersonNote> }>()
   const [orderingShelves, setOrderingShelves] = useState(false)
   const [shelvesOpen, setShelvesOpen] = useState(false)
@@ -311,6 +313,12 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
     const record = review?.local ?? snapshot.collections.find(row => row.id === id)
     if (record) setShelfEditing({ id, name: textValue(record.name), review })
   }
+  function openCoordinates(id: string) {
+    if (!visible || !snapshot) return
+    const review = reviewPlaceCoordinates(visible, operations, id), row = snapshot.places.find(row => row.id === id) ?? review?.local
+    if (row) setCoordinateEditing({ id, name: textValue(row.name), initial: placeCoordinates(row), count: snapshot.records.filter(record => record.placeId === id).length, review })
+  }
+  const coordinateReviews = [...new Set(operations.flatMap(entry => entry.mutation.type === 'taxonomy.upsert' && entry.mutation.entity === 'place' && entry.mutation.id && Object.hasOwn(entry.mutation.values, 'coordinates') && ['conflict', 'rejected'].includes(entry.response?.outcome ?? '') ? [entry.mutation.id] : []))]
   const shelfReviews = [...new Set(operations.flatMap(operation => operation.mutation.type === 'collection.upsert' && operation.mutation.id && ['conflict', 'rejected'].includes(operation.response?.outcome ?? '') ? [operation.mutation.id] : []))]
   const reviews = [...new Set(operations.filter((entry) => entry.response?.outcome === 'conflict' || entry.response?.outcome === 'rejected').flatMap((entry) => entry.mutation.type === 'object.patch' ? [entry.mutation.patch.id] : []))]
   const nameReviews = [...new Map(operations.flatMap(operation => {
@@ -373,6 +381,16 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
     if (deleting.review) await resolveTaxonomyDeletion(ownerId, deleting.review.entry.operationId, deleting.review.token, false)
     await changed()
   }} />
+  if (coordinateEditing) return <OfflineCoordinateEditor id={coordinateEditing.id} name={coordinateEditing.name} initial={coordinateEditing.initial} linkedCount={coordinateEditing.count} review={coordinateEditing.review ? { archive: coordinateEditing.review.remote ? placeCoordinates(coordinateEditing.review.remote) : null, rejected: coordinateEditing.review.rejected } : undefined} onClose={() => setCoordinateEditing(undefined)} onSave={async coordinates => {
+    if (localOwner() !== ownerId) throw new Error('Sign in to this account to edit its place coordinates.')
+    if (coordinateEditing.review) await resolvePlaceCoordinates(ownerId, coordinateEditing.id, coordinateEditing.review.token, { coordinates })
+    else await savePlaceCoordinates(ownerId, coordinateEditing.id, coordinateEditing.initial, coordinates)
+    await changed()
+  }} onDiscard={async () => {
+    if (localOwner() !== ownerId) throw new Error('Sign in to this account to review its coordinates.')
+    if (coordinateEditing.review) await resolvePlaceCoordinates(ownerId, coordinateEditing.id, coordinateEditing.review.token, { discard: true })
+    await changed()
+  }} />
   if (noteEditing) return <OfflineNoteEditor id={noteEditing.id} initialNote={noteEditing.note} review={noteEditing.review ? { archiveNote: personNote(textValue(noteEditing.review.remote?.note)), missing: !noteEditing.review.remote, rejected: noteEditing.review.rejected } : undefined} onClose={() => setNoteEditing(undefined)} onSave={async note => {
     if (localOwner() !== ownerId) throw new Error('Sign in to this account to edit its notes.')
     if (noteEditing.review) await resolvePersonNote(ownerId, noteEditing.id, noteEditing.review.token, { note })
@@ -406,6 +424,7 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
     {shelfOrders(operations).some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? '')) ? <button type="button" disabled={!!editRecord} className={buttonClass} onClick={() => { setShelvesOpen(true); setOrderingShelves(true) }}>REVIEW SHELF ORDER</button> : null}
     {shelfCreations(operations).some(entry => entry.response?.outcome === 'rejected') ? <button type="button" disabled={!!editRecord} className={buttonClass} onClick={() => setShelvesOpen(true)}>REVIEW NEW SHELF</button> : null}
     {shelfReviews.map(id => <button key={id} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openShelfName(id)}>REVIEW SHELF NAME · {textValue(snapshot?.collections.find(row => row.id === id)?.name) || 'UNAVAILABLE'}</button>)}
+    {coordinateReviews.map(id => <button key={id} type="button" disabled={!!editRecord} className={buttonClass} onClick={() => openCoordinates(id)}>REVIEW PLACE COORDINATES</button>)}
     {noteReviews.map(id => <button key={id} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openNote(id)}>REVIEW NOTE · {textValue(snapshot?.people.find(row => row.id === id)?.name) || 'PERSON'}</button>)}
     {merges.map(operation => {
       const mutation = operation.mutation
@@ -428,6 +447,7 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
         {entry ? <>
           <p className="mn mt-2 text-[9px] tracking-[0.1em] text-mute-2">{entryStats?.objectCount ?? 0} LINKED {(entryStats?.objectCount ?? 0) === 1 ? 'OBJECT' : 'OBJECTS'}{entry.localOnly ? ' · SAVED ON DEVICE' : ''}</p>
           {directory === 'people' && entry.note ? <p className="mt-4 max-w-prose whitespace-pre-wrap break-words text-[14px] leading-relaxed">{textValue(entry.note)}</p> : null}
+          {directory === 'places' ? <><p className="mn mt-3 text-[9px] tracking-[0.1em]">SAVED COORDINATES · {String(entry.lat ?? 'NOT SET')}, {String(entry.lng ?? 'NOT SET')}</p><button type="button" className={buttonClass} disabled={!!entry.localOnly} onClick={() => openCoordinates(entry.id)}>{coordinateReviews.includes(entry.id) ? 'REVIEW COORDINATES' : 'EDIT COORDINATES'}</button>{taxonomyEdits(operations, 'place', entry.id, 'coordinates').length ? <p className="mn mt-2 text-[9px] text-accent">COORDINATES SAVED ON DEVICE</p> : null}</> : null}
           {directory === 'places' && entry.kind ? <p className="mt-3 text-[14px]">{textValue(entry.kind).replaceAll('_', ' ')}</p> : null}
           {directoryEntity ? <>
             {entry.localOnly ? <p className="mt-3 text-[13px] text-mute-2">This new entry is saved on this device. Name changes sync after its object links.</p> : null}

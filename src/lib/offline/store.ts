@@ -3,7 +3,7 @@ import type { SyncMutation, SyncRequest, SyncResponse, SyncSnapshot } from './ty
 import { archiveAssets, mediaKey, validSnapshot, referencedMediaKeys, MEDIA_REFERENCE_LOCK } from './media'
 import { isLinkField, linkChoices, projectLinks, sameField, type LinkReference } from './links'
 import { objectEdits, projectArchive, reviewObject, validObjectChanges } from './edits'
-import { personNote, reviewPersonNote, pendingTaxonomyCreator, reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
+import { placeCoordinates, validCoordinates, sameCoordinates, reviewPlaceCoordinates, type PlaceCoordinates, personNote, reviewPersonNote, pendingTaxonomyCreator, reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
 import { reviewShelfName, shelfCreations, shelfEdits, shelfOrderBase, shelfOrders, reviewShelfOrder } from './shelves'
 import { occasionMergeBase, occasionMerges, reviewOccasionMerge } from './taxonomy-merge'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from './taxonomy-delete'
@@ -226,6 +226,45 @@ export function resolveTaxonomyName(ownerId: string, entity: TaxonomyEntity, id:
     for (const entry of review.edits) await result(outbox.delete([ownerId, entry.operationId]))
     if (value !== null && value !== review.remote?.name) {
       const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: Math.min(...review.edits.map(entry => entry.sequence)), createdAt: Date.now(), baseRecord: { ...review.remote!, id, revision: review.revision }, mutation: { type: 'taxonomy.upsert', entity, id, baseRevision: review.revision, base: { name: String(review.remote!.name) }, values: { name: value } } }
+      await result(outbox.add(entry))
+    }
+    await result(archives.put({ ...archive, snapshot }))
+  })
+}
+
+export function savePlaceCoordinates(ownerId: string, id: string, expected: PlaceCoordinates, coordinates: PlaceCoordinates) {
+  const value = coordinates
+  if (!validCoordinates(value)) return Promise.reject(new Error('Enter latitude from −90 to 90 and longitude from −180 to 180.'))
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare this archive before editing coordinates offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (taxonomyEdits(entries, 'place', id, 'coordinates').some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))) throw new Error('Review this place’s conflicting coordinates before editing it again.')
+    const current = projectArchive(archive.snapshot, entries).places.find(row => row.id === id)
+    if (!current || current.localOnly || !archive.snapshot.places.some(row => row.id === id) || archive.snapshot.tombstones.some(row => row.entity === 'place' && row.id === id)) throw new Error('Sync this place before editing coordinates, or refresh if they were removed.')
+    if (sameCoordinates(placeCoordinates(current), expected) === false) throw new Error('These coordinates changed in another tab. Keep your text and reopen the place before saving.')
+    if (sameCoordinates(placeCoordinates(current), value)) return
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), baseRecord: current, mutation: { type: 'taxonomy.upsert', entity: 'place', id, baseRevision: current.revision, base: { coordinates: placeCoordinates(current) }, values: { coordinates: value } } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+
+export function resolvePlaceCoordinates(ownerId: string, id: string, token: string, choice: { coordinates: PlaceCoordinates } | { discard: true }) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archives = tx.objectStore('archives'), outbox = tx.objectStore('outbox')
+    const archive = await result<LocalArchive | undefined>(archives.get(ownerId))
+    const entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (!archive) throw new Error('The local archive could not be found.')
+    const review = reviewPlaceCoordinates(archive, entries, id)
+    if (!review || review.token !== token) throw new Error('This coordinate review changed in another tab. Reopen it before choosing.')
+    const discard = 'discard' in choice, value = 'coordinates' in choice ? choice.coordinates : null
+    if (!discard && (!review.remote || review.rejected)) throw new Error('These coordinates cannot be retried. Save your local text before discarding the change.')
+    if (!discard && !validCoordinates(value)) throw new Error('Enter a valid latitude and longitude pair.')
+    const snapshot = { ...archive.snapshot, places: review.remote ? [...archive.snapshot.places.filter(row => row.id !== id), { ...review.remote, id, revision: review.revision }] : archive.snapshot.places.filter(row => row.id !== id) }
+    for (const entry of review.edits) await result(outbox.delete([ownerId, entry.operationId]))
+    if (!discard && value && !sameCoordinates(value, placeCoordinates(review.remote!))) {
+      const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: Math.min(...review.edits.map(entry => entry.sequence)), createdAt: Date.now(), baseRecord: { ...review.remote!, id, revision: review.revision }, mutation: { type: 'taxonomy.upsert', entity: 'place', id, baseRevision: review.revision, base: { coordinates: placeCoordinates(review.remote!) }, values: { coordinates: value } } }
       await result(outbox.add(entry))
     }
     await result(archives.put({ ...archive, snapshot }))

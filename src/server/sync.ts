@@ -5,7 +5,7 @@ import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { isLinkField, singleLink, referenceIds, validReferences } from '@/lib/offline/links'
 import { canWriteLinks, linkBaseline, readObjectLinks, writeObjectLinks } from './sync-links'
 import type { SyncRequest, SyncResponse, SyncSnapshot } from '@/lib/offline/types'
-import { personNote } from '@/lib/offline/taxonomy'
+import { personNote, validCoordinates, validCoordinateBase, placeCoordinates, sameCoordinates, type PlaceCoordinates } from '@/lib/offline/taxonomy'
 import { deletionBase } from '@/lib/offline/taxonomy-delete'
 import { getTxDb, type DbTransaction } from './db/pool'
 import { createObjectInTransaction, type NewObject } from './objects'
@@ -150,7 +150,9 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
     if (!uuid(mutation.id) || !revision(mutation.baseRevision) || !record(mutation.base)) return rejected
   } else if (mutation.type === 'taxonomy.upsert') {
     if (typeof mutation.entity !== 'string' || !['person', 'place', 'occasion'].includes(mutation.entity) || !uuid(mutation.id) || !revision(mutation.baseRevision) || !record(mutation.base) || !record(mutation.values) || Object.keys(mutation.values).length !== 1) return rejected
-    if (Object.hasOwn(mutation.values, 'note')) {
+    if (Object.hasOwn(mutation.values, 'coordinates')) {
+      if (mutation.entity !== 'place' || !validCoordinateBase(mutation.base.coordinates) || !validCoordinates(mutation.values.coordinates)) return rejected
+    } else if (Object.hasOwn(mutation.values, 'note')) {
       if (mutation.entity !== 'person' || !(mutation.base.note === null || typeof mutation.base.note === 'string') || !(mutation.values.note === null || typeof mutation.values.note === 'string' && mutation.values.note.length <= 20000)) return rejected
     } else if (typeof mutation.base.name !== 'string' || typeof mutation.values.name !== 'string' || !mutation.values.name.trim() || mutation.values.name.length > 250) return rejected
   } else if (mutation.type === 'collection.reorder') {
@@ -308,6 +310,20 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
         await db.delete(table).where(and(eq(table.id, id), eq(table.ownerId, ownerId)))
         const deletedAt = new Date()
         await db.insert(syncEntities).values({ ownerId, entity, entityId: id, revision: currentRevision + 1, deletedAt }).onConflictDoUpdate({ target: [syncEntities.ownerId, syncEntities.entity, syncEntities.entityId], set: { revision: currentRevision + 1, deletedAt, updatedAt: deletedAt } })
+        response = { operationId, outcome: 'applied' }
+      }
+    } else if (mutation.type === 'taxonomy.upsert' && mutation.entity === 'place' && Object.hasOwn(mutation.values, 'coordinates')) {
+      const id = mutation.id!, value = mutation.values.coordinates as { lat: number; lng: number }
+      const [current] = await db.select().from(places).where(and(eq(places.id, id), eq(places.ownerId, ownerId))).limit(1).for('update')
+      const [state] = await db.select().from(syncEntities).where(and(eq(syncEntities.ownerId, ownerId), eq(syncEntities.entity, 'place'), eq(syncEntities.entityId, id))).limit(1)
+      const currentRevision = state?.revision ?? 1
+      if (!current || state?.deletedAt || (!sameCoordinates(placeCoordinates(current), value) && !sameCoordinates(placeCoordinates(current), mutation.base!.coordinates as PlaceCoordinates))) {
+        response = { operationId, outcome: 'conflict', conflict: { entity: 'place', id, revision: currentRevision, current: current ? { ...current, revision: currentRevision } : null, fields: ['coordinates'] } }
+      } else {
+        if (!sameCoordinates(placeCoordinates(current), value)) {
+          await db.update(places).set({ lat: value.lat, lng: value.lng, updatedAt: new Date() }).where(and(eq(places.id, id), eq(places.ownerId, ownerId)))
+          await db.insert(syncEntities).values({ ownerId, entity: 'place', entityId: id, revision: currentRevision + 1 }).onConflictDoUpdate({ target: [syncEntities.ownerId, syncEntities.entity, syncEntities.entityId], set: { revision: currentRevision + 1, updatedAt: new Date() } })
+        }
         response = { operationId, outcome: 'applied' }
       }
     } else if (mutation.type === 'taxonomy.upsert' && mutation.entity === 'person' && Object.hasOwn(mutation.values, 'note')) {
