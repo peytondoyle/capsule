@@ -12,12 +12,13 @@ import { archiveIndex, indexObjectIds } from '@/lib/offline/indexes'
 import { offlineHref, readOfflineLocation, type OfflineLocation } from '@/lib/offline/navigation'
 import { OfflineObjectEditor } from './offline-object-editor'
 import { OfflineConflictReview } from './offline-conflict-review'
+import { OfflineShelfOrder } from './offline-shelf-order'
 import { OfflineShelves } from './offline-shelves'
 import { OfflineOccasionMerge } from './offline-occasion-merge'
 import { OfflineNoteEditor } from './offline-note-editor'
 import { OfflineNameEditor } from './offline-name-editor'
 import { OfflineTaxonomyDelete } from './offline-taxonomy-delete'
-import { reviewShelfName, shelfCreations } from '@/lib/offline/shelves'
+import { reviewShelfName, shelfCreations, shelfOrders } from '@/lib/offline/shelves'
 import { occasionMergeBase, occasionMerges, reviewOccasionMerge } from '@/lib/offline/taxonomy-merge'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from '@/lib/offline/taxonomy-delete'
 import { personNote, reviewPersonNote, reviewTaxonomyName, taxonomyEdits, taxonomyKind, type TaxonomyEntity } from '@/lib/offline/taxonomy'
@@ -26,7 +27,7 @@ import { linkedNames, searchArchive, textValue, type ArchiveRecord } from '@/lib
 import { mediaKey } from '@/lib/offline/media'
 import { prepareArchive, type PreparationProgress } from '@/lib/offline/prepare'
 import { localOwner, offlineShellReady } from '@/lib/offline/session'
-import { createShelf, discardShelfCreation, saveShelfName, resolveShelfName, saveOccasionMerge, resolveOccasionMerge, savePersonNote, resolvePersonNote, reclaimArchiveMedia, listOperations, mediaAvailability, readLibrary, readMedia, readPreparation, resolveObjectChanges, resolveTaxonomyName, resolveTaxonomyDeletion, saveObjectChanges, saveTaxonomyName, saveTaxonomyDeletion, type LocalArchive, type OutboxEntry } from '@/lib/offline/store'
+import { saveShelfOrder, discardShelfOrder, createShelf, discardShelfCreation, saveShelfName, resolveShelfName, saveOccasionMerge, resolveOccasionMerge, savePersonNote, resolvePersonNote, reclaimArchiveMedia, listOperations, mediaAvailability, readLibrary, readMedia, readPreparation, resolveObjectChanges, resolveTaxonomyName, resolveTaxonomyDeletion, saveObjectChanges, saveTaxonomyName, saveTaxonomyDeletion, type LocalArchive, type OutboxEntry } from '@/lib/offline/store'
 import { syncArchive } from '@/lib/offline/sync'
 import type { SyncSnapshot } from '@/lib/offline/types'
 
@@ -154,6 +155,7 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
   const [editRecord, setEditRecord] = useState<ArchiveRecord>()
   const [nameEditing, setNameEditing] = useState<{ entity: TaxonomyEntity; id: string; name: string; review: ReturnType<typeof reviewTaxonomyName> }>()
   const [noteEditing, setNoteEditing] = useState<{ id: string; note: string | null; review: ReturnType<typeof reviewPersonNote> }>()
+  const [orderingShelves, setOrderingShelves] = useState(false)
   const [shelvesOpen, setShelvesOpen] = useState(false)
   const [shelfEditing, setShelfEditing] = useState<{ id: string; name: string; review: ReturnType<typeof reviewShelfName> }>()
   const [merging, setMerging] = useState<{ id: string; snapshot: SyncSnapshot; review: ReturnType<typeof reviewOccasionMerge> }>()
@@ -328,7 +330,14 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
     if (shelfEditing.review) await resolveShelfName(ownerId, shelfEditing.id, shelfEditing.review.token, null)
     await changed()
   }} />
-  if (shelvesOpen && snapshot) return <OfflineShelves snapshot={snapshot} operations={operations} onRename={openShelfName} onCreate={async name => {
+  if (orderingShelves && snapshot && visible) return <OfflineShelfOrder snapshot={snapshot} archive={visible} operations={operations} onClose={() => setOrderingShelves(false)} onSave={async (expected, ids) => {
+    if (localOwner() !== ownerId) throw new Error('Sign in to this account to arrange its shelves.')
+    await saveShelfOrder(ownerId, expected, ids); await changed(); setOrderingShelves(false)
+  }} onKeep={async token => {
+    if (localOwner() !== ownerId) throw new Error('Sign in to this account to review its shelves.')
+    await discardShelfOrder(ownerId, token); await changed(); setOrderingShelves(false)
+  }} />
+  if (shelvesOpen && snapshot) return <OfflineShelves onOrder={() => setOrderingShelves(true)} snapshot={snapshot} operations={operations} onRename={openShelfName} onCreate={async name => {
     if (localOwner() !== ownerId) throw new Error('Sign in to this account to create shelves.')
     await createShelf(ownerId, name); await changed()
   }} onDiscardCreation={async operationId => {
@@ -394,6 +403,7 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
     <nav className="flex min-h-14 items-center justify-between border-b border-hair"><button type="button" className={buttonClass} disabled={!!editRecord} onClick={onClose}>CAPTURE & DRAFTS</button><span className="mn text-[9px] tracking-[0.14em] text-mute-2">ARCHIVE ON THIS DEVICE</span></nav>
     <nav aria-label="Saved archive sections" className="flex flex-wrap gap-x-3 border-b border-hair">{(['objects', 'people', 'places', 'occasions'] as const).map(section => <button key={section} type="button" className={`${buttonClass} ${route.section === section ? 'font-semibold text-accent' : 'text-mute-2'}`} aria-current={route.section === section ? 'page' : undefined} disabled={!!editRecord} onClick={() => location.assign(offlineHref({ section }))}>{section === 'objects' ? 'OBJECTS' : indexLabels[section].toUpperCase()}</button>)}</nav>
     {operations.length || pendingPhotos.length ? <div className="mt-4 border-b border-hair pb-3"><p className="mn text-[9px] tracking-[0.1em]">{operations.length + pendingPhotos.length} SAVED CHANGES ON DEVICE</p><button type="button" disabled={syncing || preparing || reclaiming} className={buttonClass} onClick={() => { void sync() }}>{syncing ? 'SYNCING…' : 'SYNC SAVED EDITS'}</button>{reviews.map((id) => <button key={id} type="button" disabled={!!editRecord} className={buttonClass} onClick={() => openObject(id)}>REVIEW LOT {String(snapshot?.records.find((record) => record.id === id)?.lotNo ?? '—')}</button>)}{nameReviews.map(({ entity, id }) => <button key={`${entity}:${id}`} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openName(entity, id)}>REVIEW NAME · {textValue(snapshot?.[taxonomyKind[entity]].find(row => row.id === id)?.name) || entity.toUpperCase()}</button>)}</div> : null}
+    {shelfOrders(operations).some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? '')) ? <button type="button" disabled={!!editRecord} className={buttonClass} onClick={() => { setShelvesOpen(true); setOrderingShelves(true) }}>REVIEW SHELF ORDER</button> : null}
     {shelfCreations(operations).some(entry => entry.response?.outcome === 'rejected') ? <button type="button" disabled={!!editRecord} className={buttonClass} onClick={() => setShelvesOpen(true)}>REVIEW NEW SHELF</button> : null}
     {shelfReviews.map(id => <button key={id} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openShelfName(id)}>REVIEW SHELF NAME · {textValue(snapshot?.collections.find(row => row.id === id)?.name) || 'UNAVAILABLE'}</button>)}
     {noteReviews.map(id => <button key={id} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openNote(id)}>REVIEW NOTE · {textValue(snapshot?.people.find(row => row.id === id)?.name) || 'PERSON'}</button>)}

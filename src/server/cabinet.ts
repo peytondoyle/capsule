@@ -62,7 +62,7 @@ export async function getCabinet(ownerId: string) {
       .select()
       .from(collections)
       .where(and(eq(collections.ownerId, ownerId), eq(collections.kind, 'shelf')))
-      .orderBy(asc(collections.sortOrder)),
+      .orderBy(asc(collections.sortOrder), asc(collections.id)),
     db
       .select({ collectionId: collectionObjects.collectionId, ...face })
       .from(collectionObjects)

@@ -13,6 +13,10 @@ export function projectShelfNames(snapshot: SyncSnapshot, entries: OutboxEntry[]
   const collections = new Map(snapshot.collections.map(row => [row.id, row]))
   for (const entry of [...entries].sort((a, b) => a.sequence - b.sequence)) {
     const mutation = entry.mutation
+    if (entry.ownerId === snapshot.ownerId && mutation.type === 'collection.reorder') {
+      mutation.ids.forEach((id, sortOrder) => { const row = collections.get(id); if (row?.kind === 'shelf') collections.set(id, { ...row, sortOrder }) })
+      continue
+    }
     if (entry.ownerId === snapshot.ownerId && mutation.type === 'collection.create') {
       const current = collections.get(mutation.id)
       collections.set(mutation.id, { ...(current ?? { id: mutation.id, revision: 1, name: mutation.values.name, kind: 'shelf', sortOrder: 0, impliedTags: [], rule: null, boardX: null, boardY: null, boardW: null, boardH: null, localOnly: true }), pendingCreation: true })
@@ -34,4 +38,23 @@ export function reviewShelfName(archive: LocalArchive, entries: OutboxEntry[], i
   const local = projectShelfNames(archive.snapshot, edits).collections.find(row => row.id === id)
   const revision = Number(remote?.revision ?? conflict?.revision ?? 1)
   return { edits, remote, local, revision, rejected: stopped.response?.outcome === 'rejected' || !!remote && remote.kind !== 'shelf', token: JSON.stringify({ ids: edits.map(entry => entry.operationId), remote, revision, response: stopped.response }) }
+}
+
+export function shelfOrderRows(snapshot: SyncSnapshot) {
+  return snapshot.collections.filter(row => row.kind === 'shelf').sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0) || a.id.localeCompare(b.id))
+}
+
+export function shelfOrderBase(snapshot: SyncSnapshot) {
+  return shelfOrderRows(snapshot).map(row => ({ id: row.id, sortOrder: Number(row.sortOrder ?? 0) })).sort((a, b) => a.id.localeCompare(b.id))
+}
+
+export function shelfOrders(entries: OutboxEntry[]) {
+  return entries.filter(entry => entry.mutation.type === 'collection.reorder')
+}
+
+export function reviewShelfOrder(archive: LocalArchive, entries: OutboxEntry[]) {
+  const entry = shelfOrders(entries).find(entry => entry.ownerId === archive.ownerId && ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))
+  if (!entry) return null
+  const base = shelfOrderBase(archive.snapshot), refreshed = archive.refreshedAt > (entry.responseAt ?? Infinity)
+  return { entry, base, refreshed, token: JSON.stringify({ operationId: entry.operationId, base, refreshed, response: entry.response }) }
 }

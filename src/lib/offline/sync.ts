@@ -57,6 +57,10 @@ export async function syncArchive(ownerId: string, options: {
             throw new Error(`The ${field} conflict details are incomplete. Your changes are still saved on this device.`)
           }
         }
+        if (entry.mutation.type === 'collection.reorder' && (response.outcome === 'conflict' || response.outcome === 'rejected')) {
+          const conflict = response.conflict
+          if (response.reason !== undefined || response.outcome === 'conflict' && !conflict || conflict && (conflict.entity !== 'collection' || conflict.id !== entry.mutation.ids[0] || conflict.revision !== 1 || conflict.current !== null || JSON.stringify(conflict.fields) !== '["order"]')) throw new Error('The shelf order response is unexpected. Your order is still saved on this device.')
+        }
         if (entry.mutation.type === 'collection.create' && (response.outcome === 'conflict' || response.reason !== undefined || response.conflict !== undefined)) throw new Error('The shelf creation response is unexpected. Your changes are still saved on this device.')
         if (entry.mutation.type === 'collection.upsert' && (response.outcome === 'conflict' || response.outcome === 'rejected')) {
           const conflict = response.conflict

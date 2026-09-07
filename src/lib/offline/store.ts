@@ -4,7 +4,7 @@ import { archiveAssets, mediaKey, validSnapshot, referencedMediaKeys, MEDIA_REFE
 import { isLinkField, linkChoices, projectLinks, sameField, type LinkReference } from './links'
 import { objectEdits, projectArchive, reviewObject, validObjectChanges } from './edits'
 import { personNote, reviewPersonNote, pendingTaxonomyCreator, reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
-import { reviewShelfName, shelfCreations, shelfEdits } from './shelves'
+import { reviewShelfName, shelfCreations, shelfEdits, shelfOrderBase, shelfOrders, reviewShelfOrder } from './shelves'
 import { occasionMergeBase, occasionMerges, reviewOccasionMerge } from './taxonomy-merge'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from './taxonomy-delete'
 
@@ -268,6 +268,31 @@ export function resolvePersonNote(ownerId: string, id: string, token: string, ch
       await result(outbox.add(entry))
     }
     await result(archives.put({ ...archive, snapshot }))
+  })
+}
+
+export function saveShelfOrder(ownerId: string, expected: string, ids: string[]) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare this archive before arranging shelves offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    const snapshot = projectArchive(archive.snapshot, entries), base = shelfOrderBase(snapshot)
+    if (shelfOrders(entries).length || snapshot.collections.some(row => row.kind === 'shelf' && (row.localOnly || row.pendingCreation))) throw new Error('Sync or review the saved shelf changes before arranging shelves.')
+    if (JSON.stringify(base) !== expected) throw new Error('The shelf order changed in another tab. Reopen the order editor.')
+    if (ids.length < 2 || ids.length !== base.length || new Set(ids).size !== ids.length || ids.some(id => !base.some(row => row.id === id))) throw new Error('Choose the saved manual shelves in this archive.')
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), mutation: { type: 'collection.reorder', base, ids } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+
+export function discardShelfOrder(ownerId: string, token: string) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    const review = archive && reviewShelfOrder(archive, entries)
+    if (!review || !review.refreshed || review.token !== token) throw new Error('Refresh the archive and reopen the order review before keeping its order.')
+    await result(outbox.delete([ownerId, review.entry.operationId]))
   })
 }
 
