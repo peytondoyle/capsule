@@ -58,6 +58,10 @@ export async function syncArchive(ownerId: string, options: {
             throw new Error(`The ${field} conflict details are incomplete. Your changes are still saved on this device.`)
           }
         }
+        if (entry.mutation.type === 'collection.delete' && (response.outcome === 'conflict' || response.outcome === 'rejected')) {
+          const conflict = response.conflict
+          if (response.reason === 'shared_collection' ? response.outcome !== 'rejected' || conflict !== undefined || !Array.isArray(response.shareIds) || response.shareIds.some(id => typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) : response.reason !== undefined || response.shareIds !== undefined || response.outcome === 'conflict' && !conflict || conflict && (conflict.entity !== 'collection' || conflict.id !== entry.mutation.id || !Number.isSafeInteger(conflict.revision) || conflict.revision < 1 || JSON.stringify(conflict.fields) !== '["shelf","memberships"]' || conflict.current !== null && (conflict.current.id !== conflict.id || conflict.current.revision !== conflict.revision || typeof conflict.current.name !== 'string' || conflict.current.ownerId !== undefined && conflict.current.ownerId !== ownerId))) throw new Error('The shelf removal response is unexpected. Your removal is still saved on this device.')
+        }
         if (entry.mutation.type === 'collection.reorder' && (response.outcome === 'conflict' || response.outcome === 'rejected')) {
           const conflict = response.conflict
           if (response.reason !== undefined || response.outcome === 'conflict' && !conflict || conflict && (conflict.entity !== 'collection' || conflict.id !== entry.mutation.ids[0] || conflict.revision !== 1 || conflict.current !== null || JSON.stringify(conflict.fields) !== '["order"]')) throw new Error('The shelf order response is unexpected. Your order is still saved on this device.')

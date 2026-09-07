@@ -58,3 +58,30 @@ export function reviewShelfOrder(archive: LocalArchive, entries: OutboxEntry[]) 
   const base = shelfOrderBase(archive.snapshot), refreshed = archive.refreshedAt > (entry.responseAt ?? Infinity)
   return { entry, base, refreshed, token: JSON.stringify({ operationId: entry.operationId, base, refreshed, response: entry.response }) }
 }
+
+const shelfFields = ['name', 'kind', 'rule', 'boardX', 'boardY', 'boardW', 'boardH', 'impliedTags', 'sortOrder', 'createdAt', 'updatedAt']
+export function shelfRemovalBase(row: Record<string, unknown>, links: string[]): { metadata: Record<string, unknown>; links: string[] } {
+  return { metadata: Object.fromEntries(shelfFields.map(field => [field, row[field] ?? null])), links: [...links].sort() }
+}
+export function shelfDeletionBase(snapshot: SyncSnapshot, id: string) {
+  const row = snapshot.collections.find(row => row.id === id)
+  return row ? shelfRemovalBase(row, snapshot.memberships.filter(link => link.collectionId === id).map(link => `${link.objectId}:${link.sortOrder}`)) : null
+}
+export function shelfDeletions(entries: OutboxEntry[], id?: string) {
+  return entries.filter(entry => entry.mutation.type === 'collection.delete' && (!id || entry.mutation.id === id))
+}
+export function projectShelfDeletions(snapshot: SyncSnapshot, entries: OutboxEntry[]): SyncSnapshot {
+  const ids = new Set(shelfDeletions(entries).flatMap(entry => entry.ownerId === snapshot.ownerId && entry.mutation.type === 'collection.delete' ? [entry.mutation.id] : []))
+  return { ...snapshot, collections: snapshot.collections.filter(row => !ids.has(row.id)), memberships: snapshot.memberships.filter(row => !ids.has(row.collectionId)) }
+}
+export function reviewShelfDeletion(archive: LocalArchive, entries: OutboxEntry[], operationId: string) {
+  const entry = shelfDeletions(entries).find(entry => entry.ownerId === archive.ownerId && entry.operationId === operationId && ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))
+  if (!entry || entry.mutation.type !== 'collection.delete') return null
+  const id = entry.mutation.id
+  const current = archive.snapshot.collections.find(row => row.id === id) ?? null
+  const base = shelfDeletionBase(archive.snapshot, id), refreshed = archive.refreshedAt > (entry.responseAt ?? Infinity)
+  return { entry, current, base, refreshed, token: JSON.stringify({ operationId, current, base, refreshed, response: entry.response }) }
+}
+export function shelfMembershipEdits(entries: OutboxEntry[], id: string) {
+  return entries.some(entry => entry.mutation.type === 'object.patch' && Object.hasOwn(entry.mutation.patch.changes, 'inCollections') && [entry.mutation.patch.base.inCollections, entry.mutation.patch.changes.inCollections].some(refs => Array.isArray(refs) && refs.some(ref => ref?.id === id)))
+}

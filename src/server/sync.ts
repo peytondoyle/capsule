@@ -6,12 +6,14 @@ import { isLinkField, singleLink, referenceIds, validReferences } from '@/lib/of
 import { canWriteLinks, linkBaseline, readObjectLinks, writeObjectLinks } from './sync-links'
 import type { SyncRequest, SyncResponse, SyncSnapshot } from '@/lib/offline/types'
 import { personNote, validCoordinates, validCoordinateBase, placeCoordinates, sameCoordinates, type PlaceCoordinates } from '@/lib/offline/taxonomy'
+import { shelfRemovalBase } from '@/lib/offline/shelves'
 import { deletionBase } from '@/lib/offline/taxonomy-delete'
 import { getTxDb, type DbTransaction } from './db/pool'
 import { createObjectInTransaction, type NewObject } from './objects'
 import {
   collectionObjects,
   collections,
+  shares,
   objectFaces,
   objectPeople,
   objectTags,
@@ -155,6 +157,8 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
     } else if (Object.hasOwn(mutation.values, 'note')) {
       if (mutation.entity !== 'person' || !(mutation.base.note === null || typeof mutation.base.note === 'string') || !(mutation.values.note === null || typeof mutation.values.note === 'string' && mutation.values.note.length <= 20000)) return rejected
     } else if (typeof mutation.base.name !== 'string' || typeof mutation.values.name !== 'string' || !mutation.values.name.trim() || mutation.values.name.length > 250) return rejected
+  } else if (mutation.type === 'collection.delete') {
+    if (!uuid(mutation.id) || !revision(mutation.baseRevision) || !record(mutation.base) || !record(mutation.base.metadata) || !Array.isArray(mutation.base.links) || new Set(mutation.base.links).size !== mutation.base.links.length || !mutation.base.links.every(link => typeof link === 'string' && uuid(link.split(':')[0]) && /^-?\d+$/.test(link.split(':')[1] ?? '') && link.split(':').length === 2 && Number(link.split(':')[1]) >= -2147483648 && Number(link.split(':')[1]) <= 2147483647)) return rejected
   } else if (mutation.type === 'collection.reorder') {
     if (!Array.isArray(mutation.base) || mutation.base.length < 2 || !mutation.base.every(row => record(row) && uuid(row.id) && typeof row.sortOrder === 'number' && Number.isInteger(row.sortOrder) && row.sortOrder >= -2147483648 && row.sortOrder <= 2147483647) || !Array.isArray(mutation.ids) || mutation.ids.length !== mutation.base.length || new Set(mutation.ids).size !== mutation.ids.length || new Set(mutation.base.map(row => row.id)).size !== mutation.base.length) return rejected
     const baseIds = mutation.base.map(row => row.id)
@@ -228,6 +232,27 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
         await db.insert(syncEntities).values({ ownerId, entity: 'object', entityId: id, revision: currentRevision + 1, deletedAt }).onConflictDoUpdate({ target: [syncEntities.ownerId, syncEntities.entity, syncEntities.entityId], set: { revision: currentRevision + 1, deletedAt, updatedAt: deletedAt } })
         response = { operationId, outcome: 'applied' }
       }
+    } else if (mutation.type === 'collection.delete') {
+      const id = mutation.id
+      const [current] = await db.select().from(collections).where(and(eq(collections.id, id), eq(collections.ownerId, ownerId))).limit(1).for('update')
+      const [state] = await db.select().from(syncEntities).where(and(eq(syncEntities.ownerId, ownerId), eq(syncEntities.entity, 'collection'), eq(syncEntities.entityId, id))).limit(1)
+      const currentRevision = state?.revision ?? 1
+      if (current && current.kind === 'shelf' && !state?.deletedAt) {
+        const shared = await db.select({ id: shares.id, ownerId: shares.ownerId }).from(shares).where(eq(shares.collectionId, id))
+        if (shared.length) response = { operationId, outcome: 'rejected', reason: 'shared_collection', shareIds: shared.filter(row => row.ownerId === ownerId).map(row => row.id).sort() }
+        else {
+          const members = await db.select().from(collectionObjects).where(eq(collectionObjects.collectionId, id)).orderBy(collectionObjects.objectId).for('update')
+          const base = shelfRemovalBase(current, members.map(row => `${row.objectId}:${row.sortOrder}`))
+          const expected = shelfRemovalBase(mutation.base.metadata, mutation.base.links)
+          if (currentRevision !== mutation.baseRevision || !Object.keys(base.metadata).every(key => Object.hasOwn(mutation.base.metadata, key)) || JSON.stringify(base) !== JSON.stringify(expected)) response = { operationId, outcome: 'conflict', conflict: { entity: 'collection', id, revision: currentRevision, current: { ...current, revision: currentRevision }, fields: ['shelf', 'memberships'] } }
+          else {
+            await db.delete(collections).where(and(eq(collections.id, id), eq(collections.ownerId, ownerId)))
+            const deletedAt = new Date()
+            await db.insert(syncEntities).values({ ownerId, entity: 'collection', entityId: id, revision: currentRevision + 1, deletedAt }).onConflictDoUpdate({ target: [syncEntities.ownerId, syncEntities.entity, syncEntities.entityId], set: { revision: currentRevision + 1, deletedAt, updatedAt: deletedAt } })
+            response = { operationId, outcome: 'applied' }
+          }
+        }
+      } else response = { operationId, outcome: 'conflict', conflict: { entity: 'collection', id, revision: currentRevision, current: current ? { ...current, revision: currentRevision } : null, fields: ['shelf', 'memberships'] } }
     } else if (mutation.type === 'collection.reorder') {
       const rows = await db.select().from(collections).where(and(eq(collections.ownerId, ownerId), eq(collections.kind, 'shelf'))).orderBy(collections.id).for('update')
       const current = rows.map(row => ({ id: row.id, sortOrder: row.sortOrder }))

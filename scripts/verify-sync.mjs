@@ -38,7 +38,7 @@ try {
   const links = load('src/lib/offline/links.ts', {})
   const syncLinks = load('src/server/sync-links.ts', { ...deps, '@/lib/offline/links': links })
   const deletion = load('src/lib/offline/taxonomy-delete.ts', { './taxonomy': load('src/lib/offline/taxonomy.ts', {}) })
-  const sync = load('src/server/sync.ts', { ...deps, '@/lib/offline/taxonomy': load('src/lib/offline/taxonomy.ts', {}), './objects': objects, '@/lib/offline/links': links, './sync-links': syncLinks, '@/lib/offline/taxonomy-delete': deletion })
+  const sync = load('src/server/sync.ts', { ...deps, '@/lib/offline/shelves': load('src/lib/offline/shelves.ts', {}), '@/lib/offline/taxonomy': load('src/lib/offline/taxonomy.ts', {}), './objects': objects, '@/lib/offline/links': links, './sync-links': syncLinks, '@/lib/offline/taxonomy-delete': deletion })
   const owner = 'sync-owner', other = 'sync-other'
   await db.insert(schema.users).values([{ id: owner }, { id: other }])
   const clientA = randomUUID()

@@ -1,17 +1,18 @@
 import { useState } from 'react'
 import { offlineHref } from '@/lib/offline/navigation'
-import { shelfCreations, shelfEdits } from '@/lib/offline/shelves'
+import { shelfCreations, shelfEdits, shelfOrders, shelfMembershipEdits } from '@/lib/offline/shelves'
 import type { OutboxEntry } from '@/lib/offline/store'
 import type { SyncSnapshot } from '@/lib/offline/types'
 
 const buttonClass = 'mn min-h-11 px-2 text-[9px] tracking-[0.1em] underline disabled:opacity-50'
 
-export function OfflineShelves({ snapshot, operations, onRename, onCreate, onDiscardCreation, onOrder, onClose }: {
+export function OfflineShelves({ snapshot, operations, onRename, onCreate, onDiscardCreation, onRemove, onOrder, onClose }: {
   snapshot: SyncSnapshot
   operations: OutboxEntry[]
   onRename: (id: string) => void
   onCreate: (name: string) => Promise<void>
   onDiscardCreation: (operationId: string) => Promise<void>
+  onRemove: (id: string) => void
   onOrder: () => void
   onClose: () => void
 }) {
@@ -38,7 +39,7 @@ export function OfflineShelves({ snapshot, operations, onRename, onCreate, onDis
     <ul className="mt-6">{shelves.map(row => {
       const count = new Set(snapshot.memberships.filter(link => link.collectionId === row.id && objectIds.has(link.objectId)).map(link => link.objectId)).size
       return <li key={row.id} className="border-b border-hair py-4"><h2 className="break-words text-[16px] font-medium">{String(row.name)}</h2><p className="mn mt-2 text-[9px] tracking-[0.1em] text-mute-2">{count} {count === 1 ? 'OBJECT' : 'OBJECTS'}</p>{shelfEdits(operations, row.id).length ? <p className="mn mt-2 text-[9px] tracking-[0.1em] text-accent">{reviews.includes(row.id) ? 'NAME NEEDS REVIEW' : 'NAME SAVED ON DEVICE'}</p> : null}
-        <button type="button" className={buttonClass} disabled={saving || !!row.localOnly || !!row.pendingCreation} onClick={() => onRename(row.id)}>{reviews.includes(row.id) ? 'REVIEW NAME' : 'RENAME SHELF'}</button><a href={offlineHref({ filter: `collection:${row.id}` })} className={`${buttonClass} inline-flex items-center`}>OPEN OBJECTS</a>
+        <button type="button" className={buttonClass} disabled={saving || !!row.localOnly || !!row.pendingCreation} onClick={() => onRename(row.id)}>{reviews.includes(row.id) ? 'REVIEW NAME' : 'RENAME SHELF'}</button><button type="button" className={buttonClass} disabled={saving || !!row.localOnly || !!row.pendingCreation || shelfEdits(operations, row.id).length > 0 || shelfOrders(operations).length > 0 || shelfMembershipEdits(operations, row.id)} onClick={() => onRemove(row.id)}>REMOVE SHELF</button><a href={offlineHref({ filter: `collection:${row.id}` })} className={`${buttonClass} inline-flex items-center`}>OPEN OBJECTS</a>
         {row.pendingCreation ? <p className="mt-2 text-[13px] text-mute-2">Sync this new shelf before adding objects or renaming it.</p> : row.localOnly ? <p className="mt-2 text-[13px] text-mute-2">Sync this new shelf before renaming it.</p> : null}
       </li>
     })}</ul>

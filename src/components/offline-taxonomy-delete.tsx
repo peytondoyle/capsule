@@ -6,8 +6,8 @@ type Base = ReturnType<typeof deletionBase>
 const buttonClass = 'mn min-h-11 px-2 text-[9px] tracking-[0.1em] underline disabled:opacity-50'
 const labels: Record<string, string> = { name: 'Name', initials: 'Initials', note: 'Notes', lat: 'Latitude', lng: 'Longitude', kind: 'Kind', avatarUrl: 'Portrait' }
 
-export function OfflineTaxonomyDelete({ entity, id, base, current, review, canRetry, refreshed, linkLabel, onRemove, onKeep, onClose }: {
-  entity: TaxonomyEntity
+export function OfflineTaxonomyDelete({ entity, id, base, current, review, canRetry, refreshed, linkLabel, shareIds, onRemove, onKeep, onClose }: {
+  entity: TaxonomyEntity | 'collection'
   id: string
   base: Base
   current?: Base | null
@@ -15,10 +15,12 @@ export function OfflineTaxonomyDelete({ entity, id, base, current, review, canRe
   canRetry: boolean
   refreshed: boolean
   linkLabel: (link: string) => string
+  shareIds?: string[]
   onRemove: () => Promise<void>
   onKeep: () => Promise<void>
   onClose: () => void
 }) {
+  const detailLabels: Record<string, string> = entity === 'collection' ? { ...labels, sortOrder: 'Shelf position', impliedTags: 'Filing tags', rule: 'Saved rule', boardX: 'Board position X', boardY: 'Board position Y', boardW: 'Board width', boardH: 'Board height', createdAt: 'Created', updatedAt: 'Last changed' } : labels
   const [saving, setSaving] = useState(false), [error, setError] = useState('')
   async function save(remove: boolean) {
     setSaving(true); setError('')
@@ -28,15 +30,17 @@ export function OfflineTaxonomyDelete({ entity, id, base, current, review, canRe
   }
   function details(value: Base | null | undefined, label: string) {
     return <section className="min-w-0 border-t border-hair pt-4"><h2 className="mn text-[10px] tracking-[0.1em] text-mute-2">{label}</h2>{value ? <>
-      <dl className="mt-4 grid gap-3">{Object.entries(value.metadata).filter(([key, value]) => labels[key] && value !== null && value !== '').map(([key, value]) => <div key={key}><dt className="mn text-[9px] tracking-[0.1em] text-mute-2">{labels[key]}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-[14px]">{String(value)}</dd></div>)}</dl>
+      <dl className="mt-4 grid gap-3">{Object.entries(value.metadata).filter(([key, value]) => detailLabels[key] && value !== null && value !== '').map(([key, value]) => <div key={key}><dt className="mn text-[9px] tracking-[0.1em] text-mute-2">{detailLabels[key]}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-[14px]">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</dd></div>)}</dl>
       <p className="mn mt-5 text-[9px] tracking-[0.1em]">{value.links.length} {value.links.length === 1 ? 'LINK' : 'LINKS'} TO REMOVE</p>
       <ul className="mt-2 space-y-2">{value.links.map(link => <li key={link} className="break-words text-[13px]">{linkLabel(link)}</li>)}</ul>
     </> : <p className="mt-4 text-[14px]">Already removed from the archive.</p>}</section>
   }
   return <main data-surface="ledger" className="safe-t safe-b min-h-dvh bg-bg text-ink"><div className="mx-auto max-w-[620px] px-6 pb-10">
     <nav className="flex min-h-14 items-center border-b border-hair"><button type="button" className={buttonClass} disabled={saving} onClick={onClose}>BACK TO ARCHIVE</button></nav>
-    <h1 className="mt-8 text-[27px] font-semibold tracking-tight">{review ? 'Review this removal.' : `Remove this ${entity}?`}</h1>
+    <h1 className="mt-8 text-[27px] font-semibold tracking-tight">{review ? 'Review this removal.' : `Remove this ${entity === 'collection' ? 'shelf' : entity}?`}</h1>
     <p className="mt-3 max-w-prose text-[14px] leading-relaxed text-mute-2">{review ? 'The archive could not apply your removal. Compare the saved entry and its current links before choosing again.' : 'This removes the entry and its links from your archive. Your objects and photographs stay in place. The removal is saved on this device before syncing.'}</p>
+    {entity === 'collection' ? <p className="mt-3 text-[14px] text-mute-2">Every object stays in the archive. Removal syncs only if this shelf has no share links.</p> : null}
+    {shareIds ? <section role="status" className="mt-4"><p className="text-[14px]">Share links still use this shelf, so it cannot be removed. No share link was revoked.</p>{shareIds.length ? <ul className="mt-2">{shareIds.map(id => <li key={id} className="mn break-all text-[10px]">Share record {id}</li>)}</ul> : null}</section> : null}
     {review && !refreshed ? <p role="status" className="mt-4 text-[14px]">Return to the archive and sync saved edits to load the latest entry before choosing.</p> : null}
     <div className={`mt-6 grid gap-6 ${review && refreshed ? 'sm:grid-cols-2' : ''}`}>{details(base, 'SAVED REMOVAL')}{review && refreshed ? details(current, 'CURRENT ARCHIVE') : null}</div>
     {error ? <p role="alert" className="mt-4 text-[13px] text-accent">{error}</p> : null}
