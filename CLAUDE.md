@@ -75,7 +75,7 @@ not on what the query returns.
 
 ## Verify
 
-Run all three after every edit:
+Run all three after every edit. Never report work as done without showing this output:
 
 ```bash
 npm run build && npm run typecheck && npm run lint
@@ -253,3 +253,8 @@ Next has breaking changes between majors. Check `node_modules/next/dist/docs/` b
 assuming an API matches training data. Notably in 16: `middleware.ts` → `proxy.ts`,
 Turbopack is the default builder, and `next lint` is gone (`npm run lint` calls eslint
 directly).
+
+## Subagents
+
+Spawn an Explore subagent for any file search, grep, or broad codebase exploration — keeps
+the main context window clean.
