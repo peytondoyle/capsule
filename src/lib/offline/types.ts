@@ -19,7 +19,7 @@ export type OccasionMergeBase = { revision: number; metadata: Record<string, unk
 
 export type SyncMutation =
   | { type: 'object.create'; clientId: string; values: Record<string, unknown> }
-  | { type: 'object.patch'; patch: SyncPatch }
+  | { type: 'object.patch'; patch: SyncPatch; shelfDependencies?: Array<{ id: string; operationId: string }> }
   | { type: 'object.delete'; id: string; baseRevision: number; base?: Record<string, unknown> }
   | { type: 'face.upsert'; objectId: string; faceId?: string; baseRevision?: number; values: Record<string, unknown> }
   | { type: 'face.delete'; id: string; baseRevision: number }
@@ -50,6 +50,7 @@ export type SyncResponse = {
   conflict?: SyncConflict
   reason?: 'name_taken' | 'shared_collection'
   shareIds?: string[]
+  createdShelfId?: string
 }
 
 export type SyncSnapshot = {

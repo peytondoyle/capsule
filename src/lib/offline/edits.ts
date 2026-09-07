@@ -18,6 +18,9 @@ export function objectEdits(entries: OutboxEntry[], id: string) {
 }
 
 export function projectArchive(snapshot: SyncSnapshot, entries: OutboxEntry[]): SyncSnapshot {
+  const canonical = withObjectLinks(snapshot)
+  const blockedShelves = new Set(entries.flatMap(entry => entry.mutation.type === 'collection.create' && entry.ownerId === snapshot.ownerId && (entry.response?.outcome === 'rejected' || snapshot.collections.some(row => row.id === (entry.mutation as { id: string }).id) && entry.response?.createdShelfId !== entry.mutation.id) ? [entry.mutation.id] : []))
+  snapshot = projectShelfNames(snapshot, entries)
   const records = new Map<string, SyncSnapshot['records'][number]>(withObjectLinks(snapshot).records.map((record) => [record.id, record]))
   for (const entry of [...entries].sort((a, b) => a.sequence - b.sequence)) {
     if (entry.ownerId !== snapshot.ownerId || entry.mutation.type !== 'object.patch') continue
@@ -25,6 +28,11 @@ export function projectArchive(snapshot: SyncSnapshot, entries: OutboxEntry[]): 
     const record = records.get(patch.id) ?? entry.baseRecord
     if (record) {
       const next = { ...record, ...patch.changes }
+      const blocked = entry.mutation.shelfDependencies?.filter(dependency => blockedShelves.has(dependency.id)).map(dependency => dependency.id) ?? []
+      if (blocked.length && Array.isArray(next.inCollections)) {
+        const original = canonical.records.find(row => row.id === patch.id)?.inCollections
+        next.inCollections = [...next.inCollections.filter(ref => !blocked.includes(ref.id)), ...(Array.isArray(original) ? original.filter(ref => blocked.includes(ref.id)) : [])]
+      }
       if (Object.hasOwn(patch.changes, 'placeId')) next.atPlace = snapshot.places.filter(row => row.id === next.placeId).map(row => ({ id: row.id, name: String(row.name) }))
       if (Object.hasOwn(patch.changes, 'occasionId')) next.onOccasion = snapshot.occasions.filter(row => row.id === next.occasionId).map(row => ({ id: row.id, name: String(row.name) }))
       records.set(patch.id, next)

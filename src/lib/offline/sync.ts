@@ -30,7 +30,7 @@ export async function syncArchive(ownerId: string, options: {
       if (!response) {
         const res = await fetch('/api/sync', {
           method: 'POST', headers, cache: 'no-store', signal: options.signal,
-          body: JSON.stringify({ operationId: entry.operationId, mutation: entry.mutation }),
+          body: JSON.stringify({ operationId: entry.operationId, mutation: entry.mutation.type === 'object.patch' && entry.mutation.shelfDependencies?.length ? { ...entry.mutation, type: 'object.patchWithShelfDependencies' } : entry.mutation }),
         })
         if (res.status === 401 || res.status === 409) return { status: 'locked' }
         if (!res.ok) throw new Error('Sync could not finish. Your changes are still saved on this device.')

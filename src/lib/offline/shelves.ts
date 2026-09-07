@@ -19,7 +19,7 @@ export function projectShelfNames(snapshot: SyncSnapshot, entries: OutboxEntry[]
     }
     if (entry.ownerId === snapshot.ownerId && mutation.type === 'collection.create') {
       const current = collections.get(mutation.id)
-      collections.set(mutation.id, { ...(current ?? { id: mutation.id, revision: 1, name: mutation.values.name, kind: 'shelf', sortOrder: 0, impliedTags: [], rule: null, boardX: null, boardY: null, boardW: null, boardH: null, localOnly: true }), pendingCreation: true })
+      collections.set(mutation.id, { ...(current ?? { id: mutation.id, revision: 1, name: mutation.values.name, kind: 'shelf', sortOrder: 0, impliedTags: [], rule: null, boardX: null, boardY: null, boardW: null, boardH: null, localOnly: true }), pendingCreation: true, creationRejected: entry.response?.outcome === 'rejected' })
       continue
     }
     if (entry.ownerId !== snapshot.ownerId || mutation.type !== 'collection.upsert' || !mutation.id || typeof mutation.values.name !== 'string') continue
@@ -84,4 +84,23 @@ export function reviewShelfDeletion(archive: LocalArchive, entries: OutboxEntry[
 }
 export function shelfMembershipEdits(entries: OutboxEntry[], id: string) {
   return entries.some(entry => entry.mutation.type === 'object.patch' && Object.hasOwn(entry.mutation.patch.changes, 'inCollections') && [entry.mutation.patch.base.inCollections, entry.mutation.patch.changes.inCollections].some(refs => Array.isArray(refs) && refs.some(ref => ref?.id === id)))
+}
+
+export function shelfDependencies(entries: OutboxEntry[], base: unknown, desired: unknown) {
+  const ids = new Set([base, desired].flatMap(refs => Array.isArray(refs) ? refs.map(ref => ref.id) : []))
+  const dependencies = new Map<string, { id: string; operationId: string }>()
+  for (const entry of [...entries].sort((a, b) => a.sequence - b.sequence)) {
+    if (entry.mutation.type === 'object.patch') for (const dependency of entry.mutation.shelfDependencies ?? []) if (ids.has(dependency.id)) dependencies.set(dependency.id, dependency)
+    if (entry.mutation.type === 'collection.create' && ids.has(entry.mutation.id)) dependencies.set(entry.mutation.id, { id: entry.mutation.id, operationId: entry.operationId })
+  }
+  return [...dependencies.values()].sort((a, b) => a.id.localeCompare(b.id))
+}
+
+export function reviewShelfCreation(entries: OutboxEntry[], operationId: string) {
+  const entry = entries.find(entry => entry.operationId === operationId && entry.mutation.type === 'collection.create' && entry.response?.outcome === 'rejected')
+  if (!entry || entry.mutation.type !== 'collection.create') return null
+  const id = entry.mutation.id
+  const affected = entries.filter(other => other.ownerId === entry.ownerId && other.mutation.type === 'object.patch' && ([other.mutation.patch.base.inCollections, other.mutation.patch.changes.inCollections].some(refs => Array.isArray(refs) && refs.some(ref => ref.id === id)) || other.mutation.shelfDependencies?.some(dependency => dependency.id === id && dependency.operationId === operationId))).sort((a, b) => a.sequence - b.sequence)
+  const safe = affected.every(other => other.sequence > entry.sequence && !other.response && other.mutation.type === 'object.patch' && other.mutation.shelfDependencies?.some(dependency => dependency.id === id && dependency.operationId === operationId)) && !entries.some(other => other.mutation.type === 'collection.upsert' && other.mutation.id === id)
+  return { entry, affected, safe, token: JSON.stringify({ entry, affected }) }
 }

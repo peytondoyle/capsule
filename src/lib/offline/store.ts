@@ -4,7 +4,7 @@ import { archiveAssets, mediaKey, validSnapshot, referencedMediaKeys, MEDIA_REFE
 import { isLinkField, linkChoices, projectLinks, sameField, type LinkReference } from './links'
 import { objectEdits, projectArchive, reviewObject, validObjectChanges } from './edits'
 import { placeCoordinates, validCoordinates, sameCoordinates, reviewPlaceCoordinates, type PlaceCoordinates, personNote, reviewPersonNote, pendingTaxonomyCreator, reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
-import { reviewShelfName, shelfCreations, shelfEdits, shelfOrderBase, shelfOrders, reviewShelfOrder, shelfDeletionBase, shelfDeletions, reviewShelfDeletion, shelfMembershipEdits } from './shelves'
+import { shelfDependencies, reviewShelfCreation, reviewShelfName, shelfCreations, shelfEdits, shelfOrderBase, shelfOrders, reviewShelfOrder, shelfDeletionBase, shelfDeletions, reviewShelfDeletion, shelfMembershipEdits } from './shelves'
 import { occasionMergeBase, occasionMerges, reviewOccasionMerge } from './taxonomy-merge'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from './taxonomy-delete'
 
@@ -132,16 +132,18 @@ export function saveObjectChanges(ownerId: string, id: string, expected: Record<
     for (const field of fields) if (isLinkField(field)) {
       const choices = linkChoices(projected, field)
       if (field === 'inCollections' && (changes[field] as LinkReference[]).some(ref => shelfDeletions(entries, ref.id).length || archive.snapshot.tombstones.some(row => row.entity === 'collection' && row.id === ref.id))) throw new Error('This shelf was removed. Choose another shelf.')
-      if (field === 'inCollections' && (changes[field] as LinkReference[]).some(ref => shelfCreations(entries, ref.id).length)) throw new Error('Sync this new shelf before adding objects to it.')
+      if (field === 'inCollections' && [...(current[field] as LinkReference[] ?? []), ...(changes[field] as LinkReference[])].some(ref => shelfCreations(entries, ref.id).some(entry => entry.response?.outcome === 'rejected') || projected.collections.some(row => row.id === ref.id && row.pendingCreation && !row.localOnly))) throw new Error('Review this new shelf before adding objects to it.')
       const entity = field === 'atPlace' ? 'place' : field === 'onOccasion' ? 'occasion' : ['givenBy', 'depicted', 'mentioned'].includes(field) ? 'person' : null
       if (entity === 'occasion' && (changes[field] as LinkReference[]).some(ref => occasionMerges(entries).some(entry => entry.mutation.type === 'occasion.merge' && entry.mutation.id === ref.id))) throw new Error('This occasion is being merged. Choose its destination instead.')
       if (entity && (changes[field] as LinkReference[]).some(ref => taxonomyDeletions(entries).some(entry => entry.mutation.type === 'taxonomy.delete' && entry.mutation.entity === entity && entry.mutation.id === ref.id) || archive.snapshot.tombstones.some(row => row.entity === entity && row.id === ref.id))) throw new Error('This entry was removed. Choose another name or create a new entry.')
       if ((changes[field] as LinkReference[]).some(ref => !ref.create && !choices.some(choice => choice.id === ref.id))) throw new Error('Choose people, tags, and collections from this archive or add a new name.')
     }
+    const dependencies = shelfDependencies([...objectEdits(entries, id), ...shelfCreations(entries).filter(entry => entry.response?.outcome !== 'rejected')], current.inCollections, changes.inCollections)
+    if (dependencies.length && Object.hasOwn(changes, 'inCollections')) changes = { ...changes, inCollections: (changes.inCollections as LinkReference[]).map(ref => dependencies.some(dependency => dependency.id === ref.id) ? { id: ref.id, name: ref.name } : ref) }
     const entry: OutboxEntry = {
       ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1,
       createdAt: Date.now(), baseRecord: current,
-      mutation: { type: 'object.patch', patch: { id, baseRevision: current.revision, base: Object.fromEntries(fields.map((field) => [field, current[field]])), changes } },
+      mutation: { type: 'object.patch', patch: { id, baseRevision: current.revision, base: Object.fromEntries(fields.map((field) => [field, current[field]])), changes }, ...(dependencies.length ? { shelfDependencies: dependencies } : {}) },
     }
     await result(outbox.add(entry))
     return entry
@@ -165,7 +167,8 @@ export function resolveObjectChanges(ownerId: string, id: string, token: string,
     if (!validObjectChanges(changes)) throw new Error('These local details cannot be synced. Save a copy before discarding them.')
     for (const entry of review.edits) await result(outbox.delete([ownerId, entry.operationId]))
     if (Object.keys(changes).length) {
-      const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: Math.min(...review.edits.map((item) => item.sequence)), createdAt: Date.now(), baseRecord: { ...review.remote!, id, revision: review.revision }, mutation: { type: 'object.patch', patch: { id, baseRevision: review.revision, base: Object.fromEntries(Object.keys(changes).map((field) => [field, review.remote![field]])), changes } } }
+      const dependencies = Object.hasOwn(changes, 'inCollections') ? shelfDependencies(entries, review.remote!.inCollections, changes.inCollections) : []
+      const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: (dependencies.length ? Math.max : Math.min)(...review.edits.map((item) => item.sequence)), createdAt: Date.now(), baseRecord: { ...review.remote!, id, revision: review.revision }, mutation: { type: 'object.patch', patch: { id, baseRevision: review.revision, base: Object.fromEntries(Object.keys(changes).map((field) => [field, review.remote![field]])), changes }, ...(dependencies.length ? { shelfDependencies: dependencies } : {}) } }
       await result(outbox.add(entry))
     }
     if (review.remote) {
@@ -379,13 +382,26 @@ export function createShelf(ownerId: string, name: string) {
   })
 }
 
-export function discardShelfCreation(ownerId: string, operationId: string) {
+export function discardShelfCreation(ownerId: string, operationId: string, token?: string) {
   return transact(['outbox'], 'readwrite', async tx => {
     const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
-    const entry = entries.find(entry => entry.operationId === operationId)
-    if (!entry || entry.mutation.type !== 'collection.create' || entry.response?.outcome !== 'rejected') throw new Error('This shelf creation changed. Reopen it before discarding.')
-    const id = entry.mutation.id
-    if (entries.some(other => other.operationId !== operationId && (other.mutation.type === 'collection.upsert' && other.mutation.id === id || other.mutation.type === 'object.patch' && Array.isArray(other.mutation.patch.changes.inCollections) && other.mutation.patch.changes.inCollections.some(ref => ref?.id === id)))) throw new Error('Pending edits still use this shelf. Save your pending work before resolving those edits.')
+    const review = reviewShelfCreation(entries, operationId)
+    if (!review || review.entry.mutation.type !== 'collection.create' || (token !== undefined && token !== review.token)) throw new Error('This shelf creation changed. Reopen it before discarding.')
+    if (!review.safe || review.affected.length && token === undefined) throw new Error('Pending edits still use this shelf. Save your pending work before resolving those edits.')
+    const id = review.entry.mutation.id
+    const withoutShelf = (refs: unknown) => Array.isArray(refs) ? refs.filter(ref => ref.id !== id) : refs
+    for (const old of review.affected) {
+      if (old.mutation.type !== 'object.patch') continue
+      const patch = old.mutation.patch, base = { ...patch.base }, changes = { ...patch.changes }
+      if (Object.hasOwn(base, 'inCollections')) base.inCollections = withoutShelf(base.inCollections)
+      if (Object.hasOwn(changes, 'inCollections')) {
+        changes.inCollections = withoutShelf(changes.inCollections)
+        if (sameField('inCollections', base.inCollections, changes.inCollections)) { delete base.inCollections; delete changes.inCollections }
+      }
+      const dependencies = old.mutation.shelfDependencies!.filter(dependency => dependency.id !== id)
+      await result(outbox.delete([ownerId, old.operationId]))
+      if (Object.keys(changes).length) await result(outbox.add({ ...old, operationId: crypto.randomUUID(), createdAt: Date.now(), baseRecord: old.baseRecord ? { ...old.baseRecord, inCollections: withoutShelf(old.baseRecord.inCollections) } : undefined, mutation: { type: 'object.patch', patch: { ...patch, base, changes }, ...(dependencies.length ? { shelfDependencies: dependencies } : {}) } }))
+    }
     await result(outbox.delete([ownerId, operationId]))
   })
 }
