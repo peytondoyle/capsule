@@ -7,6 +7,7 @@ import { getCurrentUser } from '@/server/auth'
 import { hasOriginalsStore } from '@/server/blob'
 import { listPendingIntake } from '@/server/intake'
 import { Uploader } from './uploader'
+import { OfflineAccess } from '@/components/offline-access'
 
 export const metadata: Metadata = { title: 'Accession — Capsule' }
 
@@ -45,6 +46,7 @@ export default async function AccessionPage() {
               </p>
             )}
           </div>
+          <OfflineAccess ownerId={user.id} />
 
           {pending.length > 0 ? (
             <Link

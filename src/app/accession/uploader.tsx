@@ -1,407 +1,213 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { upload } from '@vercel/blob/client'
+import { useAuth } from '@clerk/nextjs'
 
 import { Cutout, MonoLabel, SectionLabel } from '@/design'
-import { recordUploadAction, startBatchAction } from '@/server/actions/intake'
-import { enqueueUpload, listQueued, removeQueued } from '@/lib/offline-queue'
-import { clientIntakePath } from '@/lib/blob-path'
-import { toUploadable } from '@/lib/heic'
+import { drainCaptures, type CaptureProgress } from '@/lib/capture-sync'
+import { enqueueUpload, listQueued, listRetainedOriginals, type PendingUpload } from '@/lib/offline-queue'
+import { isHeic } from '@/lib/heic'
 
 type Queued = {
   key: string
   name: string
-  status: 'reading' | 'uploading' | 'done' | 'failed' | 'queued'
+  status: 'saving' | 'unsaved' | CaptureProgress['status']
   previewUrl?: string
-  taken?: string
+  downloadUrl?: string
+  retainedOriginal?: boolean
   error?: string
-}
-
-/** EXIF gives a date and often a place for free, before any model runs. */
-async function readExif(file: File) {
-  try {
-    const exifr = (await import('exifr')).default
-    const data = await exifr.parse(file, {
-      pick: ['DateTimeOriginal', 'CreateDate', 'latitude', 'longitude'],
-    })
-    if (!data) return null
-    const taken: Date | undefined = data.DateTimeOriginal ?? data.CreateDate
-    return {
-      taken: taken ? new Date(taken).toISOString().slice(0, 10) : undefined,
-      lat: typeof data.latitude === 'number' ? data.latitude : undefined,
-      lng: typeof data.longitude === 'number' ? data.longitude : undefined,
-    }
-  } catch {
-    // A photo with no EXIF is completely normal — scanned paper has none.
-    return null
-  }
 }
 
 export function Uploader({ ownerId }: { ownerId: string }) {
   const router = useRouter()
+  const { isLoaded, userId } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
+  const active = useRef<string | undefined>(undefined)
+  useLayoutEffect(() => {
+    active.current = isLoaded && userId === ownerId ? ownerId : undefined
+    return () => { active.current = undefined }
+  }, [isLoaded, userId, ownerId])
+  const previews = useRef(new Map<string, string>())
   const [items, setItems] = useState<Queued[]>([])
-  const [, startTransition] = useTransition()
-  const [batchId, setBatchId] = useState<string | null>(null)
   const [dropping, setDropping] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [hasLocalDrafts, setHasLocalDrafts] = useState(false)
+  const [captureReviews, setCaptureReviews] = useState(0)
+  const [, startTransition] = useTransition()
+  const draining = useRef(false)
+  const drainAgain = useRef(false)
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  /**
-   * Uploads a picker's worth of files and reports, **by index**, which of them
-   * actually reached Blob.
-   *
-   * By index and not by name: the drain deletes the only copy of an offline
-   * capture on the strength of this answer, and names are not unique. An iOS
-   * camera capture through the picker is called `image.jpg` every single time,
-   * so a name-keyed answer lets one success authorise deleting a different
-   * photograph that failed.
-   */
-  async function handleFiles(
-    files: FileList | null,
-    /** These bytes already have an IndexedDB row; do not park a second one. */
-    fromQueue = false,
-  ): Promise<Set<number>> {
-    const landed = new Set<number>()
-    if (!files?.length) return landed
-
-    // Snapshot before the first await. `files` is the input's *live* FileList,
-    // and the onChange handler clears `event.target.value` the moment this
-    // function yields — which it does on `startBatchAction` for the very first
-    // pick of a session. Reading it afterwards found an empty list, so the
-    // first "+ ADD PHOTOGRAPHS" of every session silently uploaded nothing and
-    // the second one worked.
-    const picked = Array.from(files)
-
-    // The basement case, before anything that needs the network. Minting the
-    // batch used to come first, so with no signal the very flow the offline
-    // queue exists for — photograph twenty things in a basement — aborted with
-    // a fetch error and parked nothing. Park every file up front; they upload
-    // on the next visit with signal, batch and all.
-    if (!fromQueue && typeof navigator !== 'undefined' && !navigator.onLine) {
-      const parked: Queued[] = []
-      for (const [i, file] of picked.entries()) {
-        const key = `${Date.now()}-${i}-${file.name}`
-        try {
-          const exif = await readExif(file)
-          const uploadable = await toUploadable(file)
-          if (!uploadable.ok) {
-            parked.push({ key, name: file.name, status: 'failed', error: uploadable.reason })
-            continue
-          }
-          await enqueueUpload(ownerId, uploadable.file, exif?.taken)
-          parked.push({ key, name: file.name, status: 'queued', taken: exif?.taken })
-        } catch {
-          parked.push({
-            key,
-            name: file.name,
-            status: 'failed',
-            error: 'no signal, and this browser will not let the app hold the photo — reconnect and try again',
-          })
-        }
-      }
-      setItems((current) => [...current, ...parked])
-      return landed
+  const localItem = useCallback((item: PendingUpload): Queued => {
+    let url = previews.current.get(item.key)
+    if (!url) {
+      url = URL.createObjectURL(item.bytes)
+      previews.current.set(item.key, url)
     }
-
-    let batch = batchId
-    if (!batch) {
-      try {
-        batch = await startBatchAction('files')
-        setBatchId(batch)
-      } catch (error) {
-        // Without this the whole picker looks like it did nothing at all.
-        setItems((current) => [
-          ...current,
-          {
-            key: `batch-${Date.now()}`,
-            name: 'batch',
-            status: 'failed',
-            error: error instanceof Error ? error.message : 'could not start a batch',
-          },
-        ])
-        return landed
-      }
+    return {
+      key: item.key, name: item.name, status: item.itemId ? 'uploaded' : 'saved',
+      previewUrl: isHeic(new File([], item.name, { type: item.type })) ? undefined : url,
+      downloadUrl: url, retainedOriginal: !!item.itemId,
     }
-
-    const queued: Queued[] = picked.map((file, i) => ({
-      key: `${Date.now()}-${i}-${file.name}`,
-      name: file.name,
-      status: 'reading',
-    }))
-    setItems((current) => [...current, ...queued])
-
-    await Promise.all(
-      picked.map(async (file, i) => {
-        const key = queued[i]!.key
-        const patch = (next: Partial<Queued>) =>
-          setItems((current) =>
-            current.map((item) => (item.key === key ? { ...item, ...next } : item)),
-          )
-
-        // EXIF off the original: the transcode drops it, and the capture date
-        // is the one thing here that cannot be re-derived.
-        const exif = await readExif(file)
-        patch({ status: 'uploading', taken: exif?.taken, previewUrl: URL.createObjectURL(file) })
-
-        // sharp cannot decode HEIC, so a HEIC that reaches Blob becomes an
-        // object with no image and nothing says so. Convert on the device that
-        // already has the codec, or refuse here where the user can see it.
-        const uploadable = await toUploadable(file)
-        if (!uploadable.ok) {
-          patch({ status: 'failed', error: uploadable.reason })
-          return
-        }
-        const outgoing = uploadable.file
-
-        try {
-          // Straight to Blob: the bytes never touch a function, which is the
-          // only way a 12 MB HEIC gets through at all.
-          // Must match the store the token belongs to. capsule-originals is
-          // private, and a mismatch fails silently — the PUT is simply never
-          // issued and the item sits on "uploading" forever.
-          // The path is the client's to propose and the route's to refuse:
-          // @vercel/blob puts the *client's* pathname into the issued token and
-          // discards whatever onBeforeGenerateToken returns, so asking for the
-          // wrong prefix here does not get quietly corrected — it 400s.
-          const blob = await upload(clientIntakePath(ownerId, outgoing.name), outgoing, {
-            access: 'private',
-            handleUploadUrl: '/api/blob/upload',
-            contentType: outgoing.type || undefined,
-          })
-
-          const itemId = await recordUploadAction(batch!, blob.url, exif ?? undefined)
-          landed.add(i)
-          patch({ status: 'done' })
-
-          // Kick the pipeline without blocking the picker: full-frame derive,
-          // then extraction (501 when no key is configured — that is fine).
-          void fetch('/api/derive', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ itemId }),
-          })
-            .then((res) =>
-              res.ok
-                ? fetch('/api/extract', {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ itemId }),
-                  })
-                : null,
-            )
-            .catch(() => {})
-        } catch (error) {
-          if (!navigator.onLine) {
-            // No signal is not a failure — the basement case is the whole
-            // reason the queue exists. Park the bytes; drain on next visit.
-            // Unless they are already parked: a drain that loses connectivity
-            // mid-flight would otherwise write a second row for the same photo
-            // under a fresh key, and both would upload on the next visit.
-            try {
-              if (!fromQueue) await enqueueUpload(ownerId, outgoing, exif?.taken)
-              patch({ status: 'queued' })
-            } catch {
-              patch({
-                status: 'failed',
-                error: 'no signal, and this browser will not let the app hold the photo — reconnect and try again',
-              })
-            }
-          } else {
-            patch({
-              status: 'failed',
-              error: error instanceof Error ? error.message : 'upload failed',
-            })
-          }
-        }
-      }),
-    )
-
-    startTransition(() => router.refresh())
-    return landed
-  }
-
-  // Drain anything parked by an offline session. Runs once per mount, and the
-  // ref survives StrictMode's deliberate double-invoke — without it both passes
-  // read the same rows before either deletes any, and every parked photograph
-  // uploads twice under two batches.
-  const drained = useRef(false)
-  useEffect(() => {
-    if (drained.current || !navigator.onLine) return
-    drained.current = true
-    void (async () => {
-      const queued = await listQueued(ownerId)
-      if (queued.length === 0) return
-
-      const list = new DataTransfer()
-      for (const item of queued) {
-        list.items.add(new File([item.bytes], item.name, { type: item.type }))
-      }
-      const landed = await handleFiles(list.files, true)
-
-      // Only forget bytes that actually reached Blob, matched by position
-      // rather than by name — IndexedDB is the sole copy of an offline capture
-      // until the upload records, handleFiles never throws (it reports failure
-      // in component state), and every iOS camera capture is called image.jpg.
-      for (const [i, item] of queued.entries()) {
-        if (landed.has(i)) await removeQueued(item.key)
-      }
-    })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- drain once on mount
   }, [])
 
-  // Paste and drop are the desktop capture paths — a Mac archive gets fed
-  // screenshots and files as often as camera rolls. Window-level, so neither
-  // needs the hidden input focused; both funnel into handleFiles exactly as a
-  // picked FileList does.
-  //
-  // Through a ref, not the closure: handleFiles captures `batchId`, and a
-  // mount-time subscription would freeze the first render's null — every paste
-  // for the rest of the session would then mint a fresh batch.
-  const handleFilesRef = useRef(handleFiles)
-  handleFilesRef.current = handleFiles
+  const syncRef = useRef<() => Promise<void>>(async () => {})
   useEffect(() => {
-    function fromItems(list: DataTransfer | null) {
-      const images = [...(list?.files ?? [])].filter((f) => f.type.startsWith('image/'))
-      if (images.length === 0) return null
-      const transfer = new DataTransfer()
-      for (const file of images) transfer.items.add(file)
-      return transfer.files
+    syncRef.current = async () => {
+    if (active.current !== ownerId || !navigator.onLine) return
+    if (draining.current) { drainAgain.current = true; return }
+    draining.current = true
+    try {
+      do {
+        drainAgain.current = false
+        const result = await drainCaptures(ownerId, {
+          isActiveOwner: () => active.current === ownerId,
+          onProgress: (progress) => {
+            if (active.current !== ownerId) return
+            setItems((current) => current.map((item) => item.key === progress.key ? { ...item, error: undefined, ...progress } : item))
+          },
+        })
+        if (result === 'locked') setNotice('Photographs are saved on this device. Sign in to this account in a supported browser to upload them.')
+        if (result === 'busy') {
+          clearTimeout(retryTimer.current)
+          retryTimer.current = setTimeout(() => { void syncRef.current() }, 1500)
+        }
+      } while (drainAgain.current && active.current === ownerId && navigator.onLine)
+      const local = await listQueued(ownerId)
+      if (active.current === ownerId) {
+        setCaptureReviews(local.filter(item => item.captureConflict && !item.dismissed).length)
+        setHasLocalDrafts(current => current || local.some(item => !!item.draft && !item.faceTarget))
+        startTransition(() => router.refresh())
+      }
+    } catch {
+      if (active.current === ownerId) setNotice('Could not read the local queue. Keep this tab open and try again.')
+    } finally {
+      draining.current = false
+    }
+    }
+  })
+
+  async function handleFiles(files: FileList | File[] | null) {
+    // The picker clears its live FileList as soon as this function yields.
+    const picked = Array.from(files ?? [])
+    if (!picked.length || active.current !== ownerId) return
+    setNotice('')
+    for (const file of picked) {
+      if (active.current !== ownerId) break
+      const temporaryKey = crypto.randomUUID()
+      setItems((current) => [...current, { key: temporaryKey, name: file.name, status: 'saving' }])
+      try {
+        // Preserve raw camera bytes before EXIF parsing, conversion, or any network request.
+        const key = await enqueueUpload(ownerId, file)
+        if (active.current !== ownerId) break
+        const queued = localItem({ key, ownerId, name: file.name, type: file.type, bytes: file, queuedAt: Date.now() })
+        setItems((current) => current.map((item) => item.key === temporaryKey ? queued : item))
+      } catch {
+        setItems((current) => current.map((item) => item.key === temporaryKey ? {
+          ...item, status: 'unsaved', error: 'This device could not save the photograph. Keep the original and try again after freeing space.',
+        } : item))
+      }
+    }
+    void syncRef.current()
+  }
+
+  const handleFilesRef = useRef(handleFiles)
+  useEffect(() => { handleFilesRef.current = handleFiles })
+
+  useEffect(() => {
+    if (!isLoaded || userId !== ownerId) return
+    active.current = ownerId
+    let mounted = true
+    const urls = previews.current
+    void Promise.all([listQueued(ownerId), listRetainedOriginals(ownerId)]).then(([pending, retained]) => {
+      if (!mounted || active.current !== ownerId) return
+      setHasLocalDrafts([...pending, ...retained].some((item) => !!item.draft && !item.faceTarget))
+      setCaptureReviews(pending.filter(item => item.captureConflict && !item.dismissed).length)
+      setItems((current) => {
+        const known = new Set(current.map((item) => item.key))
+        return [...current, ...[...pending, ...retained].filter((item) => !item.draft && !known.has(item.key)).map(localItem)]
+      })
+      void syncRef.current()
+    }).catch(() => { if (mounted) setNotice('This browser cannot open local photo storage. Photographs cannot be saved here yet.') })
+
+    function retry() { if (active.current === ownerId) void syncRef.current() }
+    function visible() { if (document.visibilityState === 'visible') retry() }
+    function fromTransfer(transfer: DataTransfer | null) {
+      return [...(transfer?.files ?? [])].filter((file) => file.type.startsWith('image/') || /\.(hei[cf]|jpe?g|png|webp|avif)$/i.test(file.name))
     }
     function onPaste(event: ClipboardEvent) {
-      const files = fromItems(event.clipboardData)
-      if (files) {
-        event.preventDefault()
-        void handleFilesRef.current(files)
-      }
+      const files = fromTransfer(event.clipboardData)
+      if (files.length) { event.preventDefault(); void handleFilesRef.current(files) }
     }
     function onDragOver(event: DragEvent) {
-      if (event.dataTransfer?.types.includes('Files')) {
-        event.preventDefault()
-        setDropping(true)
-      }
+      if (event.dataTransfer?.types.includes('Files')) { event.preventDefault(); setDropping(true) }
     }
-    function onDragLeave(event: DragEvent) {
-      if (!event.relatedTarget) setDropping(false)
-    }
+    function onDragLeave(event: DragEvent) { if (!event.relatedTarget) setDropping(false) }
     function onDrop(event: DragEvent) {
       setDropping(false)
-      const files = fromItems(event.dataTransfer)
-      if (files) {
-        event.preventDefault()
-        void handleFilesRef.current(files)
-      }
+      const files = fromTransfer(event.dataTransfer)
+      if (files.length) { event.preventDefault(); void handleFilesRef.current(files) }
     }
+    window.addEventListener('online', retry)
+    window.addEventListener('focus', retry)
+    document.addEventListener('visibilitychange', visible)
     window.addEventListener('paste', onPaste)
     window.addEventListener('dragover', onDragOver)
     window.addEventListener('dragleave', onDragLeave)
     window.addEventListener('drop', onDrop)
     return () => {
+      mounted = false
+      active.current = undefined
+      clearTimeout(retryTimer.current)
+      window.removeEventListener('online', retry)
+      window.removeEventListener('focus', retry)
+      document.removeEventListener('visibilitychange', visible)
       window.removeEventListener('paste', onPaste)
       window.removeEventListener('dragover', onDragOver)
       window.removeEventListener('dragleave', onDragLeave)
       window.removeEventListener('drop', onDrop)
+      for (const url of urls.values()) URL.revokeObjectURL(url)
+      urls.clear()
+      setItems([])
     }
-  }, [])
+  }, [isLoaded, userId, ownerId, localItem])
 
-  const done = items.filter((i) => i.status === 'done').length
-  const failed = items.filter((i) => i.status === 'failed')
+  if (!isLoaded || userId !== ownerId) return <p className="text-sm text-mute-2">Sign in to this account to add photographs.</p>
+  const uploaded = items.filter((item) => item.status === 'uploaded').length
+  const pending = items.filter((item) => item.status === 'saved' || item.status === 'failed' || item.status === 'uploading').length
+  const unsaved = items.filter((item) => item.status === 'unsaved').length
 
   return (
     <div className="relative">
-      {dropping ? (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[14px] border-2 border-dashed border-accent bg-bg/85">
-          <span className="mn text-[10px] tracking-[0.18em] text-accent">DROP TO ADD</span>
-        </div>
-      ) : null}
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        // No `capture` attribute, deliberately: it is mutually exclusive with
-        // `multiple` on iOS, and batches matter more than skipping one tap.
-        // (An earlier comment here claimed capture was set. It never was.)
-        className="sr-only"
-        onChange={(event) => {
-          void handleFiles(event.target.files)
-          event.target.value = ''
-        }}
-      />
-
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="mn h-11 flex-1 rounded-[11px] bg-ink text-[10px] font-medium tracking-[0.14em] text-bg"
-        >
-          + ADD PHOTOGRAPHS
-        </button>
-      </div>
-
-      {/* Upload progress and failures were both inserted into the DOM silently.
-          The visible count is the same string, so this only says it out loud. */}
-      <p aria-live="polite" className="sr-only">
-        {items.length > 0
-          ? `${done} of ${items.length} uploaded${
-              failed.length ? `, ${failed.length} failed` : ''
-            }`
-          : ''}
+      {dropping ? <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center border-2 border-dashed border-accent bg-bg/85"><span className="mn text-[10px] tracking-[0.18em] text-accent">DROP TO ADD</span></div> : null}
+      <input ref={inputRef} type="file" accept="image/*" multiple className="sr-only" onChange={(event) => {
+        void handleFiles(event.target.files)
+        event.target.value = ''
+      }} />
+      <button type="button" onClick={() => inputRef.current?.click()} className="mn h-11 w-full rounded-[11px] bg-ink text-[10px] font-medium tracking-[0.14em] text-bg">+ ADD PHOTOGRAPHS</button>
+      <p aria-live="polite" className="mt-3 text-[13px] text-mute-2">
+        {items.length ? `${uploaded} uploaded · ${pending} saved on this device${unsaved ? ` · ${unsaved} not saved` : ''}` : 'Photographs are saved on this device before uploading.'}
       </p>
-
-      {items.length > 0 ? (
-        <div className="mt-8">
-          <div className="flex items-baseline justify-between">
-            <SectionLabel>This batch</SectionLabel>
-            <MonoLabel>
-              {done} of {items.length} uploaded
-            </MonoLabel>
-          </div>
-
-          <ul className="mt-4 flex flex-wrap gap-6">
-            {items.map((item) => (
-              <li key={item.key} className="w-[124px]">
-                <Cutout
-                  width={112}
-                  silhouette="card"
-                  cut="edge"
-                  rotate={-2}
-                  src={item.previewUrl}
-                  alt={item.name}
-                  label={item.previewUrl ? undefined : 'reading…'}
-                  state={item.status === 'done' ? 'idle' : 'pending'}
-                />
-                <div className="mn mt-3 truncate text-[8.5px] tracking-[0.06em] uppercase text-mute-2">
-                  {item.status === 'failed' ? (
-                    <span className="text-accent">failed</span>
-                  ) : item.status === 'queued' ? (
-                    <span className="text-accent">waiting for signal</span>
-                  ) : item.status === 'done' ? (
-                    (item.taken ?? 'no date in exif')
-                  ) : (
-                    item.status
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          {failed.length > 0 ? (
-            <p className="mn mt-4 text-[9.5px] leading-relaxed tracking-[0.06em] text-accent">
-              {failed[0]!.error?.toUpperCase()}
-            </p>
-          ) : null}
-
-          {done > 0 ? (
-            <a
-              href="/queue"
-              className="mn mt-8 inline-flex h-11 items-center justify-center rounded-[11px] border border-hair-strong px-5 text-[10px] tracking-[0.14em]"
-            >
-              FILE THEM · {done} WAITING
-            </a>
-          ) : null}
-        </div>
-      ) : null}
+      {notice ? <p role="status" className="mt-3 text-[13px] text-accent">{notice}</p> : null}
+      {captureReviews ? <p role="status" className="mt-3 text-[13px] text-accent">{captureReviews} {captureReviews === 1 ? 'filing needs' : 'filings need'} review. Your photographs and details are saved on this device.</p> : null}
+      {hasLocalDrafts || captureReviews ? <a href="/offline.html" className="mn mt-3 inline-flex min-h-11 items-center text-[9px] tracking-[0.1em] underline">{captureReviews ? 'REVIEW LOCAL FILINGS' : 'OPEN LOCAL DRAFTS & FILED COPIES'}</a> : null}
+      {items.length ? <div className="mt-8">
+        <div className="flex items-baseline justify-between"><SectionLabel>Photographs</SectionLabel><MonoLabel>{items.length} TOTAL</MonoLabel></div>
+        <ul className="mt-4 flex flex-wrap gap-x-6 gap-y-8">
+          {items.map((item) => <li key={item.key} className="w-[140px]">
+            <Cutout width={112} silhouette="card" cut="edge" rotate={-2} src={item.previewUrl} alt={item.name} label={item.previewUrl ? undefined : item.name} state={item.status === 'uploading' || item.status === 'saving' ? 'pending' : 'idle'} />
+            <div className="mn mt-3 text-[8.5px] tracking-[0.06em] uppercase text-mute-2">
+              {item.status === 'uploaded' ? 'Uploaded' : item.status === 'uploading' ? 'Saved · uploading' : item.status === 'saving' ? 'Saving on device…' : item.status === 'unsaved' ? 'Not saved' : 'Saved on device'}
+            </div>
+            {item.error ? <p className="mt-2 text-[12px] leading-relaxed text-accent">{item.error}</p> : null}
+            {item.retainedOriginal ? <p className="mt-2 text-[12px] text-mute-2">JPEG uploaded. Camera original is still on this device.</p> : null}
+            {item.downloadUrl && (item.status !== 'uploaded' || item.retainedOriginal) ? <a href={item.downloadUrl} download={item.name} className="mn inline-flex min-h-11 items-center text-[8.5px] tracking-[0.06em] underline">SAVE ORIGINAL</a> : null}
+          </li>)}
+        </ul>
+        {pending ? <button type="button" onClick={() => { setNotice(''); void syncRef.current() }} className="mn mt-6 min-h-11 border-b border-hair-strong px-3 text-[10px] tracking-[0.12em]">RETRY UPLOADS</button> : null}
+        {uploaded ? <a href="/queue" className="mn mt-6 ml-3 inline-flex min-h-11 items-center border-b border-hair-strong px-3 text-[10px] tracking-[0.12em]">OPEN FILING QUEUE</a> : null}
+      </div> : null}
     </div>
   )
 }

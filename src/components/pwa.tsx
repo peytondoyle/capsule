@@ -1,24 +1,36 @@
 'use client'
 
 import { useEffect } from 'react'
+import { useAuth } from '@clerk/nextjs'
 
-/**
- * Registers the worker, asks for storage persistence, and nothing else.
- *
- * The badge lives in <UnfiledBadge>, rendered by the surfaces that actually
- * know the count — this component claimed to keep it honest while the layout
- * mounted it with no count at all, so it only ever cleared.
- */
+import { localOwner, lockLocalArchive, rememberLocalOwner } from '@/lib/offline/session'
+
 export function Pwa() {
+  const { isLoaded, userId } = useAuth()
   useEffect(() => {
     if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-      void navigator.serviceWorker.register('/sw.js', { type: 'module', updateViaCache: 'none' })
+      void navigator.serviceWorker.register('/sw.js', { type: 'module', updateViaCache: 'none' }).catch(() => {})
     }
-    // The IndexedDB offline queue is the sole copy of a capture until its
-    // upload records, and iOS evicts IDB under pressure — but WebKit exempts
-    // persisted storage and explicitly favours Home Screen apps in granting it.
-    if (navigator.storage?.persist) void navigator.storage.persist()
+    if (navigator.storage?.persist) void navigator.storage.persist().catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!isLoaded) return
+    let cancelled = false
+    try {
+      if (!userId || localOwner() !== userId) lockLocalArchive()
+    } catch { return }
+    if (!userId) return
+    void fetch('/api/offline-session', { cache: 'no-store', headers: { 'x-capsule-owner': userId } })
+      .then(async (response) => {
+        if (cancelled) return
+        if (response.status === 401 || response.status === 409) { lockLocalArchive(); return }
+        if (!response.ok) return
+        const value = await response.json()
+        if (!cancelled && value.ownerId === userId) rememberLocalOwner(userId)
+      }).catch(() => {})
+    return () => { cancelled = true }
+  }, [isLoaded, userId])
 
   return null
 }

@@ -50,6 +50,13 @@
       "when": 1785591593616,
       "tag": "0006_daily_vindicator",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788695041652,
+      "tag": "0007_sync-foundation",
+      "breakpoints": true
     }
   ]
 }

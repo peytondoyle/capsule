@@ -15,6 +15,7 @@ import {
   type Silhouette,
 } from '@/design'
 import { PhoneLotSheet } from '@/components/phone-lot-sheet'
+import { ObjectFaces } from '@/components/object-faces'
 import { countLine, lotLabel, receivedLabel } from '@/lib/format'
 import { getObjectDetail, getDefaultLot } from '@/server/archive'
 import { getCurrentUser } from '@/server/auth'
@@ -164,21 +165,21 @@ export default async function CabinetPage({
           <Inspector
             width={344}
             hero={
-              <Cutout
+              <ObjectFaces
                 width={200}
+                faces={detail.faces.map((face) => ({
+                  id: face.id,
+                  role: face.role,
+                  cutoutUrl: face.cutoutUrl,
+                  thumbUrl: face.thumbUrl,
+                  width: face.width,
+                  height: face.height,
+                }))}
                 silhouette={detail.silhouette as Silhouette}
                 cut={detail.cutStyle as CutStyle}
                 rotate={detail.rotationDeg}
-                aspect={aspectOf(detail.faces[0]?.width, detail.faces[0]?.height)}
-                src={detail.faces[0]?.cutoutUrl ?? undefined}
-                eager
-                alt={detail.title}
-                label={
-                  detail.faces.length > 1
-                    ? 'recto · verso →'
-                    : (detail.kind ?? undefined)
-                }
-                interactive
+                title={detail.title}
+                kind={detail.kind}
               />
             }
             lot={

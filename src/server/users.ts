@@ -63,7 +63,11 @@ export async function deleteUser(id: string) {
       .innerJoin(objects, eq(objects.id, objectFaces.objectId))
       .where(eq(objects.ownerId, id)),
     db
-      .select({ originalUrl: intakeItems.originalUrl, cutoutUrl: intakeItems.cutoutUrl })
+      .select({
+        originalUrl: intakeItems.originalUrl,
+        cutoutUrl: intakeItems.cutoutUrl,
+        thumbUrl: intakeItems.thumbUrl,
+      })
       .from(intakeItems)
       .innerJoin(intakeBatches, eq(intakeBatches.id, intakeItems.batchId))
       .where(eq(intakeBatches.ownerId, id)),
@@ -77,7 +81,7 @@ export async function deleteUser(id: string) {
       // silently skipped — so without deriving the path too, every object filed
       // before that keeps a public thumbnail forever after its owner is gone.
       ...faces.flatMap((f) => [f.cutoutUrl, f.thumbUrl, thumbBesideCutout(f.cutoutUrl), f.maskUrl]),
-      ...items.flatMap((i) => [i.cutoutUrl, thumbBesideCutout(i.cutoutUrl)]),
+      ...items.flatMap((i) => [i.cutoutUrl, i.thumbUrl, thumbBesideCutout(i.cutoutUrl)]),
     ],
   })
 

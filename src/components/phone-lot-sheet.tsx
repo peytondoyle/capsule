@@ -1,12 +1,13 @@
 import Link from 'next/link'
 
 import { Cutout, Meta, SheetPhone, aspectOf, type CutStyle, type Silhouette } from '@/design'
+import { ObjectFaces } from './object-faces'
 import { lotLabel, receivedLabel } from '@/lib/format'
 import type { ObjectDetail } from '@/server/archive'
 
 /**
  * The phone answer to the desktop Inspector: tap an object on a narrow
- * viewport and this rises instead. Server-rendered, links only — selection is
+ * viewport and this rises instead. Object selection is
  * already in the URL, so dismissing is a link back to the surface without
  * `?lot=`. The palette comes from the `data-surface` cascade, which is what
  * makes the lot line gold in the Cabinet and rust on the Ledger.
@@ -33,11 +34,19 @@ export function PhoneLotSheet({
     <div
       role="dialog"
       aria-label={detail.title}
-      className="fixed inset-x-0 bottom-0 z-30 mx-auto w-full max-w-[430px] translate-y-0 transition-transform duration-300 starting:translate-y-full motion-reduce:transition-none lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 mx-auto max-h-[85dvh] w-full max-w-[430px] translate-y-0 overflow-y-auto transition-transform duration-300 starting:translate-y-full motion-reduce:transition-none lg:hidden"
     >
       <SheetPhone className="pb-[env(safe-area-inset-bottom)]">
         <div className="mt-4 flex items-center gap-3.5">
-          <Cutout
+          {detail.faces.length ? <div className="shrink-0"><ObjectFaces
+            width={detail.faces.length > 1 ? 120 : 74}
+            faces={detail.faces}
+            silhouette={detail.silhouette as Silhouette}
+            cut={detail.cutStyle as CutStyle}
+            rotate={detail.rotationDeg}
+            title={detail.title}
+            kind={detail.kind}
+          /></div> : <Cutout
             width={74}
             silhouette={detail.silhouette as Silhouette}
             cut={detail.cutStyle as CutStyle}
@@ -47,7 +56,7 @@ export function PhoneLotSheet({
             thumbSrc={recto?.thumbUrl ?? undefined}
             alt=""
             label={recto?.cutoutUrl ? undefined : (detail.kind ?? undefined)}
-          />
+          />}
           <div className="min-w-0">
             <div className="mn text-[9px] tracking-[0.14em] text-accent">
               {lotLabel(detail.lotNo, lotStyle)}

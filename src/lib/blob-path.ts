@@ -24,3 +24,14 @@ export function safeUploadName(filename: string) {
 export function clientIntakePath(ownerId: string, filename: string) {
   return `${intakePrefix(ownerId)}${safeUploadName(filename)}`
 }
+
+export function clientCapturePath(ownerId: string, captureId: string, filename: string) {
+  return `${intakePrefix(ownerId)}captures/${captureId}/${safeUploadName(filename)}`
+}
+
+export function isClientCapturePath(ownerId: string, pathname: string) {
+  const prefix = `${intakePrefix(ownerId)}captures/`
+  if (!pathname.startsWith(prefix)) return false
+  const [captureId, name, ...rest] = pathname.slice(prefix.length).split('/')
+  return Boolean(!rest.length && captureId && name && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(captureId) && name !== '.' && name !== '..' && pathname === clientCapturePath(ownerId, captureId, name))
+}

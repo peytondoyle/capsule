@@ -31,9 +31,9 @@ export async function POST(request: NextRequest) {
   // the corner editor fires it again on every re-cut — so without this a single
   // item could bill Anthropic repeatedly for an answer already stored. `force`
   // is how the re-cut asks for a genuine re-read of changed pixels.
-  const existing = item.suggestions as Record<string, unknown> | null
-  if (!force && existing && Object.keys(existing).length > 0) {
-    return Response.json({ suggestions: existing, cached: true })
+  const extraction = item.ocr as { extraction?: { source?: string } } | null
+  if (!force && extraction?.extraction?.source === source) {
+    return Response.json({ suggestions: item.suggestions, cached: true })
   }
 
   // Counted only once the call is certain to reach the model.
@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
 
     await updateIntakeItem(user.id, itemId, {
       suggestions: suggestions as never,
+      ocr: { ...(item.ocr as Record<string, unknown> | null), extraction: { source } } as never,
       status: 'needs_review',
     })
 

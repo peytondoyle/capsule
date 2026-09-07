@@ -134,6 +134,50 @@ export const ownerCounters = pgTable('owner_counters', {
   nextLot: integer('next_lot').notNull().default(1),
 })
 
+/** Durable offline-sync bookkeeping. Entity rows carry revisions and tombstones
+ * without forcing a migration across every archive table. */
+export const syncEntities = pgTable(
+  'sync_entities',
+  {
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    entity: text('entity').notNull(),
+    entityId: text('entity_id').notNull(),
+    revision: integer('revision').notNull().default(1),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    updatedAt,
+  },
+  (t) => [primaryKey({ columns: [t.ownerId, t.entity, t.entityId] })],
+)
+
+export const syncOperations = pgTable(
+  'sync_operations',
+  {
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    operationId: text('operation_id').notNull(),
+    response: jsonb('response').notNull(),
+    createdAt,
+  },
+  (t) => [primaryKey({ columns: [t.ownerId, t.operationId] })],
+)
+
+export const syncClientIds = pgTable(
+  'sync_client_ids',
+  {
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    entity: text('entity').notNull(),
+    clientId: text('client_id').notNull(),
+    serverId: uuid('server_id').notNull(),
+    createdAt,
+  },
+  (t) => [primaryKey({ columns: [t.ownerId, t.entity, t.clientId] })],
+)
+
 /* ------------------------------------------------------------------ *
  * The five fields: who, when, where from, occasion, the story
  * ------------------------------------------------------------------ */

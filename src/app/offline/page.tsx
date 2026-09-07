@@ -21,10 +21,10 @@ export default function OfflinePage() {
       <hr className="my-7 w-24 border-0 border-t border-hair" />
 
       <p className="max-w-[38ch] text-center text-[13px] leading-relaxed text-mute-1">
-        The archive needs a connection. Anything you photographed while offline is
-        saved on this device and will upload the next time the app opens with
-        signal.
+        Open offline capture to photograph something or see photographs saved on
+        this device. The full archive still needs a connection.
       </p>
+      <a href="/offline.html" className="mn mt-6 inline-flex min-h-11 items-center text-[10px] tracking-[0.12em] underline">OPEN OFFLINE CAPTURE</a>
     </main>
   )
 }

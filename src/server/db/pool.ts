@@ -11,9 +11,8 @@ import * as schema from './schema'
  * `drizzle-orm/neon-http` (see ./index.ts) talks to Neon over stateless HTTP and
  * cannot hold a transaction open across statements, which is fine for every
  * ordinary read and single-statement write and much cheaper per call. Lot
- * allocation is the one place that genuinely needs BEGIN…COMMIT: the counter
- * increment and the object insert have to succeed or fail together, or a failed
- * insert burns a lot number and OBJ-0148 follows OBJ-0146.
+ * allocation and intake filing/processing use transactions so counters, objects,
+ * faces, and intake state commit together.
  *
  * The pooled DATABASE_URL is correct here — pgbouncer's transaction mode pins a
  * server connection for the life of a transaction.
@@ -36,3 +35,5 @@ export function getTxDb() {
   if (!txDb) txDb = create()
   return txDb
 }
+
+export type DbTransaction = Parameters<Parameters<ReturnType<typeof getTxDb>['transaction']>[0]>[0]
