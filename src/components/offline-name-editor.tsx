@@ -5,7 +5,7 @@ import type { TaxonomyEntity } from '@/lib/offline/taxonomy'
 const buttonClass = 'mn min-h-11 px-2 text-[9px] tracking-[0.1em] underline disabled:opacity-50'
 
 export function OfflineNameEditor({ entity, id, initialName, review, onSave, onDiscard, onClose }: {
-  entity: TaxonomyEntity
+  entity: TaxonomyEntity | 'collection'
   id: string
   initialName: string
   review?: { archiveName: string | null; rejected: boolean; nameTaken: boolean; pending?: boolean }

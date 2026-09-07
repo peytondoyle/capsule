@@ -153,6 +153,8 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
     if (Object.hasOwn(mutation.values, 'note')) {
       if (mutation.entity !== 'person' || !(mutation.base.note === null || typeof mutation.base.note === 'string') || !(mutation.values.note === null || typeof mutation.values.note === 'string' && mutation.values.note.length <= 20000)) return rejected
     } else if (typeof mutation.base.name !== 'string' || typeof mutation.values.name !== 'string' || !mutation.values.name.trim() || mutation.values.name.length > 250) return rejected
+  } else if (mutation.type === 'collection.upsert') {
+    if (!uuid(mutation.id) || !revision(mutation.baseRevision) || !record(mutation.base) || typeof mutation.base.name !== 'string' || !record(mutation.values) || Object.keys(mutation.values).length !== 1 || typeof mutation.values.name !== 'string' || !mutation.values.name.trim() || mutation.values.name.length > 250) return rejected
   } else if (mutation.type === 'occasion.merge') {
     if (!uuid(mutation.id) || !uuid(mutation.targetId) || mutation.id === mutation.targetId || !record(mutation.base)) return rejected
     for (const base of [mutation.base.source, mutation.base.target]) {
@@ -216,6 +218,21 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
         await db.delete(objects).where(and(eq(objects.id, id), eq(objects.ownerId, ownerId)))
         const deletedAt = new Date()
         await db.insert(syncEntities).values({ ownerId, entity: 'object', entityId: id, revision: currentRevision + 1, deletedAt }).onConflictDoUpdate({ target: [syncEntities.ownerId, syncEntities.entity, syncEntities.entityId], set: { revision: currentRevision + 1, deletedAt, updatedAt: deletedAt } })
+        response = { operationId, outcome: 'applied' }
+      }
+    } else if (mutation.type === 'collection.upsert') {
+      const id = mutation.id!, name = (mutation.values.name as string).trim()
+      const [current] = await db.select().from(collections).where(and(eq(collections.id, id), eq(collections.ownerId, ownerId))).limit(1).for('update')
+      const [state] = await db.select().from(syncEntities).where(and(eq(syncEntities.ownerId, ownerId), eq(syncEntities.entity, 'collection'), eq(syncEntities.entityId, id))).limit(1)
+      const currentRevision = state?.revision ?? 1
+      const conflict = { entity: 'collection' as const, id, revision: currentRevision, current: current ? { ...current, revision: currentRevision } : null, fields: ['name'] }
+      if (!current || state?.deletedAt) response = { operationId, outcome: 'conflict', conflict }
+      else if (current.kind !== 'shelf') response = { operationId, outcome: 'rejected', conflict }
+      else if (current.name === name) response = { operationId, outcome: 'applied' }
+      else if (current.name !== mutation.base!.name) response = { operationId, outcome: 'conflict', conflict }
+      else {
+        await db.update(collections).set({ name, updatedAt: new Date() }).where(and(eq(collections.id, id), eq(collections.ownerId, ownerId)))
+        await db.insert(syncEntities).values({ ownerId, entity: 'collection', entityId: id, revision: currentRevision + 1 }).onConflictDoUpdate({ target: [syncEntities.ownerId, syncEntities.entity, syncEntities.entityId], set: { revision: currentRevision + 1, updatedAt: new Date() } })
         response = { operationId, outcome: 'applied' }
       }
     } else if (mutation.type === 'occasion.merge') {

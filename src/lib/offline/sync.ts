@@ -57,6 +57,10 @@ export async function syncArchive(ownerId: string, options: {
             throw new Error(`The ${field} conflict details are incomplete. Your changes are still saved on this device.`)
           }
         }
+        if (entry.mutation.type === 'collection.upsert' && (response.outcome === 'conflict' || response.outcome === 'rejected')) {
+          const conflict = response.conflict
+          if (response.reason !== undefined || response.outcome === 'conflict' && !conflict || conflict && (conflict.entity !== 'collection' || conflict.id !== entry.mutation.id || !Number.isSafeInteger(conflict.revision) || conflict.revision < 1 || JSON.stringify(conflict.fields) !== '["name"]' || conflict.current !== null && (conflict.current?.id !== conflict.id || conflict.current.revision !== conflict.revision || typeof conflict.current.name !== 'string' || !['shelf', 'cluster', 'smart'].includes(String(conflict.current.kind)) || conflict.current.ownerId !== undefined && conflict.current.ownerId !== ownerId))) throw new Error('The shelf conflict details are incomplete. Your changes are still saved on this device.')
+        }
         if (entry.mutation.type === 'occasion.merge' && (response.outcome === 'conflict' || response.outcome === 'rejected')) {
           const conflict = response.conflict
           if (response.reason !== undefined || response.outcome === 'conflict' && !conflict || conflict && (conflict.entity !== 'occasion' || conflict.id !== entry.mutation.id || !Number.isSafeInteger(conflict.revision) || conflict.revision < 1 || JSON.stringify(conflict.fields) !== '["source","target","links"]' || conflict.current !== null && (conflict.current?.id !== conflict.id || conflict.current.revision !== conflict.revision || typeof conflict.current.name !== 'string' || conflict.current.ownerId !== undefined && conflict.current.ownerId !== ownerId))) throw new Error('The merge conflict details are incomplete. Your changes are still saved on this device.')

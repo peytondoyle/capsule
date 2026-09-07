@@ -12,10 +12,12 @@ import { archiveIndex, indexObjectIds } from '@/lib/offline/indexes'
 import { offlineHref, readOfflineLocation, type OfflineLocation } from '@/lib/offline/navigation'
 import { OfflineObjectEditor } from './offline-object-editor'
 import { OfflineConflictReview } from './offline-conflict-review'
+import { OfflineShelves } from './offline-shelves'
 import { OfflineOccasionMerge } from './offline-occasion-merge'
 import { OfflineNoteEditor } from './offline-note-editor'
 import { OfflineNameEditor } from './offline-name-editor'
 import { OfflineTaxonomyDelete } from './offline-taxonomy-delete'
+import { reviewShelfName } from '@/lib/offline/shelves'
 import { occasionMergeBase, occasionMerges, reviewOccasionMerge } from '@/lib/offline/taxonomy-merge'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from '@/lib/offline/taxonomy-delete'
 import { personNote, reviewPersonNote, reviewTaxonomyName, taxonomyEdits, taxonomyKind, type TaxonomyEntity } from '@/lib/offline/taxonomy'
@@ -24,7 +26,7 @@ import { linkedNames, searchArchive, textValue, type ArchiveRecord } from '@/lib
 import { mediaKey } from '@/lib/offline/media'
 import { prepareArchive, type PreparationProgress } from '@/lib/offline/prepare'
 import { localOwner, offlineShellReady } from '@/lib/offline/session'
-import { saveOccasionMerge, resolveOccasionMerge, savePersonNote, resolvePersonNote, reclaimArchiveMedia, listOperations, mediaAvailability, readLibrary, readMedia, readPreparation, resolveObjectChanges, resolveTaxonomyName, resolveTaxonomyDeletion, saveObjectChanges, saveTaxonomyName, saveTaxonomyDeletion, type LocalArchive, type OutboxEntry } from '@/lib/offline/store'
+import { saveShelfName, resolveShelfName, saveOccasionMerge, resolveOccasionMerge, savePersonNote, resolvePersonNote, reclaimArchiveMedia, listOperations, mediaAvailability, readLibrary, readMedia, readPreparation, resolveObjectChanges, resolveTaxonomyName, resolveTaxonomyDeletion, saveObjectChanges, saveTaxonomyName, saveTaxonomyDeletion, type LocalArchive, type OutboxEntry } from '@/lib/offline/store'
 import { syncArchive } from '@/lib/offline/sync'
 import type { SyncSnapshot } from '@/lib/offline/types'
 
@@ -152,6 +154,8 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
   const [editRecord, setEditRecord] = useState<ArchiveRecord>()
   const [nameEditing, setNameEditing] = useState<{ entity: TaxonomyEntity; id: string; name: string; review: ReturnType<typeof reviewTaxonomyName> }>()
   const [noteEditing, setNoteEditing] = useState<{ id: string; note: string | null; review: ReturnType<typeof reviewPersonNote> }>()
+  const [shelvesOpen, setShelvesOpen] = useState(false)
+  const [shelfEditing, setShelfEditing] = useState<{ id: string; name: string; review: ReturnType<typeof reviewShelfName> }>()
   const [merging, setMerging] = useState<{ id: string; snapshot: SyncSnapshot; review: ReturnType<typeof reviewOccasionMerge> }>()
   const [deleting, setDeleting] = useState<{ entity: TaxonomyEntity; id: string; base: NonNullable<ReturnType<typeof taxonomyDeletionBase>>; review: ReturnType<typeof reviewTaxonomyDeletion> }>()
   const [preparing, setPreparing] = useState(false)
@@ -299,6 +303,13 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
     const mutation = operation.mutation
     return (operation.response?.outcome === 'conflict' || operation.response?.outcome === 'rejected') && mutation.type === 'taxonomy.upsert' && mutation.entity === 'person' && mutation.id && Object.hasOwn(mutation.values, 'note') ? [mutation.id] : []
   }))]
+  function openShelfName(id: string) {
+    if (!visible || !snapshot) return
+    const review = reviewShelfName(visible, operations, id)
+    const record = review?.local ?? snapshot.collections.find(row => row.id === id)
+    if (record) setShelfEditing({ id, name: textValue(record.name), review })
+  }
+  const shelfReviews = [...new Set(operations.flatMap(operation => operation.mutation.type === 'collection.upsert' && operation.mutation.id && ['conflict', 'rejected'].includes(operation.response?.outcome ?? '') ? [operation.mutation.id] : []))]
   const reviews = [...new Set(operations.filter((entry) => entry.response?.outcome === 'conflict' || entry.response?.outcome === 'rejected').flatMap((entry) => entry.mutation.type === 'object.patch' ? [entry.mutation.patch.id] : []))]
   const nameReviews = [...new Map(operations.flatMap(operation => {
     const mutation = operation.mutation
@@ -307,6 +318,17 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
   const pendingPhotos = photos.filter(photo => !photo.itemId && !photo.dismissed)
   const deletions = taxonomyDeletions(operations)
   const merges = occasionMerges(operations)
+  if (shelfEditing) return <OfflineNameEditor entity="collection" id={shelfEditing.id} initialName={shelfEditing.name} review={shelfEditing.review ? { archiveName: shelfEditing.review.remote ? textValue(shelfEditing.review.remote.name) : null, rejected: shelfEditing.review.rejected, nameTaken: false } : undefined} onClose={() => setShelfEditing(undefined)} onSave={async name => {
+    if (localOwner() !== ownerId) throw new Error('Sign in to this account to rename its shelves.')
+    if (shelfEditing.review) await resolveShelfName(ownerId, shelfEditing.id, shelfEditing.review.token, name)
+    else await saveShelfName(ownerId, shelfEditing.id, shelfEditing.name, name)
+    await changed()
+  }} onDiscard={async () => {
+    if (localOwner() !== ownerId) throw new Error('Sign in to this account to review its changes.')
+    if (shelfEditing.review) await resolveShelfName(ownerId, shelfEditing.id, shelfEditing.review.token, null)
+    await changed()
+  }} />
+  if (shelvesOpen && snapshot) return <OfflineShelves snapshot={snapshot} operations={operations} onRename={openShelfName} onClose={() => setShelvesOpen(false)} />
   if (merging) {
     const mutation = merging.review?.entry.mutation
     const saved = mutation?.type === 'occasion.merge' ? mutation : null
@@ -366,6 +388,7 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
     <nav className="flex min-h-14 items-center justify-between border-b border-hair"><button type="button" className={buttonClass} disabled={!!editRecord} onClick={onClose}>CAPTURE & DRAFTS</button><span className="mn text-[9px] tracking-[0.14em] text-mute-2">ARCHIVE ON THIS DEVICE</span></nav>
     <nav aria-label="Saved archive sections" className="flex flex-wrap gap-x-3 border-b border-hair">{(['objects', 'people', 'places', 'occasions'] as const).map(section => <button key={section} type="button" className={`${buttonClass} ${route.section === section ? 'font-semibold text-accent' : 'text-mute-2'}`} aria-current={route.section === section ? 'page' : undefined} disabled={!!editRecord} onClick={() => location.assign(offlineHref({ section }))}>{section === 'objects' ? 'OBJECTS' : indexLabels[section].toUpperCase()}</button>)}</nav>
     {operations.length || pendingPhotos.length ? <div className="mt-4 border-b border-hair pb-3"><p className="mn text-[9px] tracking-[0.1em]">{operations.length + pendingPhotos.length} SAVED CHANGES ON DEVICE</p><button type="button" disabled={syncing || preparing || reclaiming} className={buttonClass} onClick={() => { void sync() }}>{syncing ? 'SYNCING…' : 'SYNC SAVED EDITS'}</button>{reviews.map((id) => <button key={id} type="button" disabled={!!editRecord} className={buttonClass} onClick={() => openObject(id)}>REVIEW LOT {String(snapshot?.records.find((record) => record.id === id)?.lotNo ?? '—')}</button>)}{nameReviews.map(({ entity, id }) => <button key={`${entity}:${id}`} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openName(entity, id)}>REVIEW NAME · {textValue(snapshot?.[taxonomyKind[entity]].find(row => row.id === id)?.name) || entity.toUpperCase()}</button>)}</div> : null}
+    {shelfReviews.map(id => <button key={id} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openShelfName(id)}>REVIEW SHELF NAME · {textValue(snapshot?.collections.find(row => row.id === id)?.name) || 'UNAVAILABLE'}</button>)}
     {noteReviews.map(id => <button key={id} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openNote(id)}>REVIEW NOTE · {textValue(snapshot?.people.find(row => row.id === id)?.name) || 'PERSON'}</button>)}
     {merges.map(operation => {
       const mutation = operation.mutation
@@ -379,6 +402,7 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
       const review = visible ? reviewTaxonomyDeletion(visible, operations, operation.operationId) : null
       return <div key={operation.operationId} className="mt-3 border-b border-hair pb-2"><p className="break-words text-[13px]">{textValue(operation.baseRecord?.name) || mutation.entity} · {review ? 'Removal needs review' : 'Removal saved on device; waiting for sync'}</p>{review ? <button type="button" disabled={!!editRecord} className={buttonClass} onClick={() => setDeleting({ entity: mutation.entity, id: mutation.id, base: mutation.base, review })}>REVIEW REMOVAL</button> : null}<a className={`${buttonClass} inline-flex items-center`} href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ entity: mutation.entity, id: mutation.id, ...mutation.base }, null, 2))}`} download={`capsule-${mutation.id}-removal.json`}>SAVE ENTRY AND LINKS</a></div>
     })}
+    {snapshot ? <button type="button" disabled={!!editRecord} className={buttonClass} onClick={() => setShelvesOpen(true)}>MANAGE SHELVES</button> : null}
     {editStatus ? <p role="status" className="mt-3 text-[13px] text-mute-2">{editStatus}</p> : null}
     {selected && visible && snapshot ? <LocalObject key={selected.id} ownerId={ownerId} snapshot={snapshot} archive={visible} operations={operations} record={selected} editing={!!editRecord} photos={photos} onPhotoEdit={setPhotoEditing} onEdit={setEditRecord} onBack={returnToList} onChanged={changed} /> : <>
       {directory && route.entry ? <header className="mt-6">

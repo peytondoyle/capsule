@@ -10,6 +10,7 @@ const { render } = await import(pathToFileURL(output))
 const base = { entity: 'place', id: 'place-1', initialName: 'The Fillmore', onSave: async () => {}, onDiscard: async () => {}, onClose: () => {} }
 const text = html => html.replace(/<[^>]*>/g, ' ').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim()
 try {
+  assert.match(render({ ...base, entity: 'collection' }), /Rename this collection/);
   const normal = render(base)
   assert.match(normal, /Rename this place/); assert.match(normal, /<input[^>]*required[^>]*maxlength="250"/i); assert.match(normal, /SAVE NAME ON DEVICE/); assert.match(normal, /BACK TO ARCHIVE/)
   const duplicate = render({ ...base, review: { archiveName: 'The Fillmore', rejected: false, nameTaken: true } })

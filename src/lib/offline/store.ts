@@ -4,6 +4,7 @@ import { archiveAssets, mediaKey, validSnapshot, referencedMediaKeys, MEDIA_REFE
 import { isLinkField, linkChoices, projectLinks, sameField, type LinkReference } from './links'
 import { objectEdits, projectArchive, reviewObject, validObjectChanges } from './edits'
 import { personNote, reviewPersonNote, pendingTaxonomyCreator, reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
+import { reviewShelfName, shelfEdits } from './shelves'
 import { occasionMergeBase, occasionMerges, reviewOccasionMerge } from './taxonomy-merge'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from './taxonomy-delete'
 
@@ -263,6 +264,43 @@ export function resolvePersonNote(ownerId: string, id: string, token: string, ch
     for (const entry of review.edits) await result(outbox.delete([ownerId, entry.operationId]))
     if (!discard && value !== personNote(review.remote!.note as string | null)) {
       const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: Math.min(...review.edits.map(entry => entry.sequence)), createdAt: Date.now(), baseRecord: { ...review.remote!, id, revision: review.revision }, mutation: { type: 'taxonomy.upsert', entity: 'person', id, baseRevision: review.revision, base: { note: personNote(review.remote!.note as string | null) }, values: { note: value } } }
+      await result(outbox.add(entry))
+    }
+    await result(archives.put({ ...archive, snapshot }))
+  })
+}
+
+export function saveShelfName(ownerId: string, id: string, expectedName: string, name: string) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const value = taxonomyName(name)
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare this archive before renaming its shelves offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (shelfEdits(entries, id).some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))) throw new Error('Review this shelf’s conflicting name before renaming it again.')
+    const current = projectArchive(archive.snapshot, entries).collections.find(row => row.id === id)
+    if (!current || current.localOnly || current.kind !== 'shelf' || !archive.snapshot.collections.some(row => row.id === id) || archive.snapshot.tombstones.some(row => row.entity === 'collection' && row.id === id)) throw new Error('Choose a shelf already saved in the archive.')
+    if (current.name !== expectedName) throw new Error('This shelf name changed in another tab. Keep your text and reopen it before saving.')
+    if (current.name === value) return
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), baseRecord: current, mutation: { type: 'collection.upsert', id, baseRevision: current.revision, base: { name: current.name }, values: { name: value } } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+
+export function resolveShelfName(ownerId: string, id: string, token: string, name: string | null) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archives = tx.objectStore('archives'), outbox = tx.objectStore('outbox')
+    const archive = await result<LocalArchive | undefined>(archives.get(ownerId))
+    const entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (!archive) throw new Error('The local archive could not be found.')
+    const review = reviewShelfName(archive, entries, id)
+    if (!review || review.token !== token) throw new Error('This shelf name review changed in another tab. Reopen it before choosing.')
+    if (name !== null && (!review.remote || review.rejected)) throw new Error('This shelf cannot be renamed from this review. Save your local name before discarding it.')
+    const value = name === null ? null : taxonomyName(name)
+    const snapshot = { ...archive.snapshot, collections: review.remote ? [...archive.snapshot.collections.filter(row => row.id !== id), { ...review.remote, id, revision: review.revision }] : archive.snapshot.collections.filter(row => row.id !== id) }
+    for (const entry of review.edits) await result(outbox.delete([ownerId, entry.operationId]))
+    if (value !== null && value !== review.remote!.name) {
+      const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: Math.min(...review.edits.map(entry => entry.sequence)), createdAt: Date.now(), baseRecord: { ...review.remote!, id, revision: review.revision }, mutation: { type: 'collection.upsert', id, baseRevision: review.revision, base: { name: review.remote!.name }, values: { name: value } } }
       await result(outbox.add(entry))
     }
     await result(archives.put({ ...archive, snapshot }))

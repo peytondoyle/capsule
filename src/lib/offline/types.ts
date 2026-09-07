@@ -26,7 +26,7 @@ export type SyncMutation =
   | { type: 'taxonomy.upsert'; entity: 'person' | 'place' | 'occasion' | 'tag'; id?: string; baseRevision?: number; base?: Record<string, unknown>; values: Record<string, unknown> }
   | { type: 'taxonomy.delete'; entity: 'person' | 'place' | 'occasion'; id: string; baseRevision: number; base: { metadata: Record<string, unknown>; links: string[] } }
   | { type: 'occasion.merge'; id: string; targetId: string; base: { source: OccasionMergeBase; target: OccasionMergeBase } }
-  | { type: 'collection.upsert'; id?: string; baseRevision?: number; values: Record<string, unknown> }
+  | { type: 'collection.upsert'; id?: string; baseRevision?: number; base?: Record<string, unknown>; values: Record<string, unknown> }
   | { type: 'collection.delete'; id: string; baseRevision: number }
   | { type: 'membership.upsert'; collectionId: string; objectId: string; sortOrder?: number }
   | { type: 'membership.delete'; collectionId: string; objectId: string }
