@@ -2,7 +2,7 @@ import 'server-only'
 import { and, eq, ne, sql } from 'drizzle-orm'
 import { isLinkField, personRoles, referenceIds, type LinkField, type LinkReference } from '@/lib/offline/links'
 import type { DbTransaction } from './db/pool'
-import { collectionObjects, collections, objectPeople, objectTags, objects, occasions, places, people, syncClientIds, tags } from './db/schema'
+import { collectionObjects, collections, objectPeople, objectTags, objects, occasions, places, people, syncClientIds, syncEntities, tags } from './db/schema'
 
 const tableFor = (field: LinkField) => field === 'atPlace' ? places : field === 'onOccasion' ? occasions : field === 'tagged' ? tags : field === 'inCollections' ? collections : people
 const entityFor = (field: LinkField) => field === 'atPlace' ? 'place' : field === 'onOccasion' ? 'occasion' : field === 'tagged' ? 'tag' : field === 'inCollections' ? 'collection' : 'person'
@@ -31,6 +31,8 @@ export async function canWriteLinks(db: DbTransaction, ownerId: string, changes:
     const table = tableFor(field)
     for (const ref of value as LinkReference[]) {
       const mapped = await mappedId(db, ownerId, field, ref.id)
+      const [state] = await db.select({ deletedAt: syncEntities.deletedAt }).from(syncEntities).where(and(eq(syncEntities.ownerId, ownerId), eq(syncEntities.entity, entityFor(field)), eq(syncEntities.entityId, mapped ?? ref.id))).limit(1)
+      if (state?.deletedAt) return false
       const [row] = await db.select().from(table).where(eq(table.id, mapped ?? ref.id)).limit(1)
       if (row ? row.ownerId !== ownerId || (field === 'inCollections' && 'kind' in row && row.kind === 'smart') : mapped || !ref.create) return false
     }

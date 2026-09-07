@@ -6,14 +6,15 @@ import vm from 'node:vm'
 import { transformSync } from 'esbuild'
 const require = createRequire(import.meta.url), { Pool } = require('pg'), { drizzle } = require('drizzle-orm/node-postgres'), orm = require('drizzle-orm')
 const port = Number(process.env.CAPSULE_TEST_PG_PORT); assert.ok(port)
-const connection = { host: '/private/tmp', port, user: userInfo().username }, admin = new Pool({ ...connection, database: 'postgres' }), database = `taxonomy_${process.pid}`; let pool
+const connection = { host: process.env.CAPSULE_TEST_PG_SOCKET ?? '/private/tmp', port, user: userInfo().username }, admin = new Pool({ ...connection, database: 'postgres' }), database = `taxonomy_${process.pid}`; let pool
 function load(file, dependencies) { const loadedModule = { exports: {} }; vm.runInNewContext(transformSync(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code, { module: loadedModule, exports: loadedModule.exports, Date, console, require: name => { assert.ok(name in dependencies, name); return dependencies[name] } }); return loadedModule.exports }
 try {
   await admin.query(`create database ${database}`); pool = new Pool({ ...connection, database })
   for (const name of ['0000_cute_jigsaw', '0001_enable_pg_trgm', '0002_tired_moondragon', '0003_fuzzy_martin_li', '0004_plain_black_bird', '0005_watery_quasimodo', '0006_daily_vindicator', '0007_sync-foundation']) await pool.query(readFileSync(new URL(`../drizzle/${name}.sql`, import.meta.url), 'utf8'))
   const schema = load('src/server/db/schema.ts', { 'drizzle-orm': orm, 'drizzle-orm/pg-core': require('drizzle-orm/pg-core') }), db = drizzle(pool, { schema })
   const deps = { 'server-only': {}, 'drizzle-orm': orm, './db': { getDb: () => db }, './db/pool': { getTxDb: () => db }, './db/schema': schema, './objects': load('src/server/objects.ts', { 'server-only': {}, 'drizzle-orm': orm, './db': { getDb: () => db }, './db/pool': { getTxDb: () => db }, './db/schema': schema, './people': {}, './taxonomy': {} }), '@/lib/offline/links': load('src/lib/offline/links.ts', {}), './sync-links': load('src/server/sync-links.ts', { 'server-only': {}, 'drizzle-orm': orm, './db/pool': { getTxDb: () => db }, './db/schema': schema, '@/lib/offline/links': load('src/lib/offline/links.ts', {}) }) }
-  const sync = load('src/server/sync.ts', deps), owner = 'tax-owner', other = 'tax-other'; await db.insert(schema.users).values([{ id: owner }, { id: other }])
+  const deletion = load('src/lib/offline/taxonomy-delete.ts', { './taxonomy': load('src/lib/offline/taxonomy.ts', {}) })
+  const sync = load('src/server/sync.ts', { ...deps, '@/lib/offline/taxonomy-delete': deletion }), owner = 'tax-owner', other = 'tax-other'; await db.insert(schema.users).values([{ id: owner }, { id: other }])
   const [person] = await db.insert(schema.people).values({ ownerId: owner, name: 'Ada', initials: 'AB', note: 'kept' }).returning(); await db.insert(schema.people).values({ ownerId: owner, name: 'Paris, France' }); const [place] = await db.insert(schema.places).values({ ownerId: owner, name: 'Paris', lat: 48, lng: 2 }).returning(); const [occasion] = await db.insert(schema.occasions).values({ ownerId: owner, name: 'Trip' }).returning()
   const rename = (operationId, entity, row, name, baseName = row.name, baseRevision = 1) => sync.applySyncMutation(owner, { operationId, mutation: { type: 'taxonomy.upsert', entity, id: row.id, baseRevision, base: { name: baseName }, values: { name } } })
   assert.match(person.id, /^[0-9a-f-]{36}$/i)

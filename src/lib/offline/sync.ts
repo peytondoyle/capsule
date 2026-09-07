@@ -56,6 +56,10 @@ export async function syncArchive(ownerId: string, options: {
             throw new Error('The name conflict details are incomplete. Your changes are still saved on this device.')
           }
         }
+        if (entry.mutation.type === 'taxonomy.delete' && response.outcome === 'conflict') {
+          const conflict = response.conflict
+          if (!conflict || conflict.entity !== entry.mutation.entity || conflict.id !== entry.mutation.id || !Number.isSafeInteger(conflict.revision) || conflict.revision < 1 || JSON.stringify(conflict.fields) !== '["entry","links"]' || (conflict.current !== null && (conflict.current?.id !== conflict.id || conflict.current.revision !== conflict.revision || typeof conflict.current.name !== 'string' || (conflict.current.ownerId !== undefined && conflict.current.ownerId !== ownerId)))) throw new Error('The removal conflict details are incomplete. Your changes are still saved on this device.')
+        }
         // An account change can happen while a response is in flight. Retain the operation for a safe retry.
         if (!active()) return { status: 'locked' }
         await recordResponse(ownerId, response)

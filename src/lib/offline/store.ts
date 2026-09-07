@@ -3,6 +3,7 @@ import { archiveAssets, mediaKey, validSnapshot } from './media'
 import { isLinkField, linkChoices, projectLinks, sameField, type LinkReference } from './links'
 import { objectEdits, projectArchive, reviewObject, validObjectChanges } from './edits'
 import { reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
+import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from './taxonomy-delete'
 
 const DATABASE = 'capsule-archive'
 const VERSION = 2
@@ -121,11 +122,14 @@ export function saveObjectChanges(ownerId: string, id: string, expected: Record<
     const fields = Object.keys(changes)
     if (!fields.length) return
     if (fields.some((field) => !sameField(field, current[field], expected[field]))) throw new Error('These details changed in another tab. Keep your text and reopen the object before saving.')
-    for (const [field, rows] of [['placeId', archive.snapshot.places], ['occasionId', archive.snapshot.occasions]] as const) {
-      if (changes[field] && !rows.some((row) => row.id === changes[field])) throw new Error('Choose a place or occasion from this archive.')
+    for (const [field, rows] of [['placeId', projected.places], ['occasionId', projected.occasions]] as const) {
+      const saved = archive.snapshot[field === 'placeId' ? 'places' : 'occasions']
+      if (changes[field] && (!rows.some(row => row.id === changes[field]) || !saved.some(row => row.id === changes[field]))) throw new Error('Choose a place or occasion from this archive.')
     }
     for (const field of fields) if (isLinkField(field)) {
       const choices = linkChoices(projected, field)
+      const entity = field === 'atPlace' ? 'place' : field === 'onOccasion' ? 'occasion' : ['givenBy', 'depicted', 'mentioned'].includes(field) ? 'person' : null
+      if (entity && (changes[field] as LinkReference[]).some(ref => taxonomyDeletions(entries).some(entry => entry.mutation.type === 'taxonomy.delete' && entry.mutation.entity === entity && entry.mutation.id === ref.id) || archive.snapshot.tombstones.some(row => row.entity === entity && row.id === ref.id))) throw new Error('This entry was removed. Choose another name or create a new entry.')
       if ((changes[field] as LinkReference[]).some(ref => !ref.create && !choices.some(choice => choice.id === ref.id))) throw new Error('Choose people, tags, and collections from this archive or add a new name.')
     }
     const entry: OutboxEntry = {
@@ -222,6 +226,39 @@ export function resolveTaxonomyName(ownerId: string, entity: TaxonomyEntity, id:
   })
 }
 
+export function saveTaxonomyDeletion(ownerId: string, entity: TaxonomyEntity, id: string, expected: string) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare this archive before removing its entries offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (taxonomyEdits(entries, entity, id).length) throw new Error('Sync or review this entry’s saved rename before removing it.')
+    const snapshot = projectArchive(archive.snapshot, entries), current = snapshot[taxonomyKind[entity]].find(row => row.id === id)
+    if (!current || current.localOnly || !archive.snapshot[taxonomyKind[entity]].some(row => row.id === id)) throw new Error('Sync this entry before removing it, or refresh if it was already removed.')
+    const base = taxonomyDeletionBase(snapshot, entity, id)!
+    if (JSON.stringify(base) !== expected) throw new Error('This entry or its links changed in another tab. Reopen the removal before confirming.')
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), baseRecord: current, mutation: { type: 'taxonomy.delete', entity, id, baseRevision: current.revision, base } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+
+export function resolveTaxonomyDeletion(ownerId: string, operationId: string, token: string, remove: boolean) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (!archive) throw new Error('The local archive could not be found.')
+    const review = reviewTaxonomyDeletion(archive, entries, operationId)
+    if (!review || review.token !== token) throw new Error('This removal review changed in another tab. Reopen it before choosing.')
+    if (!review.refreshed) throw new Error('Sync saved edits to refresh the archive before reviewing this removal.')
+    if (remove && (!review.current || !review.base || review.entry.response?.outcome === 'rejected')) throw new Error('This removal cannot be retried. Keep the archive version and reopen the entry.')
+    await result(outbox.delete([ownerId, operationId]))
+    if (remove && review.entry.mutation.type === 'taxonomy.delete') {
+      const entry: OutboxEntry = { ...review.entry, operationId: crypto.randomUUID(), createdAt: Date.now(), response: undefined, responseAt: undefined, baseRecord: review.current!, mutation: { ...review.entry.mutation, baseRevision: review.current!.revision, base: review.base! } }
+      await result(outbox.add(entry))
+    }
+  })
+}
+
 // The operation is the local edit: readers overlay this durable log on the snapshot.
 export function saveOperation(ownerId: string, mutation: SyncMutation, media: Omit<LocalMedia, 'ownerId'>[] = []) {
   const operationId = crypto.randomUUID()
@@ -237,10 +274,11 @@ export function saveOperation(ownerId: string, mutation: SyncMutation, media: Om
 }
 
 export function recordResponse(ownerId: string, response: SyncResponse) {
-  return transact(['outbox'], 'readwrite', async (tx) => {
+  return transact(['archives', 'outbox'], 'readwrite', async (tx) => {
     const store = tx.objectStore('outbox')
     const entry = await result<OutboxEntry | undefined>(store.get([ownerId, response.operationId]))
-    if (entry) await result(store.put({ ...entry, response, responseAt: Date.now() }))
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (entry) await result(store.put({ ...entry, response, responseAt: Math.max(Date.now(), archive?.refreshedAt ?? 0) }))
   })
 }
 
@@ -258,8 +296,10 @@ export function replaceSnapshot(ownerId: string, snapshot: SyncSnapshot, confirm
       }
       if (complete) preparedAt = Date.now()
     }
-    await result(archives.put({ ownerId, snapshot, refreshedAt: Date.now(), preparedAt }))
     const outbox = tx.objectStore('outbox')
+    const entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    const refreshedAt = entries.reduce((latest, entry) => Math.max(latest, (entry.responseAt ?? 0) + 1), Date.now())
+    await result(archives.put({ ownerId, snapshot, refreshedAt, preparedAt }))
     for (const id of confirmedOperationIds) {
       const entry = await result<OutboxEntry | undefined>(outbox.get([ownerId, id]))
       if (entry?.response?.outcome === 'applied' || entry?.response?.outcome === 'duplicate') {

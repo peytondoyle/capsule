@@ -528,3 +528,35 @@ or installed-iPhone acceptance.
 Standalone deletion/merging, unsynced new-entry renames, other taxonomy metadata, collection
 management, remaining archive layouts, Map, HEIC cloud backup, storage recovery, and
 installed-device acceptance remain. No hosted migration, push, or deployment has occurred.
+
+### Persisted taxonomy deletion — September 7, 2026
+
+Saved People, Places, and Occasions entries can be removed from their local directory
+pages. Confirmation shows the entry metadata and exact object links. The durable removal
+immediately hides the entry and its relationships while preserving objects and photographs.
+Pending removals retain downloadable entry/link details until acknowledgement. New local
+entries and entries with pending renames must finish syncing before removal.
+
+Sync compares metadata, revision, and linked object IDs/roles, including changes made by
+legacy online paths without revision updates. Parent and relationship locks protect the
+comparison from racing inserts and role changes. The deletion, tombstone, and replay receipt
+commit together. Stale create-marked references cannot recreate a deleted identity. Earlier
+queued relationship edits drain before deletion; later edits cannot reuse its removed ID.
+
+Conflicts require an updated snapshot and an explicit choice to keep the archive entry or
+remove its reviewed current metadata/links through a fresh operation. Response and snapshot
+timestamps stay ordered even under identical or backward-moving clocks. A failed refresh
+cannot unlock a stale review. Missing entries can only be dismissed. Interrupted saves and
+review replacements roll back without losing the previous local operation.
+
+Focused proof scripts: `verify-offline-taxonomy-delete.mjs`,
+`verify-sync-taxonomy-delete.mjs`, and `verify-offline-taxonomy-delete-ui.mjs`. They cover
+IndexedDB persistence/rollback, retry and review, real PostgreSQL transaction rollback,
+ownership, queued-link round trips, tombstones, and racing relationship writes. The local
+browser fixture uses the generated shell and real sync/database functions with synthetic
+authentication and unavailable/available API responses. No Blob service is called.
+
+This is one functional management slice. Merge, standalone creation/tags/metadata,
+pending-entry renames, collection management, remaining archive layouts, Map, HEIC backup,
+and storage recovery remain. Claude owns restyling and installed-device acceptance.
+No new migration, hosted database access, push, or deployment is part of this slice.

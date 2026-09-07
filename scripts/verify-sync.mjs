@@ -12,7 +12,7 @@ const { drizzle } = require('drizzle-orm/node-postgres')
 const orm = require('drizzle-orm')
 const port = Number(process.env.CAPSULE_TEST_PG_PORT)
 assert.ok(port, 'CAPSULE_TEST_PG_PORT is required')
-const connection = { host: '/private/tmp', port, user: userInfo().username }
+const connection = { host: process.env.CAPSULE_TEST_PG_SOCKET ?? '/private/tmp', port, user: userInfo().username }
 const admin = new Pool({ ...connection, database: 'postgres' })
 const database = `capsule_sync_${process.pid}`
 let pool
@@ -37,7 +37,8 @@ try {
   const objects = load('src/server/objects.ts', { ...deps, './people': {}, './taxonomy': {} })
   const links = load('src/lib/offline/links.ts', {})
   const syncLinks = load('src/server/sync-links.ts', { ...deps, '@/lib/offline/links': links })
-  const sync = load('src/server/sync.ts', { ...deps, './objects': objects, '@/lib/offline/links': links, './sync-links': syncLinks })
+  const deletion = load('src/lib/offline/taxonomy-delete.ts', { './taxonomy': load('src/lib/offline/taxonomy.ts', {}) })
+  const sync = load('src/server/sync.ts', { ...deps, './objects': objects, '@/lib/offline/links': links, './sync-links': syncLinks, '@/lib/offline/taxonomy-delete': deletion })
   const owner = 'sync-owner', other = 'sync-other'
   await db.insert(schema.users).values([{ id: owner }, { id: other }])
   const clientA = randomUUID()
