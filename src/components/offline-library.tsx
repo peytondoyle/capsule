@@ -21,7 +21,7 @@ import { linkedNames, searchArchive, textValue, type ArchiveRecord } from '@/lib
 import { mediaKey } from '@/lib/offline/media'
 import { prepareArchive, type PreparationProgress } from '@/lib/offline/prepare'
 import { localOwner, offlineShellReady } from '@/lib/offline/session'
-import { listOperations, mediaAvailability, readLibrary, readMedia, readPreparation, resolveObjectChanges, resolveTaxonomyName, resolveTaxonomyDeletion, saveObjectChanges, saveTaxonomyName, saveTaxonomyDeletion, type LocalArchive, type OutboxEntry } from '@/lib/offline/store'
+import { reclaimArchiveMedia, listOperations, mediaAvailability, readLibrary, readMedia, readPreparation, resolveObjectChanges, resolveTaxonomyName, resolveTaxonomyDeletion, saveObjectChanges, saveTaxonomyName, saveTaxonomyDeletion, type LocalArchive, type OutboxEntry } from '@/lib/offline/store'
 import { syncArchive } from '@/lib/offline/sync'
 import type { SyncSnapshot } from '@/lib/offline/types'
 
@@ -152,6 +152,8 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
   const [preparing, setPreparing] = useState(false)
   const [progress, setProgress] = useState<PreparationProgress>()
   const controller = useRef<AbortController | null>(null)
+  const [reclaiming, setReclaiming] = useState(false)
+  const [storageStatus, setStorageStatus] = useState('')
   const actions = useRef({ refresh: async () => {}, sync: async () => {} })
 
   useEffect(() => {
@@ -187,6 +189,20 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
     document.addEventListener('visibilitychange', visible)
     return () => { active = false; controller.current?.abort(); window.removeEventListener('focus', returned); window.removeEventListener('online', returned); document.removeEventListener('visibilitychange', visible) }
   }, [ownerId])
+
+  async function reclaim() {
+    if (controller.current || localOwner() !== ownerId) return
+    const abort = new AbortController()
+    controller.current = abort
+    setReclaiming(true); setStorageStatus('Checking local files…')
+    try {
+      const result = await reclaimArchiveMedia(ownerId, () => localOwner() === ownerId && !abort.signal.aborted)
+      if (abort.signal.aborted || localOwner() !== ownerId) return
+      await actions.current.refresh()
+      setStorageStatus(result.status === 'busy' ? 'Another tab is saving local photographs. Try again when it finishes.' : result.removed ? `Removed ${result.removed} unused ${result.removed === 1 ? 'file' : 'files'} and freed ${result.bytes.toLocaleString()} bytes. Referenced photographs and drafts are retained.` : 'No unused local files to remove.')
+    } catch (error) { if (!abort.signal.aborted && localOwner() === ownerId) setStorageStatus(error instanceof Error ? error.message : 'Local cleanup could not finish. Try again.') }
+    finally { controller.current = null; setReclaiming(false) }
+  }
 
   async function sync() {
     if (controller.current || localOwner() !== ownerId) return
@@ -307,7 +323,7 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
   return <main data-surface="ledger" className="safe-t safe-b min-h-dvh bg-bg text-ink"><div className="mx-auto max-w-[900px] px-6 pb-10">
     <nav className="flex min-h-14 items-center justify-between border-b border-hair"><button type="button" className={buttonClass} disabled={!!editRecord} onClick={onClose}>CAPTURE & DRAFTS</button><span className="mn text-[9px] tracking-[0.14em] text-mute-2">ARCHIVE ON THIS DEVICE</span></nav>
     <nav aria-label="Saved archive sections" className="flex flex-wrap gap-x-3 border-b border-hair">{(['objects', 'people', 'places', 'occasions'] as const).map(section => <button key={section} type="button" className={`${buttonClass} ${route.section === section ? 'font-semibold text-accent' : 'text-mute-2'}`} aria-current={route.section === section ? 'page' : undefined} disabled={!!editRecord} onClick={() => location.assign(offlineHref({ section }))}>{section === 'objects' ? 'OBJECTS' : indexLabels[section].toUpperCase()}</button>)}</nav>
-    {operations.length || pendingPhotos.length ? <div className="mt-4 border-b border-hair pb-3"><p className="mn text-[9px] tracking-[0.1em]">{operations.length + pendingPhotos.length} SAVED CHANGES ON DEVICE</p><button type="button" disabled={syncing || preparing} className={buttonClass} onClick={() => { void sync() }}>{syncing ? 'SYNCING…' : 'SYNC SAVED EDITS'}</button>{reviews.map((id) => <button key={id} type="button" disabled={!!editRecord} className={buttonClass} onClick={() => openObject(id)}>REVIEW LOT {String(snapshot?.records.find((record) => record.id === id)?.lotNo ?? '—')}</button>)}{nameReviews.map(({ entity, id }) => <button key={`${entity}:${id}`} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openName(entity, id)}>REVIEW NAME · {textValue(snapshot?.[taxonomyKind[entity]].find(row => row.id === id)?.name) || entity.toUpperCase()}</button>)}</div> : null}
+    {operations.length || pendingPhotos.length ? <div className="mt-4 border-b border-hair pb-3"><p className="mn text-[9px] tracking-[0.1em]">{operations.length + pendingPhotos.length} SAVED CHANGES ON DEVICE</p><button type="button" disabled={syncing || preparing || reclaiming} className={buttonClass} onClick={() => { void sync() }}>{syncing ? 'SYNCING…' : 'SYNC SAVED EDITS'}</button>{reviews.map((id) => <button key={id} type="button" disabled={!!editRecord} className={buttonClass} onClick={() => openObject(id)}>REVIEW LOT {String(snapshot?.records.find((record) => record.id === id)?.lotNo ?? '—')}</button>)}{nameReviews.map(({ entity, id }) => <button key={`${entity}:${id}`} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openName(entity, id)}>REVIEW NAME · {textValue(snapshot?.[taxonomyKind[entity]].find(row => row.id === id)?.name) || entity.toUpperCase()}</button>)}</div> : null}
     {deletions.map(operation => {
       const mutation = operation.mutation
       if (mutation.type !== 'taxonomy.delete') return null
@@ -335,7 +351,8 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
       {!snapshot && directory && !route.entry ? <h1 className="mt-8 text-[27px] font-semibold tracking-tight">{indexLabels[directory]}</h1> : null}
       <p role="status" className="mt-3 text-[13px] leading-relaxed text-mute-2">{status}</p>
       {progress ? <p className="mn mt-2 text-[9px] tracking-[0.08em]">{progress.saved} / {progress.total} FILES · {progress.objects} OBJECTS · {(progress.bytes / 1024 / 1024).toFixed(1)} MB</p> : null}
-      <div className="mt-3 flex gap-3"><button type="button" disabled={preparing || syncing} className={buttonClass} onClick={() => { void prepare() }}>{preparing ? 'PREPARING…' : progress ? 'RESUME / REFRESH ARCHIVE' : visible ? 'REFRESH SAVED ARCHIVE' : 'PREPARE FULL ARCHIVE'}</button>{preparing ? <button type="button" className={buttonClass} onClick={() => controller.current?.abort()}>PAUSE</button> : null}</div>
+      <div className="mt-3 flex gap-3"><button type="button" disabled={preparing || syncing || reclaiming} className={buttonClass} onClick={() => { void prepare() }}>{preparing ? 'PREPARING…' : progress ? 'RESUME / REFRESH ARCHIVE' : visible ? 'REFRESH SAVED ARCHIVE' : 'PREPARE FULL ARCHIVE'}</button>{preparing ? <button type="button" className={buttonClass} onClick={() => controller.current?.abort()}>PAUSE</button> : null}{visible ? <button type="button" disabled={preparing || syncing || reclaiming} className={buttonClass} onClick={() => { void reclaim() }}>{reclaiming ? 'CHECKING FILES…' : 'FREE UNUSED LOCAL FILES'}</button> : null}</div>
+      {storageStatus ? <p role="status" className="mt-2 text-[13px] text-mute-2">{storageStatus}</p> : null}
       {snapshot && directory && !route.entry ? <OfflineIndex snapshot={snapshot} kind={directory} initialQuery={route.query} /> : visible ? <>
         {directory === 'people' && entry ? <label className="mt-6 grid max-w-[260px] gap-1"><span className="mn text-[9px] tracking-[0.1em]">RELATIONSHIP</span><select className={controlClass} value={indexRole ?? ''} onChange={event => { const role = event.target.value as OfflineLocation['role']; setIndexRole(role || undefined); setLimit(50); history.replaceState(null, '', offlineHref({ section: directory, entry: entry.id, role, query, filter, order })) }}><option value="">All relationships</option><option value="given_by">Given by · {entryStats?.roles?.given_by ?? 0}</option><option value="depicted">Pictured · {entryStats?.roles?.depicted ?? 0}</option><option value="mentioned">Mentioned · {entryStats?.roles?.mentioned ?? 0}</option></select></label> : null}
         <div className="mt-7 grid gap-3 sm:grid-cols-[1fr_180px_150px]"><label className="grid gap-1"><span className="mn text-[9px] tracking-[0.1em]">SEARCH</span><input value={query} onChange={(event) => { setQuery(event.target.value); setLimit(50) }} placeholder="Object, lot, person, place, story…" className={controlClass} /></label><label className="grid gap-1"><span className="mn text-[9px] tracking-[0.1em]">FILTER</span><select className={controlClass} value={filter} onChange={(event) => { setFilter(event.target.value); setLimit(50) }}><option value="">All objects</option>{([['person', 'People', snapshot!.people], ['place', 'Places', snapshot!.places], ['occasion', 'Occasions', snapshot!.occasions], ['tag', 'Tags', snapshot!.tags], ['collection', 'Collections', snapshot!.collections]] as const).map(([kind, label, rows]) => <optgroup key={kind} label={label}>{rows.map((row) => <option key={row.id} value={`${kind}:${row.id}`}>{textValue(row.name)}</option>)}</optgroup>)}</select></label><label className="grid gap-1"><span className="mn text-[9px] tracking-[0.1em]">ORDER</span><select className={controlClass} value={order} onChange={(event) => setOrder(event.target.value as typeof order)}><option value="newest">Newest received</option><option value="oldest">Oldest received</option><option value="lot">Lot number</option></select></label></div>

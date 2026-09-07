@@ -1,3 +1,4 @@
+import { MEDIA_REFERENCE_LOCK } from './offline/media'
 import { faceBaseline, type FaceTarget, type FaceConflict, type FaceReceipt } from './face-draft'
 import { emptyCaptureDraft } from './capture-draft'
 import type { CaptureExif, CaptureOriginal } from './capture-types'
@@ -60,7 +61,7 @@ function result<T>(request: IDBRequest<T>): Promise<T> {
   })
 }
 
-async function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => Promise<T>) {
+async function transaction<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => Promise<T>) {
   const db = await open()
   try {
     return await new Promise<T>((resolve, reject) => {
@@ -77,6 +78,17 @@ async function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => P
   } finally {
     db.close()
   }
+}
+
+async function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => Promise<T>) {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined
+  return mode === 'readwrite' && locks
+    ? locks.request(MEDIA_REFERENCE_LOCK, { mode: 'exclusive' }, () => transaction(mode, run))
+    : transaction(mode, run)
+}
+
+export async function captureMediaReferences(ownerId: string) {
+  return listForOwner(ownerId)
 }
 
 export async function enqueueUpload(ownerId: string, file: File, taken?: string, draft?: CaptureDraft) {

@@ -26,3 +26,18 @@ export function validSnapshot(value: SyncSnapshot, ownerId: string) {
   return value?.version === 1 && value.ownerId === ownerId &&
     ['records', 'faces', 'people', 'places', 'occasions', 'tags', 'collections', 'memberships', 'objectPeople', 'objectTags', 'pendingIntake', 'tombstones'].every((key) => Array.isArray(value[key as keyof SyncSnapshot]))
 }
+
+export const MEDIA_REFERENCE_LOCK = 'capsule-media-references'
+
+export function referencedMediaKeys(values: unknown[]) {
+  const keys = new Set<string>(), seen = new Set<object>(), pending = [...values]
+  while (pending.length) {
+    const value = pending.pop()
+    if (typeof value === 'string') keys.add(value.startsWith('remote:') ? value : mediaKey(value))
+    else if (value && typeof value === 'object' && !(value instanceof Blob) && !seen.has(value)) {
+      seen.add(value)
+      pending.push(...Object.values(value))
+    }
+  }
+  return keys
+}

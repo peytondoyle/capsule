@@ -581,3 +581,17 @@ byte identity, distinct JPEG/raw paths, upload token restrictions, lost-response
 backfill, owner isolation, mismatch retention and account switching. Real HEIC decoding
 on installed devices remains Peyton/Claude acceptance. No live Blob proof is claimed.
 No new migration or dependency. Local original reclamation is a separate next slice.
+
+### 2026-09-07 — unused local media reclamation
+
+The saved-archive controls can free unused cached media for the active local owner.
+References in the current archive, unfinished preparation, all pending operations and
+conflict data, and capture/face drafts and retained receipts prevent removal. The collector
+preserves every camera original, processing copy and preview in the capture queue, plus
+all non-remote media IDs. It does not remove Blob objects or other owners' cached files.
+
+Queue writes and cleanup share a Web Lock; reference collection/deletion in the archive
+is one transaction. Missing lock support, invalid/missing archive or account change refuses
+cleanup, and interrupted deletion rolls back. The control reports busy, empty, error and
+removed-count/size states. `scripts/verify-offline-storage.mjs` proves these behaviors with
+actual IndexedDB and concurrent writes. No new migration, dependency or remote operation.

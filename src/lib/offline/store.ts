@@ -1,5 +1,6 @@
+import { captureMediaReferences } from '../offline-queue'
 import type { SyncMutation, SyncRequest, SyncResponse, SyncSnapshot } from './types'
-import { archiveAssets, mediaKey, validSnapshot } from './media'
+import { archiveAssets, mediaKey, validSnapshot, referencedMediaKeys, MEDIA_REFERENCE_LOCK } from './media'
 import { isLinkField, linkChoices, projectLinks, sameField, type LinkReference } from './links'
 import { objectEdits, projectArchive, reviewObject, validObjectChanges } from './edits'
 import { reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
@@ -368,4 +369,32 @@ export function exportPending(ownerId: string) {
     operations: await result<OutboxEntry[]>(tx.objectStore('outbox').index('ownerId').getAll(ownerId)),
     media: await result<LocalMedia[]>(tx.objectStore('media').index('ownerId').getAll(ownerId)),
   }))
+}
+
+export async function reclaimArchiveMedia(ownerId: string, isActiveOwner: () => boolean) {
+  if (typeof navigator === 'undefined' || !navigator.locks) throw new Error('Open Capsule in a browser with safe local storage locking to free unused files.')
+  return navigator.locks.request(MEDIA_REFERENCE_LOCK, { mode: 'exclusive', ifAvailable: true }, async lock => {
+    if (!lock) return { status: 'busy' as const }
+    const active = () => { if (!isActiveOwner()) throw new Error('Local cleanup paused. Reopen this account to continue.') }
+    active()
+    const captures = await captureMediaReferences(ownerId)
+    active()
+    return transact(['archives', 'preparations', 'outbox', 'media'], 'readwrite', async tx => {
+      const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+      const preparation = await result<ArchivePreparation | undefined>(tx.objectStore('preparations').get(ownerId))
+      if (!archive || !validSnapshot(archive.snapshot, ownerId) || (preparation && !validSnapshot(preparation.snapshot, ownerId))) throw new Error('Prepare this archive before freeing unused local files.')
+      const operations = await result<OutboxEntry[]>(tx.objectStore('outbox').index('ownerId').getAll(ownerId))
+      const references = referencedMediaKeys([archive.snapshot, preparation?.snapshot, operations, captures])
+      const media = tx.objectStore('media'), files = await result<LocalMedia[]>(media.index('ownerId').getAll(ownerId))
+      let removed = 0, bytes = 0
+      for (const file of files) {
+        active()
+        if (!file.id.startsWith('remote:') || references.has(file.id)) continue
+        await result(media.delete([ownerId, file.id]))
+        removed++; bytes += file.bytes.size
+      }
+      active()
+      return { status: 'reclaimed' as const, removed, bytes, retained: files.length - removed }
+    })
+  })
 }
