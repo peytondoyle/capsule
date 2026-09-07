@@ -5,9 +5,14 @@ const config = [
   // Build output and imported design-source exports, not source — see
   // build:sw and build:detect; docs/design-directions is the Claude Design
   // capture (Capsule.dc.html and its runtime).
-  { ignores: ['.next/**', 'next-env.d.ts', 'public/sw.js', 'public/detect-worker.js', 'docs/design-directions/**'] },
+  { ignores: ['.next/**', 'next-env.d.ts', 'public/sw.js', 'public/detect-worker.js', 'public/offline-assets/**', 'docs/design-directions/**'] },
   ...coreWebVitals,
   ...typescript,
+  {
+    files: ['src/offline-app.tsx'],
+    // The standalone shell must navigate without importing the Next runtime.
+    rules: { '@next/next/no-html-link-for-pages': 'off' },
+  },
   {
     rules: {
       // `const { id: _id, ...safe } = patch` is how we strip fields a caller

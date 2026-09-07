@@ -1,0 +1,54 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { userInfo } from 'node:os'
+import vm from 'node:vm'
+import { transformSync } from 'esbuild'
+const require = createRequire(import.meta.url), { Pool } = require('pg'), { drizzle } = require('drizzle-orm/node-postgres'), orm = require('drizzle-orm')
+const port = Number(process.env.CAPSULE_TEST_PG_PORT); assert.ok(port)
+const connection = { host: process.env.CAPSULE_TEST_PG_SOCKET ?? '/private/tmp', port, user: userInfo().username }, admin = new Pool({ ...connection, database: 'postgres' }), database = `taxonomy_${process.pid}`; let pool
+function load(file, dependencies) { const loadedModule = { exports: {} }; vm.runInNewContext(transformSync(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code, { module: loadedModule, exports: loadedModule.exports, Date, console, require: name => { assert.ok(name in dependencies, name); return dependencies[name] } }); return loadedModule.exports }
+try {
+  await admin.query(`create database ${database}`); pool = new Pool({ ...connection, database })
+  for (const name of ['0000_cute_jigsaw', '0001_enable_pg_trgm', '0002_tired_moondragon', '0003_fuzzy_martin_li', '0004_plain_black_bird', '0005_watery_quasimodo', '0006_daily_vindicator', '0007_sync-foundation']) await pool.query(readFileSync(new URL(`../drizzle/${name}.sql`, import.meta.url), 'utf8'))
+  const schema = load('src/server/db/schema.ts', { 'drizzle-orm': orm, 'drizzle-orm/pg-core': require('drizzle-orm/pg-core') }), db = drizzle(pool, { schema })
+  const deps = { 'server-only': {}, 'drizzle-orm': orm, './db': { getDb: () => db }, './db/pool': { getTxDb: () => db }, './db/schema': schema, './objects': load('src/server/objects.ts', { 'server-only': {}, 'drizzle-orm': orm, './db': { getDb: () => db }, './db/pool': { getTxDb: () => db }, './db/schema': schema, './people': {}, './taxonomy': {} }), '@/lib/offline/links': load('src/lib/offline/links.ts', {}), './sync-links': load('src/server/sync-links.ts', { 'server-only': {}, 'drizzle-orm': orm, './db/pool': { getTxDb: () => db }, './db/schema': schema, '@/lib/offline/links': load('src/lib/offline/links.ts', {}) }) }
+  const deletion = load('src/lib/offline/taxonomy-delete.ts', { './taxonomy': load('src/lib/offline/taxonomy.ts', {}) })
+  const sync = load('src/server/sync.ts', { ...deps, '@/lib/offline/taxonomy-delete': deletion }), owner = 'tax-owner', other = 'tax-other'; await db.insert(schema.users).values([{ id: owner }, { id: other }])
+  const [person] = await db.insert(schema.people).values({ ownerId: owner, name: 'Ada', initials: 'AB', note: 'kept' }).returning(); await db.insert(schema.people).values({ ownerId: owner, name: 'Paris, France' }); const [place] = await db.insert(schema.places).values({ ownerId: owner, name: 'Paris', lat: 48, lng: 2 }).returning(); const [occasion] = await db.insert(schema.occasions).values({ ownerId: owner, name: 'Trip' }).returning()
+  const rename = (operationId, entity, row, name, baseName = row.name, baseRevision = 1) => sync.applySyncMutation(owner, { operationId, mutation: { type: 'taxonomy.upsert', entity, id: row.id, baseRevision, base: { name: baseName }, values: { name } } })
+  assert.match(person.id, /^[0-9a-f-]{36}$/i)
+  for (const [entity, row, name] of [['person', person, 'Ada Byron'], ['place', place, 'Paris, France'], ['occasion', occasion, 'Summer Trip']]) { const result = await rename(`rename-${entity}`, entity, row, name); assert.equal(result.outcome, 'applied', `${entity}: ${JSON.stringify(result)} id=${row.id} base=${row.name}`) }
+  let updated = (await db.select().from(schema.people).where(orm.eq(schema.people.id, person.id)))[0]; assert.equal(updated.note, 'kept'); assert.equal(updated.initials, 'AB')
+  await db.insert(schema.syncEntities).values({ ownerId: owner, entity: 'person', entityId: person.id, revision: 9 }).onConflictDoUpdate({ target: [schema.syncEntities.ownerId, schema.syncEntities.entity, schema.syncEntities.entityId], set: { revision: 9 } })
+  assert.equal((await rename('second-name', 'person', person, 'Ada Final', 'Ada Byron', 1)).outcome, 'applied')
+  updated = (await db.select().from(schema.people).where(orm.eq(schema.people.id, person.id)))[0]; assert.equal(updated.note, 'kept'); assert.equal(updated.initials, 'AB')
+  assert.equal((await rename('same-name', 'person', person, 'Ada Final', 'wrong stale baseline', 1)).outcome, 'applied')
+  const duplicate = await rename('duplicate', 'person', person, 'Paris, France', 'Ada Final', 1); assert.equal(duplicate.outcome, 'rejected'); assert.equal(duplicate.reason, 'name_taken'); assert.equal(duplicate.conflict.current.id, person.id)
+  const stale = await rename('stale', 'person', person, 'Another Name', 'Ada Byron', 1); assert.equal(stale.outcome, 'conflict'); assert.equal(JSON.stringify(stale.conflict.fields), '["name"]'); assert.equal(stale.conflict.current.revision, 10)
+  const foreign = await sync.applySyncMutation(other, { operationId: 'foreign', mutation: { type: 'taxonomy.upsert', entity: 'person', id: person.id, baseRevision: 1, base: { name: 'Ada Byron' }, values: { name: 'Nope' } } }); assert.equal(foreign.outcome, 'conflict'); assert.equal(foreign.conflict.current, null)
+  const gone = await sync.applySyncMutation(owner, { operationId: 'gone', mutation: { type: 'taxonomy.upsert', entity: 'occasion', id: crypto.randomUUID(), baseRevision: 1, base: { name: 'Gone' }, values: { name: 'Back' } } }); assert.equal(gone.outcome, 'conflict'); assert.equal(gone.conflict.current, null)
+  const bad = await sync.applySyncMutation(owner, { operationId: 'bad', mutation: { type: 'taxonomy.upsert', entity: 'tag', id: person.id, baseRevision: 1, base: { name: 'Ada Byron' }, values: { name: 'No' } } }); assert.equal(bad.operationId, 'bad'); assert.equal(bad.outcome, 'rejected')
+  const replayRequest = { operationId: 'rename-person', mutation: { type: 'taxonomy.upsert', entity: 'person', id: person.id, baseRevision: 2, base: { name: 'Ada Byron' }, values: { name: 'Ada Final' } } }; assert.equal(JSON.stringify(await sync.applySyncMutation(owner, replayRequest)), JSON.stringify(await sync.applySyncMutation(owner, replayRequest)))
+  await pool.query(`create function taxonomy_rollback() returns trigger language plpgsql as $$ begin raise exception 'taxonomy rollback'; end $$`)
+  await pool.query(`create trigger taxonomy_rollback before update on people for each row execute function taxonomy_rollback()`)
+  const rollbackRequest = { operationId: 'rollback', mutation: { type: 'taxonomy.upsert', entity: 'person', id: person.id, baseRevision: 1, base: { name: 'Ada Final' }, values: { name: 'Rollback Name' } } }
+  await assert.rejects(() => sync.applySyncMutation(owner, rollbackRequest))
+  updated = (await db.select().from(schema.people).where(orm.eq(schema.people.id, person.id)))[0]; assert.equal(updated.name, 'Ada Final')
+  assert.equal((await db.select().from(schema.syncOperations).where(orm.eq(schema.syncOperations.operationId, 'rollback'))).length, 0)
+  await pool.query('drop trigger taxonomy_rollback on people'); await pool.query('drop function taxonomy_rollback()')
+  await pool.query(`create function receipt_rollback() returns trigger language plpgsql as $$ begin if NEW.operation_id = 'receipt-rollback' then raise exception 'receipt rollback'; end if; return NEW; end $$`)
+  await pool.query(`create trigger receipt_rollback before insert on sync_operations for each row execute function receipt_rollback()`)
+  const receiptRollback = { operationId: 'receipt-rollback', mutation: { type: 'taxonomy.upsert', entity: 'person', id: person.id, baseRevision: 1, base: { name: 'Ada Final' }, values: { name: 'Receipt Name' } } }
+  await assert.rejects(() => sync.applySyncMutation(owner, receiptRollback), error => /receipt rollback/.test(String(error?.cause?.message ?? error?.message)))
+  updated = (await db.select().from(schema.people).where(orm.eq(schema.people.id, person.id)))[0]; assert.equal(updated.name, 'Ada Final'); assert.equal((await db.select().from(schema.syncEntities).where(orm.eq(schema.syncEntities.entityId, person.id)))[0].revision, 10); assert.equal((await db.select().from(schema.syncOperations).where(orm.eq(schema.syncOperations.operationId, 'receipt-rollback'))).length, 0)
+  await pool.query('drop trigger receipt_rollback on sync_operations'); await pool.query('drop function receipt_rollback()')
+  await pool.query(`create function taxonomy_race() returns trigger language plpgsql as $$ begin if NEW.name = 'Race Name' then insert into people (owner_id, name) values (NEW.owner_id, NEW.name); end if; return NEW; end $$`)
+  await pool.query(`create trigger taxonomy_race before update on people for each row execute function taxonomy_race()`)
+  const race = { operationId: 'race', mutation: { type: 'taxonomy.upsert', entity: 'person', id: person.id, baseRevision: 1, base: { name: 'Ada Final' }, values: { name: 'Race Name' } } }
+  const raceResult = await sync.applySyncMutation(owner, race); assert.equal(raceResult.outcome, 'rejected'); assert.equal(raceResult.reason, 'name_taken'); updated = (await db.select().from(schema.people).where(orm.eq(schema.people.id, person.id)))[0]; assert.equal(updated.name, 'Ada Final'); assert.equal((await db.select().from(schema.people).where(orm.eq(schema.people.name, 'Race Name'))).length, 0); assert.equal((await db.select().from(schema.syncEntities).where(orm.eq(schema.syncEntities.entityId, person.id)))[0].revision, 10)
+  await pool.query('drop trigger taxonomy_race on people'); await pool.query('drop function taxonomy_race()')
+  const raceReplay = await sync.applySyncMutation(owner, race); assert.equal(raceReplay.operationId, 'race'); assert.equal(raceReplay.outcome, 'rejected'); assert.equal(raceReplay.reason, 'name_taken'); assert.equal(raceReplay.conflict.revision, raceResult.conflict.revision); assert.equal((await db.select().from(schema.syncOperations).where(orm.eq(schema.syncOperations.operationId, 'race'))).length, 1)
+  const later = { operationId: 'later', mutation: { type: 'taxonomy.upsert', entity: 'person', id: person.id, baseRevision: 1, base: { name: 'Ada Final' }, values: { name: 'After Receipt' } } }; assert.equal((await sync.applySyncMutation(owner, later)).outcome, 'applied'); assert.equal((await sync.applySyncMutation(owner, replayRequest)).outcome, 'applied'); updated = (await db.select().from(schema.people).where(orm.eq(schema.people.id, person.id)))[0]; assert.equal(updated.name, 'After Receipt')
+  console.log('verify-sync-taxonomy: passed owner isolation, retries, conflicts, duplicate names, preserved fields, and invalid mutations')
+} finally { await pool?.end(); await admin.query(`drop database if exists ${database}`); await admin.end() }

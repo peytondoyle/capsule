@@ -3,8 +3,9 @@ import 'server-only'
 import { and, asc, eq, inArray } from 'drizzle-orm'
 
 import { getDb } from './db'
+import { getTxDb, type DbTransaction } from './db/pool'
 import { intakeBatches, intakeItems, objectFaces, objects } from './db/schema'
-import { createObject } from './objects'
+import { createObjectInTransaction } from './objects'
 import { assertOwnedOriginalUrl } from './blob'
 import { silhouetteForKind } from '@/design/silhouettes'
 
@@ -101,44 +102,60 @@ export async function updateIntakeItem(
   ownerId: string,
   itemId: string,
   patch: Partial<typeof intakeItems.$inferInsert>,
+  deriveBase?: { corners: unknown; cutoutUrl: string | null },
 ) {
-  const db = getDb()
-  const [item] = await db
-    .select({
-      id: intakeItems.id,
-      batchId: intakeItems.batchId,
-      objectId: intakeItems.objectId,
-      status: intakeItems.status,
-    })
-    .from(intakeItems)
-    .innerJoin(intakeBatches, eq(intakeBatches.id, intakeItems.batchId))
-    .where(and(eq(intakeItems.id, itemId), eq(intakeBatches.ownerId, ownerId)))
-    .limit(1)
-  if (!item) throw new Error('intake item not found')
+  return getTxDb().transaction(async (db) => {
+    const [item] = await db
+      .select({
+        id: intakeItems.id,
+        batchId: intakeItems.batchId,
+        objectId: intakeItems.objectId,
+        status: intakeItems.status,
+        corners: intakeItems.corners,
+        cutoutUrl: intakeItems.cutoutUrl,
+      })
+      .from(intakeItems)
+      .innerJoin(intakeBatches, eq(intakeBatches.id, intakeItems.batchId))
+      .where(and(eq(intakeItems.id, itemId), eq(intakeBatches.ownerId, ownerId)))
+      .limit(1)
+      .for('update', { of: intakeItems })
+    if (!item) throw new Error('intake item not found')
+    if (deriveBase && (JSON.stringify(item.corners) !== JSON.stringify(deriveBase.corners) || item.cutoutUrl !== deriveBase.cutoutUrl)) return null
 
-  const { id: _id, batchId: _batchId, ...safe } = patch
+    const { id: _id, batchId: _batchId, ...safe } = patch
 
-  // The derive and extract jobs are kicked off unawaited from the uploader, so
-  // one can land after the user has already dealt with the item from /queue.
-  // Letting it write a pending status back would resurrect the item into
-  // listPendingIntake. Keyed on the item having *left the queue*, not on
-  // objectId: an objectId check protects filed items but not skipped ones, so a
-  // late derive un-skipped a photograph and put it back at the head of the
-  // queue. The legitimate uploaded → segmented → needs_review progression is
-  // unaffected — all of those are pending, so the guard never fires.
-  if (
-    !(PENDING_STATUSES as readonly string[]).includes(item.status) &&
-    safe.status &&
-    (PENDING_STATUSES as readonly string[]).includes(safe.status)
-  ) {
-    delete safe.status
-  }
-  const [row] = await db
-    .update(intakeItems)
-    .set({ ...safe, updatedAt: new Date() })
-    .where(eq(intakeItems.id, itemId))
-    .returning()
-  return row ?? null
+    // The derive and extract jobs are kicked off unawaited from the uploader, so
+    // one can land after the user has already dealt with the item from /queue.
+    // Letting it write a pending status back would resurrect the item into
+    // listPendingIntake. Keyed on the item having *left the queue*, not on
+    // objectId: an objectId check protects filed items but not skipped ones, so a
+    // late derive un-skipped a photograph and put it back at the head of the
+    // queue. The legitimate uploaded → segmented → needs_review progression is
+    // unaffected — all of those are pending, so the guard never fires.
+    if (
+      !(PENDING_STATUSES as readonly string[]).includes(item.status) &&
+      safe.status &&
+      (PENDING_STATUSES as readonly string[]).includes(safe.status)
+    ) {
+      delete safe.status
+    }
+    const [row] = await db
+      .update(intakeItems)
+      .set({ ...safe, updatedAt: new Date() })
+      .where(eq(intakeItems.id, itemId))
+      .returning()
+    if (row?.objectId && safe.cutoutUrl !== undefined) {
+      // Filing holds this same intake lock, so the face and intake cannot diverge.
+      await repairObjectFace(ownerId, row.objectId, {
+        originalUrl: row.originalUrl,
+        cutoutUrl: row.cutoutUrl,
+        thumbUrl: row.thumbUrl,
+        width: row.width,
+        height: row.height,
+      }, db)
+    }
+    return row ?? null
+  })
 }
 
 /**
@@ -162,67 +179,67 @@ export async function fileIntakeItem(
     tagIds?: string[]
   },
 ) {
-  const db = getDb()
-  const [item] = await db
-    .select({
-      id: intakeItems.id,
-      objectId: intakeItems.objectId,
-      status: intakeItems.status,
-      originalUrl: intakeItems.originalUrl,
-      cutoutUrl: intakeItems.cutoutUrl,
-      thumbUrl: intakeItems.thumbUrl,
-      width: intakeItems.width,
-      height: intakeItems.height,
-    })
-    .from(intakeItems)
-    .innerJoin(intakeBatches, eq(intakeBatches.id, intakeItems.batchId))
-    .where(and(eq(intakeItems.id, itemId), eq(intakeBatches.ownerId, ownerId)))
-    .limit(1)
-  if (!item) throw new Error('intake item not found')
-  if (item.objectId) {
-    // Self-heal: if anything did drift the status back to a pending value, an
-    // attempt to file is the moment to put it right, so the item leaves the
-    // queue instead of sitting at its head forever.
-    if ((PENDING_STATUSES as readonly string[]).includes(item.status)) {
-      await db
-        .update(intakeItems)
-        .set({ status: 'filed', updatedAt: new Date() })
-        .where(eq(intakeItems.id, itemId))
+  return getTxDb().transaction(async (db) => {
+    const [item] = await db
+      .select({
+        id: intakeItems.id,
+        objectId: intakeItems.objectId,
+        status: intakeItems.status,
+        originalUrl: intakeItems.originalUrl,
+        cutoutUrl: intakeItems.cutoutUrl,
+        thumbUrl: intakeItems.thumbUrl,
+        width: intakeItems.width,
+        height: intakeItems.height,
+      })
+      .from(intakeItems)
+      .innerJoin(intakeBatches, eq(intakeBatches.id, intakeItems.batchId))
+      .where(and(eq(intakeItems.id, itemId), eq(intakeBatches.ownerId, ownerId)))
+      .limit(1)
+      .for('update', { of: intakeItems })
+    if (!item) throw new Error('intake item not found')
+    if (item.objectId) {
+      // Self-heal: if anything did drift the status back to a pending value, an
+      // attempt to file is the moment to put it right, so the item leaves the
+      // queue instead of sitting at its head forever.
+      if ((PENDING_STATUSES as readonly string[]).includes(item.status)) {
+        await db
+          .update(intakeItems)
+          .set({ status: 'filed', updatedAt: new Date() })
+          .where(eq(intakeItems.id, itemId))
+      }
+      return { objectId: item.objectId, alreadyFiled: true as const }
     }
-    return { objectId: item.objectId, alreadyFiled: true as const }
-  }
 
-  const object = await createObject(ownerId, {
-    title: input.title,
-    kind: (input.kind ?? null) as never,
-    silhouette: silhouetteForKind(input.kind),
-    receivedAt: input.receivedAt ?? null,
-    placeId: input.placeId ?? null,
-    occasionId: input.occasionId ?? null,
-    story: input.story ?? null,
-    personIds: input.personIds,
-    tagIds: input.tagIds,
+    const object = await createObjectInTransaction(ownerId, {
+      title: input.title,
+      kind: (input.kind ?? null) as never,
+      silhouette: silhouetteForKind(input.kind),
+      receivedAt: input.receivedAt ?? null,
+      placeId: input.placeId ?? null,
+      occasionId: input.occasionId ?? null,
+      story: input.story ?? null,
+      personIds: input.personIds,
+      tagIds: input.tagIds,
+    }, db)
+
+    await db.insert(objectFaces).values({
+      objectId: object.id,
+      role: 'recto',
+      originalUrl: item.originalUrl,
+      cutoutUrl: item.cutoutUrl,
+      // A later derive updates this face while holding the same intake lock.
+      thumbUrl: item.thumbUrl,
+      width: item.width,
+      height: item.height,
+    })
+
+    await db
+      .update(intakeItems)
+      .set({ objectId: object.id, status: 'filed', updatedAt: new Date() })
+      .where(eq(intakeItems.id, itemId))
+
+    return { objectId: object.id, lotNo: object.lotNo, alreadyFiled: false as const }
   })
-
-  await db.insert(objectFaces).values({
-    objectId: object.id,
-    role: 'recto',
-    originalUrl: item.originalUrl,
-    cutoutUrl: item.cutoutUrl,
-    // Carried across so the archive has real dimensions and a thumbnail to
-    // render. Still a snapshot of whatever the derive had produced by now —
-    // repairObjectFace is what closes the gap when it had produced nothing.
-    thumbUrl: item.thumbUrl,
-    width: item.width,
-    height: item.height,
-  })
-
-  await db
-    .update(intakeItems)
-    .set({ objectId: object.id, status: 'filed', updatedAt: new Date() })
-    .where(eq(intakeItems.id, itemId))
-
-  return { objectId: object.id, lotNo: object.lotNo, alreadyFiled: false as const }
 }
 
 export async function skipIntakeItems(ownerId: string, itemIds: string[]) {
@@ -272,9 +289,9 @@ export type PendingIntake = Awaited<ReturnType<typeof listPendingIntake>>
 export async function repairObjectFace(
   ownerId: string,
   objectId: string,
-  derived: { cutoutUrl: string; thumbUrl: string; width: number; height: number },
+  derived: { originalUrl?: string | null; cutoutUrl: string | null; thumbUrl: string | null; width: number | null; height: number | null },
+  db: ReturnType<typeof getDb> | DbTransaction = getDb(),
 ) {
-  const db = getDb()
   const [owned] = await db
     .select({ id: objects.id })
     .from(objects)
@@ -290,7 +307,7 @@ export async function repairObjectFace(
       width: derived.width,
       height: derived.height,
     })
-    .where(and(eq(objectFaces.objectId, objectId), eq(objectFaces.role, 'recto')))
+    .where(and(eq(objectFaces.objectId, objectId), derived.originalUrl ? eq(objectFaces.originalUrl, derived.originalUrl) : eq(objectFaces.role, 'recto')))
     .returning()
   return row ?? null
 }

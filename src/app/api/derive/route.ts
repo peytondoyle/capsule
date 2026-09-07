@@ -5,7 +5,7 @@ import { deleteBlobs, thumbBesideCutout } from '@/server/blob'
 import { consume, tooManyRequests } from '@/server/limits'
 import { intakePath } from '@/server/blob'
 import { deriveFromOriginal, type Corner } from '@/server/derive'
-import { getIntakeItem, repairObjectFace, updateIntakeItem } from '@/server/intake'
+import { getIntakeItem, updateIntakeItem } from '@/server/intake'
 
 // sharp is native, so this cannot run on the edge.
 export const runtime = 'nodejs'
@@ -49,21 +49,18 @@ export async function POST(request: NextRequest) {
     // to the browser and dropped, so the 640px thumbnail was written to Blob on
     // every derive and referenced by nothing, and every object rendered at the
     // fallback aspect because no face ever had real dimensions.
-    await updateIntakeItem(user.id, itemId, {
+    const updated = await updateIntakeItem(user.id, itemId, {
       cutoutUrl: derived.cutoutUrl,
       thumbUrl: derived.thumbUrl,
       width: derived.width,
       height: derived.height,
       status: 'segmented',
       ...(corners ? { corners: corners as never } : {}),
-    })
-
-    // An item is filable from the moment it is recorded, before any derive, and
-    // fileIntakeItem copies the URLs it can see at that instant. Without this
-    // write-through an object filed during its own derive keeps a face pointing
-    // at nothing, on every surface, permanently — the derive lands in
-    // intake_items, which nothing reads again once the item is filed.
-    if (item.objectId) await repairObjectFace(user.id, item.objectId, derived)
+    }, { corners: item.corners, cutoutUrl: item.cutoutUrl })
+    if (!updated) {
+      await deleteBlobs({ media: [derived.cutoutUrl, derived.thumbUrl] })
+      return Response.json({ error: 'This photograph changed while processing. Reopen it to use the latest crop.' }, { status: 409 })
+    }
 
     // Derivatives are never overwritten (see deriveFromOriginal), so a re-cut
     // leaves the previous pair orphaned. Delete it only after both rows point

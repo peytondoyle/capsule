@@ -4,38 +4,61 @@
  * Serwist × Next 16 investigation: Serwist's runtime classes without its
  * webpack plugin, so Turbopack stays the app builder.
  *
- * No precache manifest by design. The app shell is auth-gated and served
- * per-user, so "precache the shell" would cache a redirect; runtime strategies
- * carry the offline story instead.
+ * Only the standalone, account-free capture shell is precached. Authenticated
+ * pages and API responses remain network-only.
  */
 import { BackgroundSyncQueue, CacheFirst, ExpirationPlugin, NetworkOnly, Serwist, StaleWhileRevalidate } from 'serwist'
 
 declare const self: ServiceWorkerGlobalScope
+declare const __OFFLINE_ASSETS__: Array<{ url: string; sha256: string }>
+declare const __OFFLINE_DIGEST__: string
 
-/**
- * The offline landing. Bumping OFFLINE_VERSION busts the cached copy on the
- * next worker install.
- *
- * /offline is static, unauthenticated, and holds no user data — so caching it
- * does not breach the "never serve one user's cache to another session" rule
- * the catch-all below enforces for everything else. Before this existed, an
- * installed app launched with no network showed the browser's error page,
- * which for something in a Dock reads as "the app is broken", not "I'm
- * offline".
- */
-const OFFLINE_VERSION = 1
-// In the cache name, so bumping the version really does orphan the old entry
-// rather than the comment merely claiming it would.
+const OFFLINE_VERSION = __OFFLINE_DIGEST__
 const OFFLINE_CACHE = `capsule-offline-shell-v${OFFLINE_VERSION}`
-const OFFLINE_URL = '/offline'
+const OFFLINE_URL = '/offline.html'
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches
-      .open(OFFLINE_CACHE)
-      .then((cache) => cache.add(new Request(OFFLINE_URL, { cache: 'reload' }))),
-  )
-})
+async function digest(response: Response) {
+  const bytes = await response.clone().arrayBuffer()
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+async function shellReady() {
+  const cache = await caches.open(OFFLINE_CACHE)
+  for (const asset of __OFFLINE_ASSETS__) {
+    const response = await cache.match(asset.url)
+    if (!response || await digest(response) !== asset.sha256) return false
+  }
+  return true
+}
+
+async function shellAsset(request: Request, path: string) {
+  const asset = __OFFLINE_ASSETS__.find((entry) => entry.url === path)
+  const oldHash = /^\/offline-assets\/offline-([a-f0-9]{12})\.(js|css)$/.exec(path)?.[1]
+  const valid = async (response: Response) => {
+    if (!response.ok) return false
+    const hash = await digest(response)
+    return asset ? hash === asset.sha256 : !!oldHash && hash.startsWith(oldHash)
+  }
+  const names = [OFFLINE_CACHE, ...(await caches.keys()).filter((name) => name !== OFFLINE_CACHE && name.startsWith('capsule-offline-shell-v'))]
+  for (const name of names) {
+    const cached = await caches.match(path, { cacheName: name })
+    if (cached && await valid(cached)) return cached
+  }
+  const response = await fetch(request)
+  if (!await valid(response)) return Response.error()
+  await (await caches.open(OFFLINE_CACHE)).put(path, response.clone())
+  return response
+}
+
+async function prepareShell() {
+  if (await shellReady()) return
+  const cache = await caches.open(OFFLINE_CACHE)
+  const responses = await Promise.all(__OFFLINE_ASSETS__.map((asset) => fetch(new Request(asset.url, { cache: 'reload' }))))
+  if (responses.some((response) => !response.ok) || !(await Promise.all(responses.map(digest))).every((hash, index) => hash === __OFFLINE_ASSETS__[index]!.sha256)) throw new Error('offline shell incomplete')
+  await Promise.all(responses.map((response, index) => cache.put(__OFFLINE_ASSETS__[index]!.url, response)))
+}
+
+self.addEventListener('install', (event) => { event.waitUntil(prepareShell()) })
 
 const serwist = new Serwist({
   skipWaiting: true,
@@ -43,9 +66,7 @@ const serwist = new Serwist({
   navigationPreload: true,
   runtimeCaching: [
     {
-      // Blob derivatives are content-addressed by pathname and overwritten in
-      // place only by re-derives; a day of cache is safe and makes the
-      // timeline instant offline.
+      // Derivatives have immutable random-suffixed paths.
       matcher: ({ url }) => url.hostname.endsWith('.public.blob.vercel-storage.com'),
       handler: new CacheFirst({
         cacheName: 'capsule-derivatives',
@@ -77,6 +98,7 @@ const pipelineQueue = new BackgroundSyncQueue('capsule-pipeline', {
 
 self.addEventListener('fetch', (event) => {
   const { request } = event
+  const url = new URL(request.url)
 
   // Navigations fall back to the offline shell only when the network is truly
   // unreachable. Serwist's handlers run on the same event; respondWith here
@@ -101,10 +123,18 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  if (request.method === 'GET' && url.origin === self.location.origin && (__OFFLINE_ASSETS__.some((asset) => asset.url === url.pathname) || /^\/offline-assets\/offline-[a-f0-9]{12}\.(js|css)$/.test(url.pathname))) {
+    event.stopImmediatePropagation()
+    event.respondWith(shellAsset(request, url.pathname))
+    return
+  }
+
   if (
     request.method === 'POST' &&
-    (request.url.includes('/api/derive') || request.url.includes('/api/extract'))
+    url.origin === self.location.origin &&
+    (url.pathname === '/api/derive' || url.pathname === '/api/extract')
   ) {
+    event.stopImmediatePropagation()
     event.respondWith(
       fetch(request.clone()).catch(async () => {
         await pipelineQueue.pushRequest({ request })
@@ -115,6 +145,19 @@ self.addEventListener('fetch', (event) => {
       }),
     )
   }
+})
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'OFFLINE_READY' && event.data?.type !== 'PREPARE_OFFLINE') return
+  event.waitUntil((async () => {
+    let ready = false
+    try {
+      if (event.data.type === 'PREPARE_OFFLINE') await prepareShell()
+      ready = await shellReady()
+    } catch { /* Incomplete storage must never be reported as prepared. */ }
+    const recipient = event.ports[0] ?? event.source
+    recipient?.postMessage({ type: 'OFFLINE_READY', ready, digest: __OFFLINE_DIGEST__ })
+  })())
 })
 
 self.addEventListener('push', (event) => {

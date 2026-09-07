@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { MAX_ORIGINAL_BYTES } from './blob'
-import { clientIntakePath } from '@/lib/blob-path'
+import { clientIntakePath, isClientCapturePath } from '@/lib/blob-path'
 
 /**
  * The `onBeforeGenerateToken` callback for client uploads — the single copy.
@@ -25,7 +25,8 @@ export function intakeTokenOptions(ownerId: string) {
     // so refusing here is what keeps a caller out of another owner's prefix —
     // and out of the store root, which is where every upload landed while this
     // code believed it was rewriting the path.
-    if (pathname !== clientIntakePath(ownerId, pathname)) {
+    const capture = isClientCapturePath(ownerId, pathname)
+    if (!capture && pathname !== clientIntakePath(ownerId, pathname)) {
       throw new Error('upload path is not this owner’s intake prefix')
     }
     return {
@@ -43,7 +44,8 @@ export function intakeTokenOptions(ownerId: string) {
       // /api/original, which streams it back with the store bearer attached
       // server-side — a bandwidth amplifier. 50 MB clears a 48MP HEIC.
       maximumSizeInBytes: MAX_ORIGINAL_BYTES,
-      addRandomSuffix: true,
+      addRandomSuffix: !capture,
+      ...(capture ? { allowOverwrite: false } : {}),
       tokenPayload: JSON.stringify({ ownerId }),
     }
   }

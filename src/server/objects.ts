@@ -3,7 +3,7 @@ import 'server-only'
 import { and, asc, count, desc, eq, isNull, or, sql } from 'drizzle-orm'
 
 import { getDb } from './db'
-import { getTxDb } from './db/pool'
+import { getTxDb, type DbTransaction } from './db/pool'
 import {
   objectFaces,
   objectPeople,
@@ -62,64 +62,66 @@ function jitterFrom(id: string): number {
  * somehow missing still gets lot 1 rather than a silent no-op UPDATE.
  */
 export async function createObject(ownerId: string, input: NewObject) {
-  return getTxDb().transaction(async (tx) => {
-    const allocated = await tx.execute<{ lot_no: number }>(sql`
-      insert into owner_counters (owner_id, next_lot)
-      values (${ownerId}, 2)
-      on conflict (owner_id) do update set next_lot = owner_counters.next_lot + 1
-      returning next_lot - 1 as lot_no
-    `)
+  return getTxDb().transaction((tx) => createObjectInTransaction(ownerId, input, tx))
+}
 
-    const lotNo = allocated.rows[0]?.lot_no
-    if (lotNo === undefined) throw new Error('could not allocate a lot number')
+export async function createObjectInTransaction(ownerId: string, input: NewObject, tx: DbTransaction) {
+  const allocated = await tx.execute<{ lot_no: number }>(sql`
+    insert into owner_counters (owner_id, next_lot)
+    values (${ownerId}, 2)
+    on conflict (owner_id) do update set next_lot = owner_counters.next_lot + 1
+    returning next_lot - 1 as lot_no
+  `)
 
-    const [row] = await tx
-      .insert(objects)
-      .values({
-        ownerId,
-        lotNo,
-        title: input.title,
-        kind: input.kind ?? null,
-        silhouette: input.silhouette ?? 'card',
-        cutStyle: input.cutStyle ?? 'edge',
-        rotationDeg: 0,
-        receivedAt: input.receivedAt ?? null,
-        receivedPrecision: input.receivedPrecision ?? (input.receivedAt ? 'day' : 'unknown'),
-        placeId: input.placeId ?? null,
-        occasionId: input.occasionId ?? null,
-        story: input.story ?? null,
-        retention: input.retention ?? 'retained',
-        retainedLocation: input.retainedLocation ?? null,
-        material: input.material ?? null,
-        widthMm: input.widthMm ?? null,
-        heightMm: input.heightMm ?? null,
-      })
-      .returning()
+  const lotNo = allocated.rows[0]?.lot_no
+  if (lotNo === undefined) throw new Error('could not allocate a lot number')
 
-    if (!row) throw new Error('insert returned no row')
+  const [row] = await tx
+    .insert(objects)
+    .values({
+      ownerId,
+      lotNo,
+      title: input.title,
+      kind: input.kind ?? null,
+      silhouette: input.silhouette ?? 'card',
+      cutStyle: input.cutStyle ?? 'edge',
+      rotationDeg: 0,
+      receivedAt: input.receivedAt ?? null,
+      receivedPrecision: input.receivedPrecision ?? (input.receivedAt ? 'day' : 'unknown'),
+      placeId: input.placeId ?? null,
+      occasionId: input.occasionId ?? null,
+      story: input.story ?? null,
+      retention: input.retention ?? 'retained',
+      retainedLocation: input.retainedLocation ?? null,
+      material: input.material ?? null,
+      widthMm: input.widthMm ?? null,
+      heightMm: input.heightMm ?? null,
+    })
+    .returning()
 
-    const rotationDeg = input.rotationDeg ?? jitterFrom(row.id)
-    if (rotationDeg !== row.rotationDeg) {
-      await tx.update(objects).set({ rotationDeg }).where(eq(objects.id, row.id))
-      row.rotationDeg = rotationDeg
-    }
+  if (!row) throw new Error('insert returned no row')
 
-    if (input.personIds?.length) {
-      await tx
-        .insert(objectPeople)
-        .values(input.personIds.map((personId) => ({ objectId: row.id, personId })))
-        .onConflictDoNothing()
-    }
+  const rotationDeg = input.rotationDeg ?? jitterFrom(row.id)
+  if (rotationDeg !== row.rotationDeg) {
+    await tx.update(objects).set({ rotationDeg }).where(eq(objects.id, row.id))
+    row.rotationDeg = rotationDeg
+  }
 
-    if (input.tagIds?.length) {
-      await tx
-        .insert(objectTags)
-        .values(input.tagIds.map((tagId) => ({ objectId: row.id, tagId })))
-        .onConflictDoNothing()
-    }
+  if (input.personIds?.length) {
+    await tx
+      .insert(objectPeople)
+      .values(input.personIds.map((personId) => ({ objectId: row.id, personId })))
+      .onConflictDoNothing()
+  }
 
-    return row
-  })
+  if (input.tagIds?.length) {
+    await tx
+      .insert(objectTags)
+      .values(input.tagIds.map((tagId) => ({ objectId: row.id, tagId })))
+      .onConflictDoNothing()
+  }
+
+  return row
 }
 
 /**
