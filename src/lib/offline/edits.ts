@@ -1,7 +1,7 @@
 import type { LocalArchive, OutboxEntry } from './store'
 import type { SyncSnapshot } from './types'
 import { isLinkField, singleLink, linkLabels, withObjectLinks, projectLinks, validReferences } from './links'
-import { projectTaxonomyNames } from './taxonomy'
+import { projectTaxonomyNames, projectPersonNotes } from './taxonomy'
 import { projectTaxonomyDeletions } from './taxonomy-delete'
 
 export const editLabels = {
@@ -28,7 +28,7 @@ export function projectArchive(snapshot: SyncSnapshot, entries: OutboxEntry[]): 
       records.set(patch.id, next)
     }
   }
-  return withObjectLinks(projectTaxonomyDeletions(projectTaxonomyNames(projectLinks({ ...snapshot, records: [...records.values()] }), entries), entries))
+  return withObjectLinks(projectTaxonomyDeletions(projectPersonNotes(projectTaxonomyNames(projectLinks({ ...snapshot, records: [...records.values()] }), entries), entries), entries))
 }
 
 export function reviewObject(archive: LocalArchive, entries: OutboxEntry[], id: string) {

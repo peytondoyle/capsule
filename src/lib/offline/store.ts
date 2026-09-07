@@ -3,7 +3,7 @@ import type { SyncMutation, SyncRequest, SyncResponse, SyncSnapshot } from './ty
 import { archiveAssets, mediaKey, validSnapshot, referencedMediaKeys, MEDIA_REFERENCE_LOCK } from './media'
 import { isLinkField, linkChoices, projectLinks, sameField, type LinkReference } from './links'
 import { objectEdits, projectArchive, reviewObject, validObjectChanges } from './edits'
-import { pendingTaxonomyCreator, reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
+import { personNote, reviewPersonNote, pendingTaxonomyCreator, reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from './taxonomy-delete'
 
 const DATABASE = 'capsule-archive'
@@ -189,7 +189,7 @@ export function saveTaxonomyName(ownerId: string, entity: TaxonomyEntity, id: st
     const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
     if (!archive) throw new Error('Prepare this archive before renaming its entries offline.')
     const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
-    if (taxonomyEdits(entries, entity, id).some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))) throw new Error('Review this name’s conflicting changes before renaming it again.')
+    if (taxonomyEdits(entries, entity, id, 'name').some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))) throw new Error('Review this name’s conflicting changes before renaming it again.')
     const projected = projectArchive(archive.snapshot, entries), current = projected[taxonomyKind[entity]].find(row => row.id === id)
     if (!current || (!archive.snapshot[taxonomyKind[entity]].some(row => row.id === id) && !(current.localOnly && pendingTaxonomyCreator(entries, entity, id)))) throw new Error('Sync this entry before renaming it, or refresh if it was removed.')
     if (current.name !== expectedName) throw new Error('This name changed in another tab. Keep your text and reopen the entry before saving.')
@@ -227,12 +227,51 @@ export function resolveTaxonomyName(ownerId: string, entity: TaxonomyEntity, id:
   })
 }
 
+export function savePersonNote(ownerId: string, id: string, expectedNote: string | null, note: string | null) {
+  const value = personNote(note)
+  if (value && value.length > 20000) return Promise.reject(new Error('Keep the note to 20,000 characters or fewer.'))
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare this archive before editing notes offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (taxonomyEdits(entries, 'person', id, 'note').some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))) throw new Error('Review this note’s conflicting changes before editing it again.')
+    const current = projectArchive(archive.snapshot, entries).people.find(row => row.id === id)
+    if (!current || current.localOnly || !archive.snapshot.people.some(row => row.id === id) || archive.snapshot.tombstones.some(row => row.entity === 'person' && row.id === id)) throw new Error('Sync this person before editing their note, or refresh if they were removed.')
+    if (personNote(current.note as string | null) !== personNote(expectedNote)) throw new Error('This note changed in another tab. Keep your text and reopen the person before saving.')
+    if (personNote(current.note as string | null) === value) return
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), baseRecord: current, mutation: { type: 'taxonomy.upsert', entity: 'person', id, baseRevision: current.revision, base: { note: personNote(current.note as string | null) }, values: { note: value } } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+
+export function resolvePersonNote(ownerId: string, id: string, token: string, choice: { note: string | null } | { discard: true }) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archives = tx.objectStore('archives'), outbox = tx.objectStore('outbox')
+    const archive = await result<LocalArchive | undefined>(archives.get(ownerId))
+    const entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (!archive) throw new Error('The local archive could not be found.')
+    const review = reviewPersonNote(archive, entries, id)
+    if (!review || review.token !== token) throw new Error('This note review changed in another tab. Reopen it before choosing.')
+    const discard = 'discard' in choice, value = 'note' in choice ? personNote(choice.note) : null
+    if (!discard && (!review.remote || review.rejected)) throw new Error('This note cannot be retried. Save your local text before discarding the change.')
+    if (value && value.length > 20000) throw new Error('Keep the note to 20,000 characters or fewer.')
+    const snapshot = { ...archive.snapshot, people: review.remote ? [...archive.snapshot.people.filter(row => row.id !== id), { ...review.remote, id, revision: review.revision }] : archive.snapshot.people.filter(row => row.id !== id) }
+    for (const entry of review.edits) await result(outbox.delete([ownerId, entry.operationId]))
+    if (!discard && value !== personNote(review.remote!.note as string | null)) {
+      const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: Math.min(...review.edits.map(entry => entry.sequence)), createdAt: Date.now(), baseRecord: { ...review.remote!, id, revision: review.revision }, mutation: { type: 'taxonomy.upsert', entity: 'person', id, baseRevision: review.revision, base: { note: personNote(review.remote!.note as string | null) }, values: { note: value } } }
+      await result(outbox.add(entry))
+    }
+    await result(archives.put({ ...archive, snapshot }))
+  })
+}
+
 export function saveTaxonomyDeletion(ownerId: string, entity: TaxonomyEntity, id: string, expected: string) {
   return transact(['archives', 'outbox'], 'readwrite', async tx => {
     const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
     if (!archive) throw new Error('Prepare this archive before removing its entries offline.')
     const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
-    if (taxonomyEdits(entries, entity, id).length) throw new Error('Sync or review this entry’s saved rename before removing it.')
+    if (taxonomyEdits(entries, entity, id).length) throw new Error('Sync or review this entry’s saved changes before removing it.')
     const snapshot = projectArchive(archive.snapshot, entries), current = snapshot[taxonomyKind[entity]].find(row => row.id === id)
     if (!current || current.localOnly || !archive.snapshot[taxonomyKind[entity]].some(row => row.id === id)) throw new Error('Sync this entry before removing it, or refresh if it was already removed.')
     const base = taxonomyDeletionBase(snapshot, entity, id)!

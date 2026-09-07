@@ -12,16 +12,17 @@ import { archiveIndex, indexObjectIds } from '@/lib/offline/indexes'
 import { offlineHref, readOfflineLocation, type OfflineLocation } from '@/lib/offline/navigation'
 import { OfflineObjectEditor } from './offline-object-editor'
 import { OfflineConflictReview } from './offline-conflict-review'
+import { OfflineNoteEditor } from './offline-note-editor'
 import { OfflineNameEditor } from './offline-name-editor'
 import { OfflineTaxonomyDelete } from './offline-taxonomy-delete'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from '@/lib/offline/taxonomy-delete'
-import { reviewTaxonomyName, taxonomyEdits, taxonomyKind, type TaxonomyEntity } from '@/lib/offline/taxonomy'
+import { personNote, reviewPersonNote, reviewTaxonomyName, taxonomyEdits, taxonomyKind, type TaxonomyEntity } from '@/lib/offline/taxonomy'
 import { objectEdits, projectArchive, reviewObject } from '@/lib/offline/edits'
 import { linkedNames, searchArchive, textValue, type ArchiveRecord } from '@/lib/offline/library'
 import { mediaKey } from '@/lib/offline/media'
 import { prepareArchive, type PreparationProgress } from '@/lib/offline/prepare'
 import { localOwner, offlineShellReady } from '@/lib/offline/session'
-import { reclaimArchiveMedia, listOperations, mediaAvailability, readLibrary, readMedia, readPreparation, resolveObjectChanges, resolveTaxonomyName, resolveTaxonomyDeletion, saveObjectChanges, saveTaxonomyName, saveTaxonomyDeletion, type LocalArchive, type OutboxEntry } from '@/lib/offline/store'
+import { savePersonNote, resolvePersonNote, reclaimArchiveMedia, listOperations, mediaAvailability, readLibrary, readMedia, readPreparation, resolveObjectChanges, resolveTaxonomyName, resolveTaxonomyDeletion, saveObjectChanges, saveTaxonomyName, saveTaxonomyDeletion, type LocalArchive, type OutboxEntry } from '@/lib/offline/store'
 import { syncArchive } from '@/lib/offline/sync'
 import type { SyncSnapshot } from '@/lib/offline/types'
 
@@ -148,6 +149,7 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
   const [selectedId, setSelectedId] = useState<string | undefined>(route.objectId)
   const [editRecord, setEditRecord] = useState<ArchiveRecord>()
   const [nameEditing, setNameEditing] = useState<{ entity: TaxonomyEntity; id: string; name: string; review: ReturnType<typeof reviewTaxonomyName> }>()
+  const [noteEditing, setNoteEditing] = useState<{ id: string; note: string | null; review: ReturnType<typeof reviewPersonNote> }>()
   const [deleting, setDeleting] = useState<{ entity: TaxonomyEntity; id: string; base: NonNullable<ReturnType<typeof taxonomyDeletionBase>>; review: ReturnType<typeof reviewTaxonomyDeletion> }>()
   const [preparing, setPreparing] = useState(false)
   const [progress, setProgress] = useState<PreparationProgress>()
@@ -284,10 +286,20 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
     const record = review?.local ?? snapshot[taxonomyKind[entity]].find(row => row.id === id)
     if (record) setNameEditing({ entity, id, name: textValue(record.name), review })
   }
+  function openNote(id: string) {
+    if (!visible || !snapshot) return
+    const review = reviewPersonNote(visible, operations, id)
+    const record = review?.local ?? snapshot.people.find(row => row.id === id)
+    if (record) setNoteEditing({ id, note: personNote(textValue(record.note)), review })
+  }
+  const noteReviews = [...new Set(operations.flatMap(operation => {
+    const mutation = operation.mutation
+    return (operation.response?.outcome === 'conflict' || operation.response?.outcome === 'rejected') && mutation.type === 'taxonomy.upsert' && mutation.entity === 'person' && mutation.id && Object.hasOwn(mutation.values, 'note') ? [mutation.id] : []
+  }))]
   const reviews = [...new Set(operations.filter((entry) => entry.response?.outcome === 'conflict' || entry.response?.outcome === 'rejected').flatMap((entry) => entry.mutation.type === 'object.patch' ? [entry.mutation.patch.id] : []))]
   const nameReviews = [...new Map(operations.flatMap(operation => {
     const mutation = operation.mutation
-    return (operation.response?.outcome === 'conflict' || operation.response?.outcome === 'rejected') && mutation.type === 'taxonomy.upsert' && mutation.entity !== 'tag' && mutation.id ? [[`${mutation.entity}:${mutation.id}`, { entity: mutation.entity, id: mutation.id }] as const] : []
+    return (operation.response?.outcome === 'conflict' || operation.response?.outcome === 'rejected') && mutation.type === 'taxonomy.upsert' && mutation.entity !== 'tag' && mutation.id && Object.hasOwn(mutation.values, 'name') ? [[`${mutation.entity}:${mutation.id}`, { entity: mutation.entity, id: mutation.id }] as const] : []
   })).values()]
   const pendingPhotos = photos.filter(photo => !photo.itemId && !photo.dismissed)
   const deletions = taxonomyDeletions(operations)
@@ -302,6 +314,16 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
   }} onKeep={async () => {
     if (localOwner() !== ownerId) throw new Error('Sign in to this account to review its changes.')
     if (deleting.review) await resolveTaxonomyDeletion(ownerId, deleting.review.entry.operationId, deleting.review.token, false)
+    await changed()
+  }} />
+  if (noteEditing) return <OfflineNoteEditor id={noteEditing.id} initialNote={noteEditing.note} review={noteEditing.review ? { archiveNote: personNote(textValue(noteEditing.review.remote?.note)), missing: !noteEditing.review.remote, rejected: noteEditing.review.rejected } : undefined} onClose={() => setNoteEditing(undefined)} onSave={async note => {
+    if (localOwner() !== ownerId) throw new Error('Sign in to this account to edit its notes.')
+    if (noteEditing.review) await resolvePersonNote(ownerId, noteEditing.id, noteEditing.review.token, { note })
+    else await savePersonNote(ownerId, noteEditing.id, noteEditing.note, note)
+    await changed()
+  }} onDiscard={async () => {
+    if (localOwner() !== ownerId) throw new Error('Sign in to this account to review its changes.')
+    if (noteEditing.review) await resolvePersonNote(ownerId, noteEditing.id, noteEditing.review.token, { discard: true })
     await changed()
   }} />
   if (nameEditing) return <OfflineNameEditor entity={nameEditing.entity} id={nameEditing.id} initialName={nameEditing.name} review={nameEditing.review ? { archiveName: nameEditing.review.remote ? textValue(nameEditing.review.remote.name) : null, rejected: nameEditing.review.rejected, nameTaken: nameEditing.review.reason === 'name_taken', pending: nameEditing.review.pending } : undefined} onClose={() => setNameEditing(undefined)} onSave={async name => {
@@ -324,6 +346,7 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
     <nav className="flex min-h-14 items-center justify-between border-b border-hair"><button type="button" className={buttonClass} disabled={!!editRecord} onClick={onClose}>CAPTURE & DRAFTS</button><span className="mn text-[9px] tracking-[0.14em] text-mute-2">ARCHIVE ON THIS DEVICE</span></nav>
     <nav aria-label="Saved archive sections" className="flex flex-wrap gap-x-3 border-b border-hair">{(['objects', 'people', 'places', 'occasions'] as const).map(section => <button key={section} type="button" className={`${buttonClass} ${route.section === section ? 'font-semibold text-accent' : 'text-mute-2'}`} aria-current={route.section === section ? 'page' : undefined} disabled={!!editRecord} onClick={() => location.assign(offlineHref({ section }))}>{section === 'objects' ? 'OBJECTS' : indexLabels[section].toUpperCase()}</button>)}</nav>
     {operations.length || pendingPhotos.length ? <div className="mt-4 border-b border-hair pb-3"><p className="mn text-[9px] tracking-[0.1em]">{operations.length + pendingPhotos.length} SAVED CHANGES ON DEVICE</p><button type="button" disabled={syncing || preparing || reclaiming} className={buttonClass} onClick={() => { void sync() }}>{syncing ? 'SYNCING…' : 'SYNC SAVED EDITS'}</button>{reviews.map((id) => <button key={id} type="button" disabled={!!editRecord} className={buttonClass} onClick={() => openObject(id)}>REVIEW LOT {String(snapshot?.records.find((record) => record.id === id)?.lotNo ?? '—')}</button>)}{nameReviews.map(({ entity, id }) => <button key={`${entity}:${id}`} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openName(entity, id)}>REVIEW NAME · {textValue(snapshot?.[taxonomyKind[entity]].find(row => row.id === id)?.name) || entity.toUpperCase()}</button>)}</div> : null}
+    {noteReviews.map(id => <button key={id} type="button" disabled={!!editRecord} className={`${buttonClass} max-w-full break-words text-left`} onClick={() => openNote(id)}>REVIEW NOTE · {textValue(snapshot?.people.find(row => row.id === id)?.name) || 'PERSON'}</button>)}
     {deletions.map(operation => {
       const mutation = operation.mutation
       if (mutation.type !== 'taxonomy.delete') return null
@@ -341,10 +364,11 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
           {directory === 'places' && entry.kind ? <p className="mt-3 text-[14px]">{textValue(entry.kind).replaceAll('_', ' ')}</p> : null}
           {directoryEntity ? <>
             {entry.localOnly ? <p className="mt-3 text-[13px] text-mute-2">This new entry is saved on this device. Name changes sync after its object links.</p> : null}
-            {taxonomyEdits(operations, directoryEntity, entry.id).length ? <p className="mn mt-3 text-[9px] tracking-[0.1em] text-accent">NAME SAVED ON DEVICE</p> : null}
+            {taxonomyEdits(operations, directoryEntity, entry.id, 'name').length ? <p className="mn mt-3 text-[9px] tracking-[0.1em] text-accent">NAME SAVED ON DEVICE</p> : null}
             <button type="button" className={`${buttonClass} mt-2`} onClick={() => openName(directoryEntity, entry.id)}>{nameReviews.some(review => review.entity === directoryEntity && review.id === entry.id) ? 'REVIEW NAME' : 'RENAME'}</button>
+            {directory === 'people' ? <><button type="button" className={`${buttonClass} mt-2`} disabled={!!entry.localOnly} onClick={() => openNote(entry.id)}>{noteReviews.includes(entry.id) ? 'REVIEW NOTE' : 'EDIT NOTE'}</button>{taxonomyEdits(operations, 'person', entry.id, 'note').length ? <p className="mn mt-3 text-[9px] tracking-[0.1em] text-accent">NOTE SAVED ON DEVICE</p> : null}</> : null}
             <button type="button" className={`${buttonClass} mt-2`} disabled={!!entry.localOnly || taxonomyEdits(operations, directoryEntity, entry.id).length > 0} onClick={() => { const base = taxonomyDeletionBase(snapshot!, directoryEntity, entry.id); if (base) setDeleting({ entity: directoryEntity, id: entry.id, base, review: null }) }}>REMOVE ENTRY</button>
-            {taxonomyEdits(operations, directoryEntity, entry.id).length ? <p className="mt-2 text-[13px] text-mute-2">Sync or review the saved rename before removing this entry.</p> : null}
+            {taxonomyEdits(operations, directoryEntity, entry.id).length ? <p className="mt-2 text-[13px] text-mute-2">Sync or review the saved changes before removing this entry.</p> : null}
           </> : null}
         </> : snapshot ? <p className="mt-3 text-[14px] text-mute-2">It may have been removed or not yet saved here. Refresh the archive while connected, or return to the index.</p> : null}
       </header> : !directory ? <h1 className="mt-8 text-[27px] font-semibold tracking-tight">Your archive, here.</h1> : null}

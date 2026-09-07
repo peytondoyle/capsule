@@ -48,12 +48,13 @@ export async function syncArchive(ownerId: string, options: {
         if (entry.mutation.type === 'taxonomy.upsert' && entry.mutation.entity !== 'tag' &&
           (response.outcome === 'conflict' || response.outcome === 'rejected')) {
           const conflict = response.conflict
-          if ((response.reason !== undefined && response.reason !== 'name_taken') ||
+          const field = Object.hasOwn(entry.mutation.values, 'note') ? 'note' : 'name'
+          if ((response.reason !== undefined && (field !== 'name' || response.reason !== 'name_taken')) ||
             ((response.outcome === 'conflict' || response.reason === 'name_taken') && !conflict) ||
             (conflict && (conflict.entity !== entry.mutation.entity || conflict.id !== entry.mutation.id ||
-              !Number.isSafeInteger(conflict.revision) || conflict.revision < 1 || !Array.isArray(conflict.fields) || conflict.fields.length !== 1 || conflict.fields[0] !== 'name' ||
-              (conflict.current !== null && (conflict.current?.id !== conflict.id || typeof conflict.current.name !== 'string' || !conflict.current.name.trim() || conflict.current.name.length > 250 || conflict.current.revision !== conflict.revision || (conflict.current.ownerId !== undefined && conflict.current.ownerId !== ownerId)))))) {
-            throw new Error('The name conflict details are incomplete. Your changes are still saved on this device.')
+              !Number.isSafeInteger(conflict.revision) || conflict.revision < 1 || !Array.isArray(conflict.fields) || conflict.fields.length !== 1 || conflict.fields[0] !== field ||
+              (conflict.current !== null && (conflict.current?.id !== conflict.id || (field === 'note' && conflict.current.note !== null && typeof conflict.current.note !== 'string') || typeof conflict.current.name !== 'string' || !conflict.current.name.trim() || conflict.current.name.length > 250 || conflict.current.revision !== conflict.revision || (conflict.current.ownerId !== undefined && conflict.current.ownerId !== ownerId)))))) {
+            throw new Error(`The ${field} conflict details are incomplete. Your changes are still saved on this device.`)
           }
         }
         if (entry.mutation.type === 'taxonomy.delete' && response.outcome === 'conflict') {
