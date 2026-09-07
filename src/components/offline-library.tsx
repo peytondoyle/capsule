@@ -277,7 +277,7 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
   const deletions = taxonomyDeletions(operations)
   if (deleting) return <OfflineTaxonomyDelete entity={deleting.entity} id={deleting.id} base={deleting.base} current={deleting.review?.base} review={!!deleting.review} refreshed={deleting.review?.refreshed ?? true} canRetry={!deleting.review || !!deleting.review.current && deleting.review.entry.response?.outcome === 'conflict'} linkLabel={link => {
     const [id, role] = link.split(':'), object = visible?.snapshot.records.find(row => row.id === id)
-    return `${object ? `Lot ${String(object.lotNo).padStart(4, '0')} · ${textValue(object.title)}` : id}${role ? ` · ${role.replaceAll('_', ' ')}` : ''}`
+    return `${object ? `Lot ${String(object.lotNo).padStart(4, '0')}: ${textValue(object.title)}` : id}${role ? ` · ${role.replaceAll('_', ' ')}` : ''}`
   }} onClose={() => setDeleting(undefined)} onRemove={async () => {
     if (localOwner() !== ownerId) throw new Error('Sign in to this account to remove its entries.')
     if (deleting.review) await resolveTaxonomyDeletion(ownerId, deleting.review.entry.operationId, deleting.review.token, true)
