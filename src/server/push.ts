@@ -54,7 +54,7 @@ const sendPush: SendPush = (subscription, payload) => {
   if (!publicKey || !privateKey) throw new Error('VAPID keys are not configured')
   return webpush.sendNotification(subscription, payload, {
     vapidDetails: {
-      subject: 'https://capsule-omega-ruby.vercel.app',
+      subject: process.env.VAPID_SUBJECT || 'https://capsule-omega-ruby.vercel.app',
       publicKey,
       privateKey,
     },
