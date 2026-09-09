@@ -15,6 +15,9 @@ type Queued = {
   status: 'saving' | 'unsaved' | CaptureProgress['status']
   previewUrl?: string
   downloadUrl?: string
+  originalBackup?: CaptureProgress['originalBackup']
+  itemId?: string
+  needsOriginalBackup?: boolean
   retainedOriginal?: boolean
   error?: string
 }
@@ -48,7 +51,7 @@ export function Uploader({ ownerId }: { ownerId: string }) {
     return {
       key: item.key, name: item.name, status: item.itemId ? 'uploaded' : 'saved',
       previewUrl: isHeic(new File([], item.name, { type: item.type })) ? undefined : url,
-      downloadUrl: url, retainedOriginal: !!item.itemId,
+      downloadUrl: url, retainedOriginal: !!item.itemId, originalBackup: item.originalBackup, itemId: item.itemId, needsOriginalBackup: !!item.itemId && !!item.prepared?.converted && !item.originalBackup,
     }
   }, [])
 
@@ -65,7 +68,7 @@ export function Uploader({ ownerId }: { ownerId: string }) {
           isActiveOwner: () => active.current === ownerId,
           onProgress: (progress) => {
             if (active.current !== ownerId) return
-            setItems((current) => current.map((item) => item.key === progress.key ? { ...item, error: undefined, ...progress } : item))
+            setItems((current) => current.map((item) => item.key === progress.key ? { ...item, error: undefined, ...progress, needsOriginalBackup: progress.originalBackup ? false : item.needsOriginalBackup } : item))
           },
         })
         if (result === 'locked') setNotice('Photographs are saved on this device. Sign in to this account in a supported browser to upload them.')
@@ -175,7 +178,7 @@ export function Uploader({ ownerId }: { ownerId: string }) {
 
   if (!isLoaded || userId !== ownerId) return <p className="text-sm text-mute-2">Sign in to this account to add photographs.</p>
   const uploaded = items.filter((item) => item.status === 'uploaded').length
-  const pending = items.filter((item) => item.status === 'saved' || item.status === 'failed' || item.status === 'uploading').length
+  const pending = items.filter((item) => item.status === 'saved' || item.status === 'failed' || item.status === 'uploading' || item.needsOriginalBackup).length
   const unsaved = items.filter((item) => item.status === 'unsaved').length
 
   return (
@@ -201,7 +204,8 @@ export function Uploader({ ownerId }: { ownerId: string }) {
               {item.status === 'uploaded' ? 'Uploaded' : item.status === 'uploading' ? 'Saved · uploading' : item.status === 'saving' ? 'Saving on device…' : item.status === 'unsaved' ? 'Not saved' : 'Saved on device'}
             </div>
             {item.error ? <p className="mt-2 text-[12px] leading-relaxed text-accent">{item.error}</p> : null}
-            {item.retainedOriginal ? <p className="mt-2 text-[12px] text-mute-2">JPEG uploaded. Camera original is still on this device.</p> : null}
+            {item.retainedOriginal ? <p className="mt-2 text-[12px] text-mute-2">{item.originalBackup ? 'Camera original backed up. Local copy retained.' : 'JPEG uploaded. Camera original still needs backup.'}</p> : null}
+            {item.originalBackup && item.itemId ? <a href={`/api/capture/${item.itemId}/original`} className="mn inline-flex min-h-11 items-center text-[8.5px] tracking-[0.06em] underline">DOWNLOAD BACKUP</a> : null}
             {item.downloadUrl && (item.status !== 'uploaded' || item.retainedOriginal) ? <a href={item.downloadUrl} download={item.name} className="mn inline-flex min-h-11 items-center text-[8.5px] tracking-[0.06em] underline">SAVE ORIGINAL</a> : null}
           </li>)}
         </ul>

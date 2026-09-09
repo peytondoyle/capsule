@@ -28,7 +28,7 @@ try {
   const deps = { 'server-only': {}, 'drizzle-orm': orm, './db': { getDb: () => db }, './db/pool': { getTxDb: () => db }, './db/schema': schema }
   const links = load('src/lib/offline/links.ts', {})
   const deletion = load('src/lib/offline/taxonomy-delete.ts', { './taxonomy': load('src/lib/offline/taxonomy.ts', {}) })
-  const sync = load('src/server/sync.ts', { ...deps, './objects': load('src/server/objects.ts', { ...deps, './people': {}, './taxonomy': {} }), '@/lib/offline/links': links, '@/lib/offline/taxonomy-delete': deletion, './sync-links': load('src/server/sync-links.ts', { ...deps, '@/lib/offline/links': links }) })
+  const sync = load('src/server/sync.ts', { ...deps, '@/lib/offline/shelves': load('src/lib/offline/shelves.ts', {}), '@/lib/offline/taxonomy': load('src/lib/offline/taxonomy.ts', {}), './objects': load('src/server/objects.ts', { ...deps, './people': {}, './taxonomy': {} }), '@/lib/offline/links': links, '@/lib/offline/taxonomy-delete': deletion, './sync-links': load('src/server/sync-links.ts', { ...deps, '@/lib/offline/links': links }) })
   const tableFor = { person: schema.people, place: schema.places, occasion: schema.occasions }
   let serial = 0
   async function fixture(entity = 'person') {

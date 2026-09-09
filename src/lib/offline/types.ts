@@ -15,6 +15,8 @@ export type SyncPatch = {
   changes: Record<string, unknown>
 }
 
+export type OccasionMergeBase = { revision: number; metadata: Record<string, unknown>; links: string[] }
+
 export type SyncMutation =
   | { type: 'object.create'; clientId: string; values: Record<string, unknown> }
   | { type: 'object.patch'; patch: SyncPatch }
@@ -23,8 +25,11 @@ export type SyncMutation =
   | { type: 'face.delete'; id: string; baseRevision: number }
   | { type: 'taxonomy.upsert'; entity: 'person' | 'place' | 'occasion' | 'tag'; id?: string; baseRevision?: number; base?: Record<string, unknown>; values: Record<string, unknown> }
   | { type: 'taxonomy.delete'; entity: 'person' | 'place' | 'occasion'; id: string; baseRevision: number; base: { metadata: Record<string, unknown>; links: string[] } }
-  | { type: 'collection.upsert'; id?: string; baseRevision?: number; values: Record<string, unknown> }
-  | { type: 'collection.delete'; id: string; baseRevision: number }
+  | { type: 'occasion.merge'; id: string; targetId: string; base: { source: OccasionMergeBase; target: OccasionMergeBase } }
+  | { type: 'collection.reorder'; base: Array<{ id: string; sortOrder: number }>; ids: string[] }
+  | { type: 'collection.create'; id: string; values: { name: string } }
+  | { type: 'collection.upsert'; id?: string; baseRevision?: number; base?: Record<string, unknown>; values: Record<string, unknown> }
+  | { type: 'collection.delete'; id: string; baseRevision: number; base: { metadata: Record<string, unknown>; links: string[] } }
   | { type: 'membership.upsert'; collectionId: string; objectId: string; sortOrder?: number }
   | { type: 'membership.delete'; collectionId: string; objectId: string }
 
@@ -43,7 +48,8 @@ export type SyncResponse = {
   outcome: 'applied' | 'duplicate' | 'conflict' | 'rejected'
   mapping?: { clientId: string; id: string; lotNo: number }
   conflict?: SyncConflict
-  reason?: 'name_taken'
+  reason?: 'name_taken' | 'shared_collection'
+  shareIds?: string[]
 }
 
 export type SyncSnapshot = {

@@ -560,3 +560,53 @@ This is one functional management slice. Merge, standalone creation/tags/metadat
 pending-entry renames, collection management, remaining archive layouts, Map, HEIC backup,
 and storage recovery remain. Claude owns restyling and installed-device acceptance.
 No new migration, hosted database access, push, or deployment is part of this slice.
+
+### 2026-09-07 — HEIC original backup
+
+Converted captures now upload untouched camera bytes to a separate immutable private
+capture path. The JPEG remains the processing source. Status/finish verify the raw byte
+length and SHA-256 before local sync acknowledgement; mismatches retain the local copy
+and never overwrite the existing backup. Sync also backs up converted originals retained
+by the previous pipeline, including retained face captures, without refiling them.
+
+`GET /api/capture/[captureId]/original` returns the untouched bytes as an authenticated,
+owner-checked attachment with private/no-store headers. A missing backup returns 404;
+it does not silently substitute the JPEG. Capture views show backup receipts and a
+backup download link. The route is also usable by capture ID without local storage;
+a general per-face online download affordance is not part of this slice.
+
+Proof: `scripts/verify-heic-backup.mjs` runs actual capture sync, IndexedDB, server logic
+and routes against synthetic local PostgreSQL and in-memory Blob transport. It verifies
+byte identity, distinct JPEG/raw paths, upload token restrictions, lost-response retry,
+backfill, owner isolation, mismatch retention and account switching. Real HEIC decoding
+on installed devices remains Peyton/Claude acceptance. No live Blob proof is claimed.
+No new migration or dependency. Local original reclamation is a separate next slice.
+
+### 2026-09-07 — unused local media reclamation
+
+The saved-archive controls can free unused cached media for the active local owner.
+References in the current archive, unfinished preparation, all pending operations and
+conflict data, and capture/face drafts and retained receipts prevent removal. The collector
+preserves every camera original, processing copy and preview in the capture queue, plus
+all non-remote media IDs. It does not remove Blob objects or other owners' cached files.
+
+Queue writes and cleanup share a Web Lock; reference collection/deletion in the archive
+is one transaction. Missing lock support, invalid/missing archive or account change refuses
+cleanup, and interrupted deletion rolls back. The control reports busy, empty, error and
+removed-count/size states. `scripts/verify-offline-storage.mjs` proves these behaviors with
+actual IndexedDB and concurrent writes. No new migration, dependency or remote operation.
+
+### 2026-09-07 — pending-entry names
+
+People, Places and Occasions created by queued object-link edits can now be renamed
+before sync. Each rename appends a new operation after existing edits; original creation
+requests and IDs remain unchanged, including after lost acknowledgements. Projected names
+appear on linked objects immediately. Deletion remains disabled until the entry persists.
+
+If creation matches an existing server entry under another ID, the pending rename stops
+for review rather than renaming that existing identity. Recovery copy distinguishes an
+unavailable pending identity from a confirmed deletion. Conflicting creator edits stop
+before dependent renames. `scripts/verify-pending-taxonomy.mjs` proves ordering, repeated
+names, stale/owner/rollback guards, byte-identical retries, alias safety and creator-conflict
+handling through actual client/IndexedDB/server code and synthetic local PostgreSQL.
+No new server protocol, migration, dependency or Blob operation.

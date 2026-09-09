@@ -10,12 +10,15 @@ const { render } = await import(pathToFileURL(output))
 const base = { entity: 'place', id: 'place-1', initialName: 'The Fillmore', onSave: async () => {}, onDiscard: async () => {}, onClose: () => {} }
 const text = html => html.replace(/<[^>]*>/g, ' ').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim()
 try {
+  assert.match(render({ ...base, entity: 'collection' }), /Rename this collection/);
   const normal = render(base)
   assert.match(normal, /Rename this place/); assert.match(normal, /<input[^>]*required[^>]*maxlength="250"/i); assert.match(normal, /SAVE NAME ON DEVICE/); assert.match(normal, /BACK TO ARCHIVE/)
   const duplicate = render({ ...base, review: { archiveName: 'The Fillmore', rejected: false, nameTaken: true } })
   assert.match(text(duplicate), /already used/i); assert.match(text(duplicate), /KEEP ARCHIVE NAME/); assert.match(duplicate, /SAVE LOCAL NAME/)
   const removed = render({ ...base, review: { archiveName: null, rejected: true, nameTaken: false } })
   assert.doesNotMatch(removed, /<input/); assert.match(text(removed), /DISCARD LOCAL RENAME/); assert.match(removed, /download=/)
+  const pending = render({ ...base, review: { archiveName: null, rejected: false, nameTaken: false, pending: true } })
+  assert.match(text(pending), /linked to an existing archive entry/); assert.doesNotMatch(text(pending), /was removed/); assert.match(text(pending), /Unavailable/); assert.match(pending, /SAVE LOCAL NAME/); assert.doesNotMatch(pending, /<input/)
   const hostile = '"><scr' + 'ipt>alert(1)</scr' + 'ipt>'
   const escaped = render({ ...base, initialName: hostile, review: { archiveName: hostile, rejected: false, nameTaken: false } })
   assert.doesNotMatch(escaped, /<script>/); assert.ok(text(escaped).includes(hostile)); assert.match(escaped, /<label/); assert.match(escaped, /type="submit"/)

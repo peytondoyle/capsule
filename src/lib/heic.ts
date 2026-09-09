@@ -11,8 +11,8 @@
  * so the conversion happens on the device that already has the codec. That also
  * fixes the corner editor, whose `<img>` could not display a HEIC either.
  *
- * Costs the "never modify the original" rule for HEIC alone, deliberately: an
- * original nothing in the pipeline can read is not an archive, it is a file.
+ * The JPEG is a processing copy. Capture sync backs up the untouched camera
+ * bytes separately before confirming the upload.
  */
 
 const HEIC_TYPES = ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence']
@@ -61,9 +61,7 @@ export async function toUploadable(file: File): Promise<TranscodeResult> {
     context.drawImage(bitmap, 0, 0)
 
     const blob = await new Promise<Blob | null>((resolve) =>
-      // 0.92 rather than 1: this is the archival original, and the alternative
-      // is no image at all, but a lossless re-encode of a 12MP phone photo is
-      // ~30MB and the upload has to survive a basement.
+      // Keep the processing copy small; camera bytes are backed up separately.
       canvas.toBlob(resolve, 'image/jpeg', 0.92),
     )
     if (!blob) return { ok: false, reason: 'could not convert this photograph' }

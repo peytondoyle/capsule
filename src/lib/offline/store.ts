@@ -1,8 +1,11 @@
+import { captureMediaReferences } from '../offline-queue'
 import type { SyncMutation, SyncRequest, SyncResponse, SyncSnapshot } from './types'
-import { archiveAssets, mediaKey, validSnapshot } from './media'
+import { archiveAssets, mediaKey, validSnapshot, referencedMediaKeys, MEDIA_REFERENCE_LOCK } from './media'
 import { isLinkField, linkChoices, projectLinks, sameField, type LinkReference } from './links'
 import { objectEdits, projectArchive, reviewObject, validObjectChanges } from './edits'
-import { reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
+import { placeCoordinates, validCoordinates, sameCoordinates, reviewPlaceCoordinates, type PlaceCoordinates, personNote, reviewPersonNote, pendingTaxonomyCreator, reviewTaxonomyName, taxonomyEdits, taxonomyKind, taxonomyName, type TaxonomyEntity } from './taxonomy'
+import { reviewShelfName, shelfCreations, shelfEdits, shelfOrderBase, shelfOrders, reviewShelfOrder, shelfDeletionBase, shelfDeletions, reviewShelfDeletion, shelfMembershipEdits } from './shelves'
+import { occasionMergeBase, occasionMerges, reviewOccasionMerge } from './taxonomy-merge'
 import { reviewTaxonomyDeletion, taxonomyDeletionBase, taxonomyDeletions } from './taxonomy-delete'
 
 const DATABASE = 'capsule-archive'
@@ -128,7 +131,10 @@ export function saveObjectChanges(ownerId: string, id: string, expected: Record<
     }
     for (const field of fields) if (isLinkField(field)) {
       const choices = linkChoices(projected, field)
+      if (field === 'inCollections' && (changes[field] as LinkReference[]).some(ref => shelfDeletions(entries, ref.id).length || archive.snapshot.tombstones.some(row => row.entity === 'collection' && row.id === ref.id))) throw new Error('This shelf was removed. Choose another shelf.')
+      if (field === 'inCollections' && (changes[field] as LinkReference[]).some(ref => shelfCreations(entries, ref.id).length)) throw new Error('Sync this new shelf before adding objects to it.')
       const entity = field === 'atPlace' ? 'place' : field === 'onOccasion' ? 'occasion' : ['givenBy', 'depicted', 'mentioned'].includes(field) ? 'person' : null
+      if (entity === 'occasion' && (changes[field] as LinkReference[]).some(ref => occasionMerges(entries).some(entry => entry.mutation.type === 'occasion.merge' && entry.mutation.id === ref.id))) throw new Error('This occasion is being merged. Choose its destination instead.')
       if (entity && (changes[field] as LinkReference[]).some(ref => taxonomyDeletions(entries).some(entry => entry.mutation.type === 'taxonomy.delete' && entry.mutation.entity === entity && entry.mutation.id === ref.id) || archive.snapshot.tombstones.some(row => row.entity === entity && row.id === ref.id))) throw new Error('This entry was removed. Choose another name or create a new entry.')
       if ((changes[field] as LinkReference[]).some(ref => !ref.create && !choices.some(choice => choice.id === ref.id))) throw new Error('Choose people, tags, and collections from this archive or add a new name.')
     }
@@ -188,9 +194,10 @@ export function saveTaxonomyName(ownerId: string, entity: TaxonomyEntity, id: st
     const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
     if (!archive) throw new Error('Prepare this archive before renaming its entries offline.')
     const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
-    if (taxonomyEdits(entries, entity, id).some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))) throw new Error('Review this name’s conflicting changes before renaming it again.')
+    if (entity === 'occasion' && occasionMerges(entries, id).length) throw new Error('Sync or review this occasion’s saved merge first.')
+    if (taxonomyEdits(entries, entity, id, 'name').some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))) throw new Error('Review this name’s conflicting changes before renaming it again.')
     const projected = projectArchive(archive.snapshot, entries), current = projected[taxonomyKind[entity]].find(row => row.id === id)
-    if (!current || !archive.snapshot[taxonomyKind[entity]].some(row => row.id === id) || current.localOnly) throw new Error('Sync this entry before renaming it, or refresh if it was removed.')
+    if (!current || (!archive.snapshot[taxonomyKind[entity]].some(row => row.id === id) && !(current.localOnly && pendingTaxonomyCreator(entries, entity, id)))) throw new Error('Sync this entry before renaming it, or refresh if it was removed.')
     if (current.name !== expectedName) throw new Error('This name changed in another tab. Keep your text and reopen the entry before saving.')
     assertAvailableName(projected, entity, id, value)
     if (current.name === value) return
@@ -226,12 +233,248 @@ export function resolveTaxonomyName(ownerId: string, entity: TaxonomyEntity, id:
   })
 }
 
+export function savePlaceCoordinates(ownerId: string, id: string, expected: PlaceCoordinates, coordinates: PlaceCoordinates) {
+  const value = coordinates
+  if (!validCoordinates(value)) return Promise.reject(new Error('Enter latitude from −90 to 90 and longitude from −180 to 180.'))
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare this archive before editing coordinates offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (taxonomyEdits(entries, 'place', id, 'coordinates').some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))) throw new Error('Review this place’s conflicting coordinates before editing it again.')
+    const current = projectArchive(archive.snapshot, entries).places.find(row => row.id === id)
+    if (!current || current.localOnly || !archive.snapshot.places.some(row => row.id === id) || archive.snapshot.tombstones.some(row => row.entity === 'place' && row.id === id)) throw new Error('Sync this place before editing coordinates, or refresh if they were removed.')
+    if (sameCoordinates(placeCoordinates(current), expected) === false) throw new Error('These coordinates changed in another tab. Keep your text and reopen the place before saving.')
+    if (sameCoordinates(placeCoordinates(current), value)) return
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), baseRecord: current, mutation: { type: 'taxonomy.upsert', entity: 'place', id, baseRevision: current.revision, base: { coordinates: placeCoordinates(current) }, values: { coordinates: value } } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+
+export function resolvePlaceCoordinates(ownerId: string, id: string, token: string, choice: { coordinates: PlaceCoordinates } | { discard: true }) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archives = tx.objectStore('archives'), outbox = tx.objectStore('outbox')
+    const archive = await result<LocalArchive | undefined>(archives.get(ownerId))
+    const entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (!archive) throw new Error('The local archive could not be found.')
+    const review = reviewPlaceCoordinates(archive, entries, id)
+    if (!review || review.token !== token) throw new Error('This coordinate review changed in another tab. Reopen it before choosing.')
+    const discard = 'discard' in choice, value = 'coordinates' in choice ? choice.coordinates : null
+    if (!discard && (!review.remote || review.rejected)) throw new Error('These coordinates cannot be retried. Save your local text before discarding the change.')
+    if (!discard && !validCoordinates(value)) throw new Error('Enter a valid latitude and longitude pair.')
+    const snapshot = { ...archive.snapshot, places: review.remote ? [...archive.snapshot.places.filter(row => row.id !== id), { ...review.remote, id, revision: review.revision }] : archive.snapshot.places.filter(row => row.id !== id) }
+    for (const entry of review.edits) await result(outbox.delete([ownerId, entry.operationId]))
+    if (!discard && value && !sameCoordinates(value, placeCoordinates(review.remote!))) {
+      const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: Math.min(...review.edits.map(entry => entry.sequence)), createdAt: Date.now(), baseRecord: { ...review.remote!, id, revision: review.revision }, mutation: { type: 'taxonomy.upsert', entity: 'place', id, baseRevision: review.revision, base: { coordinates: placeCoordinates(review.remote!) }, values: { coordinates: value } } }
+      await result(outbox.add(entry))
+    }
+    await result(archives.put({ ...archive, snapshot }))
+  })
+}
+
+export function savePersonNote(ownerId: string, id: string, expectedNote: string | null, note: string | null) {
+  const value = personNote(note)
+  if (value && value.length > 20000) return Promise.reject(new Error('Keep the note to 20,000 characters or fewer.'))
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare this archive before editing notes offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (taxonomyEdits(entries, 'person', id, 'note').some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))) throw new Error('Review this note’s conflicting changes before editing it again.')
+    const current = projectArchive(archive.snapshot, entries).people.find(row => row.id === id)
+    if (!current || current.localOnly || !archive.snapshot.people.some(row => row.id === id) || archive.snapshot.tombstones.some(row => row.entity === 'person' && row.id === id)) throw new Error('Sync this person before editing their note, or refresh if they were removed.')
+    if (personNote(current.note as string | null) !== personNote(expectedNote)) throw new Error('This note changed in another tab. Keep your text and reopen the person before saving.')
+    if (personNote(current.note as string | null) === value) return
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), baseRecord: current, mutation: { type: 'taxonomy.upsert', entity: 'person', id, baseRevision: current.revision, base: { note: personNote(current.note as string | null) }, values: { note: value } } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+
+export function resolvePersonNote(ownerId: string, id: string, token: string, choice: { note: string | null } | { discard: true }) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archives = tx.objectStore('archives'), outbox = tx.objectStore('outbox')
+    const archive = await result<LocalArchive | undefined>(archives.get(ownerId))
+    const entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (!archive) throw new Error('The local archive could not be found.')
+    const review = reviewPersonNote(archive, entries, id)
+    if (!review || review.token !== token) throw new Error('This note review changed in another tab. Reopen it before choosing.')
+    const discard = 'discard' in choice, value = 'note' in choice ? personNote(choice.note) : null
+    if (!discard && (!review.remote || review.rejected)) throw new Error('This note cannot be retried. Save your local text before discarding the change.')
+    if (value && value.length > 20000) throw new Error('Keep the note to 20,000 characters or fewer.')
+    const snapshot = { ...archive.snapshot, people: review.remote ? [...archive.snapshot.people.filter(row => row.id !== id), { ...review.remote, id, revision: review.revision }] : archive.snapshot.people.filter(row => row.id !== id) }
+    for (const entry of review.edits) await result(outbox.delete([ownerId, entry.operationId]))
+    if (!discard && value !== personNote(review.remote!.note as string | null)) {
+      const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: Math.min(...review.edits.map(entry => entry.sequence)), createdAt: Date.now(), baseRecord: { ...review.remote!, id, revision: review.revision }, mutation: { type: 'taxonomy.upsert', entity: 'person', id, baseRevision: review.revision, base: { note: personNote(review.remote!.note as string | null) }, values: { note: value } } }
+      await result(outbox.add(entry))
+    }
+    await result(archives.put({ ...archive, snapshot }))
+  })
+}
+
+export function saveShelfDeletion(ownerId: string, id: string, expected: string) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare the archive before removing shelves offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (shelfDeletions(entries, id).length || shelfEdits(entries, id).length || shelfOrders(entries).length || shelfCreations(entries, id).length || shelfMembershipEdits(entries, id)) throw new Error('Sync or review the saved shelf and membership changes before removing it.')
+    const snapshot = projectArchive(archive.snapshot, entries), current = snapshot.collections.find(row => row.id === id)
+    if (!current || current.kind !== 'shelf' || current.localOnly || current.pendingCreation || !archive.snapshot.collections.some(row => row.id === id) || archive.snapshot.tombstones.some(row => row.entity === 'collection' && row.id === id)) throw new Error('Choose a manual shelf already saved in this archive.')
+    const base = shelfDeletionBase(snapshot, id)!
+    if (JSON.stringify(base) !== expected) throw new Error('This shelf or its memberships changed in another tab. Reopen removal before confirming.')
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), baseRecord: current, mutation: { type: 'collection.delete', id, baseRevision: current.revision, base } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+export function resolveShelfDeletion(ownerId: string, operationId: string, token: string, remove: boolean) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    const review = archive && reviewShelfDeletion(archive, entries, operationId)
+    if (!review || review.token !== token) throw new Error('This shelf removal review changed. Reopen it before choosing.')
+    if (!review.refreshed) throw new Error('Sync to refresh the archive before reviewing this removal.')
+    if (remove && (!review.current || review.current.kind !== 'shelf' || !review.base || review.entry.response?.outcome === 'rejected' || shelfOrders(entries).length || shelfEdits(entries, review.current.id).length || shelfMembershipEdits(entries, review.current.id))) throw new Error('Keep the archive shelf and reopen it after syncing other changes.')
+    await result(outbox.delete([ownerId, operationId]))
+    if (remove && review.entry.mutation.type === 'collection.delete') {
+      const entry: OutboxEntry = { ...review.entry, operationId: crypto.randomUUID(), createdAt: Date.now(), response: undefined, responseAt: undefined, baseRecord: review.current!, mutation: { ...review.entry.mutation, baseRevision: review.current!.revision, base: review.base! } }
+      await result(outbox.add(entry))
+    }
+  })
+}
+
+export function saveShelfOrder(ownerId: string, expected: string, ids: string[]) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare this archive before arranging shelves offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    const snapshot = projectArchive(archive.snapshot, entries), base = shelfOrderBase(snapshot)
+    if (shelfOrders(entries).length || shelfDeletions(entries).length || snapshot.collections.some(row => row.kind === 'shelf' && (row.localOnly || row.pendingCreation))) throw new Error('Sync or review the saved shelf changes before arranging shelves.')
+    if (JSON.stringify(base) !== expected) throw new Error('The shelf order changed in another tab. Reopen the order editor.')
+    if (ids.length < 2 || ids.length !== base.length || new Set(ids).size !== ids.length || ids.some(id => !base.some(row => row.id === id))) throw new Error('Choose the saved manual shelves in this archive.')
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), mutation: { type: 'collection.reorder', base, ids } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+
+export function discardShelfOrder(ownerId: string, token: string) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    const review = archive && reviewShelfOrder(archive, entries)
+    if (!review || !review.refreshed || review.token !== token) throw new Error('Refresh the archive and reopen the order review before keeping its order.')
+    await result(outbox.delete([ownerId, review.entry.operationId]))
+  })
+}
+
+export function createShelf(ownerId: string, name: string) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const value = taxonomyName(name)
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare this archive before creating shelves offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), mutation: { type: 'collection.create', id: crypto.randomUUID(), values: { name: value } } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+
+export function discardShelfCreation(ownerId: string, operationId: string) {
+  return transact(['outbox'], 'readwrite', async tx => {
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    const entry = entries.find(entry => entry.operationId === operationId)
+    if (!entry || entry.mutation.type !== 'collection.create' || entry.response?.outcome !== 'rejected') throw new Error('This shelf creation changed. Reopen it before discarding.')
+    const id = entry.mutation.id
+    if (entries.some(other => other.operationId !== operationId && (other.mutation.type === 'collection.upsert' && other.mutation.id === id || other.mutation.type === 'object.patch' && Array.isArray(other.mutation.patch.changes.inCollections) && other.mutation.patch.changes.inCollections.some(ref => ref?.id === id)))) throw new Error('Pending edits still use this shelf. Save your pending work before resolving those edits.')
+    await result(outbox.delete([ownerId, operationId]))
+  })
+}
+
+export function saveShelfName(ownerId: string, id: string, expectedName: string, name: string) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const value = taxonomyName(name)
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare this archive before renaming its shelves offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (shelfEdits(entries, id).some(entry => ['conflict', 'rejected'].includes(entry.response?.outcome ?? ''))) throw new Error('Review this shelf’s conflicting name before renaming it again.')
+    const current = projectArchive(archive.snapshot, entries).collections.find(row => row.id === id)
+    if (!current || current.localOnly || current.pendingCreation || current.kind !== 'shelf' || !archive.snapshot.collections.some(row => row.id === id) || archive.snapshot.tombstones.some(row => row.entity === 'collection' && row.id === id)) throw new Error('Choose a shelf already saved in the archive.')
+    if (current.name !== expectedName) throw new Error('This shelf name changed in another tab. Keep your text and reopen it before saving.')
+    if (current.name === value) return
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), baseRecord: current, mutation: { type: 'collection.upsert', id, baseRevision: current.revision, base: { name: current.name }, values: { name: value } } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+
+export function resolveShelfName(ownerId: string, id: string, token: string, name: string | null) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archives = tx.objectStore('archives'), outbox = tx.objectStore('outbox')
+    const archive = await result<LocalArchive | undefined>(archives.get(ownerId))
+    const entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (!archive) throw new Error('The local archive could not be found.')
+    const review = reviewShelfName(archive, entries, id)
+    if (!review || review.token !== token) throw new Error('This shelf name review changed in another tab. Reopen it before choosing.')
+    if (name !== null && (!review.remote || review.rejected)) throw new Error('This shelf cannot be renamed from this review. Save your local name before discarding it.')
+    const value = name === null ? null : taxonomyName(name)
+    const snapshot = { ...archive.snapshot, collections: review.remote ? [...archive.snapshot.collections.filter(row => row.id !== id), { ...review.remote, id, revision: review.revision }] : archive.snapshot.collections.filter(row => row.id !== id) }
+    for (const entry of review.edits) await result(outbox.delete([ownerId, entry.operationId]))
+    if (value !== null && value !== review.remote!.name) {
+      const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: Math.min(...review.edits.map(entry => entry.sequence)), createdAt: Date.now(), baseRecord: { ...review.remote!, id, revision: review.revision }, mutation: { type: 'collection.upsert', id, baseRevision: review.revision, base: { name: review.remote!.name }, values: { name: value } } }
+      await result(outbox.add(entry))
+    }
+    await result(archives.put({ ...archive, snapshot }))
+  })
+}
+
+function assertMergeEntries(archive: LocalArchive, entries: OutboxEntry[], id: string, targetId: string) {
+  if (id === targetId) throw new Error('Choose a different destination occasion.')
+  for (const key of [id, targetId]) {
+    const row = archive.snapshot.occasions.find(row => row.id === key)
+    if (!row || row.localOnly || archive.snapshot.tombstones.some(row => row.entity === 'occasion' && row.id === key)) throw new Error('Choose two occasions already saved in the archive.')
+    if (taxonomyEdits(entries, 'occasion', key).length || occasionMerges(entries, key).length || taxonomyDeletions(entries).some(entry => entry.mutation.type === 'taxonomy.delete' && entry.mutation.entity === 'occasion' && entry.mutation.id === key)) throw new Error('Sync or review these occasions’ saved changes before merging.')
+  }
+}
+
+export function saveOccasionMerge(ownerId: string, id: string, targetId: string, expected: string) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    if (!archive) throw new Error('Prepare this archive before merging occasions offline.')
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    assertMergeEntries(archive, entries, id, targetId)
+    const snapshot = projectArchive(archive.snapshot, entries)
+    const base = { source: occasionMergeBase(snapshot, id)!, target: occasionMergeBase(snapshot, targetId)! }
+    if (JSON.stringify(base) !== expected) throw new Error('These occasions or their links changed in another tab. Reopen the merge before confirming.')
+    const entry: OutboxEntry = { ownerId, operationId: crypto.randomUUID(), sequence: entries.reduce((max, item) => Math.max(max, item.sequence), 0) + 1, createdAt: Date.now(), baseRecord: snapshot.occasions.find(row => row.id === id), mutation: { type: 'occasion.merge', id, targetId, base } }
+    await result(outbox.add(entry))
+    return entry
+  })
+}
+
+export function resolveOccasionMerge(ownerId: string, operationId: string, token: string, merge: boolean) {
+  return transact(['archives', 'outbox'], 'readwrite', async tx => {
+    const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+    const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
+    if (!archive) throw new Error('The local archive could not be found.')
+    const review = reviewOccasionMerge(archive, entries, operationId)
+    if (!review || review.token !== token || review.entry.mutation.type !== 'occasion.merge') throw new Error('This merge review changed in another tab. Reopen it before choosing.')
+    if (!review.refreshed) throw new Error('Sync saved edits to refresh both occasions before reviewing this merge.')
+    if (merge) {
+      if (review.entry.response?.outcome !== 'conflict' || !review.source || !review.target) throw new Error('This merge cannot be retried. Keep the archive entries and choose again.')
+      assertMergeEntries(archive, entries.filter(entry => entry.operationId !== operationId), review.entry.mutation.id, review.entry.mutation.targetId)
+    }
+    await result(outbox.delete([ownerId, operationId]))
+    if (merge) await result(outbox.add({ ...review.entry, operationId: crypto.randomUUID(), createdAt: Date.now(), response: undefined, responseAt: undefined, mutation: { ...review.entry.mutation, base: { source: review.source!, target: review.target! } } }))
+  })
+}
+
 export function saveTaxonomyDeletion(ownerId: string, entity: TaxonomyEntity, id: string, expected: string) {
   return transact(['archives', 'outbox'], 'readwrite', async tx => {
     const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
     if (!archive) throw new Error('Prepare this archive before removing its entries offline.')
     const outbox = tx.objectStore('outbox'), entries = await result<OutboxEntry[]>(outbox.index('ownerId').getAll(ownerId))
-    if (taxonomyEdits(entries, entity, id).length) throw new Error('Sync or review this entry’s saved rename before removing it.')
+    if (entity === 'occasion' && occasionMerges(entries, id).length) throw new Error('Sync or review this occasion’s saved merge first.')
+    if (taxonomyEdits(entries, entity, id).length) throw new Error('Sync or review this entry’s saved changes before removing it.')
     const snapshot = projectArchive(archive.snapshot, entries), current = snapshot[taxonomyKind[entity]].find(row => row.id === id)
     if (!current || current.localOnly || !archive.snapshot[taxonomyKind[entity]].some(row => row.id === id)) throw new Error('Sync this entry before removing it, or refresh if it was already removed.')
     const base = taxonomyDeletionBase(snapshot, entity, id)!
@@ -368,4 +611,32 @@ export function exportPending(ownerId: string) {
     operations: await result<OutboxEntry[]>(tx.objectStore('outbox').index('ownerId').getAll(ownerId)),
     media: await result<LocalMedia[]>(tx.objectStore('media').index('ownerId').getAll(ownerId)),
   }))
+}
+
+export async function reclaimArchiveMedia(ownerId: string, isActiveOwner: () => boolean) {
+  if (typeof navigator === 'undefined' || !navigator.locks) throw new Error('Open Capsule in a browser with safe local storage locking to free unused files.')
+  return navigator.locks.request(MEDIA_REFERENCE_LOCK, { mode: 'exclusive', ifAvailable: true }, async lock => {
+    if (!lock) return { status: 'busy' as const }
+    const active = () => { if (!isActiveOwner()) throw new Error('Local cleanup paused. Reopen this account to continue.') }
+    active()
+    const captures = await captureMediaReferences(ownerId)
+    active()
+    return transact(['archives', 'preparations', 'outbox', 'media'], 'readwrite', async tx => {
+      const archive = await result<LocalArchive | undefined>(tx.objectStore('archives').get(ownerId))
+      const preparation = await result<ArchivePreparation | undefined>(tx.objectStore('preparations').get(ownerId))
+      if (!archive || !validSnapshot(archive.snapshot, ownerId) || (preparation && !validSnapshot(preparation.snapshot, ownerId))) throw new Error('Prepare this archive before freeing unused local files.')
+      const operations = await result<OutboxEntry[]>(tx.objectStore('outbox').index('ownerId').getAll(ownerId))
+      const references = referencedMediaKeys([archive.snapshot, preparation?.snapshot, operations, captures])
+      const media = tx.objectStore('media'), files = await result<LocalMedia[]>(media.index('ownerId').getAll(ownerId))
+      let removed = 0, bytes = 0
+      for (const file of files) {
+        active()
+        if (!file.id.startsWith('remote:') || references.has(file.id)) continue
+        await result(media.delete([ownerId, file.id]))
+        removed++; bytes += file.bytes.size
+      }
+      active()
+      return { status: 'reclaimed' as const, removed, bytes, retained: files.length - removed }
+    })
+  })
 }

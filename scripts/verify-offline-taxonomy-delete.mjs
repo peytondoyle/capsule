@@ -59,7 +59,7 @@ try {
     await assert.rejects(store.saveTaxonomyDeletion(owner, 'person', ids.person, expected), /another tab/)
     const fresh = JSON.stringify(taxonomyDeletionBase(await projected(owner), 'person', ids.person))
     await store.saveTaxonomyName(owner, 'person', ids.person, 'Ada', 'New Ada')
-    await assert.rejects(store.saveTaxonomyDeletion(owner, 'person', ids.person, fresh), /saved rename/)
+    await assert.rejects(store.saveTaxonomyDeletion(owner, 'person', ids.person, fresh), /saved changes/)
     await assert.rejects(store.saveTaxonomyDeletion('foreign', 'person', ids.person, fresh))
     const other = 'local-only'; await store.replaceSnapshot(other, snapshot(other))
     await store.saveObjectChanges(other, id(2), (await projected(other)).records[1], { givenBy: [{ id: id(99), name: 'New friend', create: true }] })

@@ -1,5 +1,6 @@
 import { listOperations, recordResponse, replaceSnapshot } from './store'
 import type { SyncResponse, SyncSnapshot } from './types'
+import { validCoordinateBase } from './taxonomy'
 import { validSnapshot } from './media'
 
 export type SyncResult =
@@ -48,13 +49,31 @@ export async function syncArchive(ownerId: string, options: {
         if (entry.mutation.type === 'taxonomy.upsert' && entry.mutation.entity !== 'tag' &&
           (response.outcome === 'conflict' || response.outcome === 'rejected')) {
           const conflict = response.conflict
-          if ((response.reason !== undefined && response.reason !== 'name_taken') ||
+          const field = Object.hasOwn(entry.mutation.values, 'coordinates') ? 'coordinates' : Object.hasOwn(entry.mutation.values, 'note') ? 'note' : 'name'
+          if ((response.reason !== undefined && (field !== 'name' || response.reason !== 'name_taken')) ||
             ((response.outcome === 'conflict' || response.reason === 'name_taken') && !conflict) ||
             (conflict && (conflict.entity !== entry.mutation.entity || conflict.id !== entry.mutation.id ||
-              !Number.isSafeInteger(conflict.revision) || conflict.revision < 1 || !Array.isArray(conflict.fields) || conflict.fields.length !== 1 || conflict.fields[0] !== 'name' ||
-              (conflict.current !== null && (conflict.current?.id !== conflict.id || typeof conflict.current.name !== 'string' || !conflict.current.name.trim() || conflict.current.name.length > 250 || conflict.current.revision !== conflict.revision || (conflict.current.ownerId !== undefined && conflict.current.ownerId !== ownerId)))))) {
-            throw new Error('The name conflict details are incomplete. Your changes are still saved on this device.')
+              !Number.isSafeInteger(conflict.revision) || conflict.revision < 1 || !Array.isArray(conflict.fields) || conflict.fields.length !== 1 || conflict.fields[0] !== field ||
+              (conflict.current !== null && (conflict.current?.id !== conflict.id || (field === 'coordinates' && !validCoordinateBase({ lat: conflict.current.lat, lng: conflict.current.lng })) || (field === 'note' && conflict.current.note !== null && typeof conflict.current.note !== 'string') || typeof conflict.current.name !== 'string' || !conflict.current.name.trim() || conflict.current.name.length > 250 || conflict.current.revision !== conflict.revision || (conflict.current.ownerId !== undefined && conflict.current.ownerId !== ownerId)))))) {
+            throw new Error(`The ${field} conflict details are incomplete. Your changes are still saved on this device.`)
           }
+        }
+        if (entry.mutation.type === 'collection.delete' && (response.outcome === 'conflict' || response.outcome === 'rejected')) {
+          const conflict = response.conflict
+          if (response.reason === 'shared_collection' ? response.outcome !== 'rejected' || conflict !== undefined || !Array.isArray(response.shareIds) || response.shareIds.some(id => typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) : response.reason !== undefined || response.shareIds !== undefined || response.outcome === 'conflict' && !conflict || conflict && (conflict.entity !== 'collection' || conflict.id !== entry.mutation.id || !Number.isSafeInteger(conflict.revision) || conflict.revision < 1 || JSON.stringify(conflict.fields) !== '["shelf","memberships"]' || conflict.current !== null && (conflict.current.id !== conflict.id || conflict.current.revision !== conflict.revision || typeof conflict.current.name !== 'string' || conflict.current.ownerId !== undefined && conflict.current.ownerId !== ownerId))) throw new Error('The shelf removal response is unexpected. Your removal is still saved on this device.')
+        }
+        if (entry.mutation.type === 'collection.reorder' && (response.outcome === 'conflict' || response.outcome === 'rejected')) {
+          const conflict = response.conflict
+          if (response.reason !== undefined || response.outcome === 'conflict' && !conflict || conflict && (conflict.entity !== 'collection' || conflict.id !== entry.mutation.ids[0] || conflict.revision !== 1 || conflict.current !== null || JSON.stringify(conflict.fields) !== '["order"]')) throw new Error('The shelf order response is unexpected. Your order is still saved on this device.')
+        }
+        if (entry.mutation.type === 'collection.create' && (response.outcome === 'conflict' || response.reason !== undefined || response.conflict !== undefined)) throw new Error('The shelf creation response is unexpected. Your changes are still saved on this device.')
+        if (entry.mutation.type === 'collection.upsert' && (response.outcome === 'conflict' || response.outcome === 'rejected')) {
+          const conflict = response.conflict
+          if (response.reason !== undefined || response.outcome === 'conflict' && !conflict || conflict && (conflict.entity !== 'collection' || conflict.id !== entry.mutation.id || !Number.isSafeInteger(conflict.revision) || conflict.revision < 1 || JSON.stringify(conflict.fields) !== '["name"]' || conflict.current !== null && (conflict.current?.id !== conflict.id || conflict.current.revision !== conflict.revision || typeof conflict.current.name !== 'string' || !['shelf', 'cluster', 'smart'].includes(String(conflict.current.kind)) || conflict.current.ownerId !== undefined && conflict.current.ownerId !== ownerId))) throw new Error('The shelf conflict details are incomplete. Your changes are still saved on this device.')
+        }
+        if (entry.mutation.type === 'occasion.merge' && (response.outcome === 'conflict' || response.outcome === 'rejected')) {
+          const conflict = response.conflict
+          if (response.reason !== undefined || response.outcome === 'conflict' && !conflict || conflict && (conflict.entity !== 'occasion' || conflict.id !== entry.mutation.id || !Number.isSafeInteger(conflict.revision) || conflict.revision < 1 || JSON.stringify(conflict.fields) !== '["source","target","links"]' || conflict.current !== null && (conflict.current?.id !== conflict.id || conflict.current.revision !== conflict.revision || typeof conflict.current.name !== 'string' || conflict.current.ownerId !== undefined && conflict.current.ownerId !== ownerId))) throw new Error('The merge conflict details are incomplete. Your changes are still saved on this device.')
         }
         if (entry.mutation.type === 'taxonomy.delete' && response.outcome === 'conflict') {
           const conflict = response.conflict

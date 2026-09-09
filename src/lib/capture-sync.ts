@@ -1,16 +1,17 @@
 import { upload } from '@vercel/blob/client'
 
-import { clientCapturePath, safeUploadName } from './blob-path'
-import type { CaptureExif, CaptureRequest, CaptureResponse } from './capture-types'
+import { clientCapturePath, clientCaptureOriginalPath, safeUploadName } from './blob-path'
+import type { CaptureExif, CaptureOriginal, CaptureRequest, CaptureResponse } from './capture-types'
 import type { FaceConflict, FaceReceipt } from './face-draft'
 import type { CaptureFilingReceipt } from './capture-draft'
 import { toUploadable } from './heic'
-import { acknowledgeFace, recordFaceConflict, recordCaptureConflict, acknowledgeFiling, acknowledgeUpload, claimUpload, listQueued, prepareUpload, type PendingUpload } from './offline-queue'
+import { acknowledgeOriginalBackup, listRetainedOriginals, acknowledgeFace, recordFaceConflict, recordCaptureConflict, acknowledgeFiling, acknowledgeUpload, claimUpload, listQueued, prepareUpload, type PendingUpload } from './offline-queue'
 
 export type CaptureProgress = {
   key: string
   status: 'saved' | 'uploading' | 'uploaded' | 'failed'
   itemId?: string
+  originalBackup?: CaptureOriginal
   retainedOriginal?: boolean
   faceReceipt?: FaceReceipt
   filed?: CaptureFilingReceipt
@@ -60,6 +61,7 @@ async function captureRequest(ownerId: string, body: CaptureRequest): Promise<Ca
   if (!['missing', 'uploaded', 'recorded'].includes(value.status) || (value.status === 'recorded' && value.itemId !== body.captureId)) {
     throw new Error('The archive did not confirm this photograph. Its local copy is safe.')
   }
+  if (body.original && value.original !== null && (value.original?.sha256 !== body.original.sha256 || value.original?.size !== body.original.size)) throw new Error('The archive did not confirm the camera original bytes. Its local copy is safe.')
   return value
 }
 
@@ -73,22 +75,37 @@ export async function drainCaptures(ownerId: string, options: {
     if (!lock) return 'busy'
     const active = () => options.isActiveOwner()
     if (!active()) return 'locked'
-    const queued = await listQueued(ownerId)
+    const queued = [...await listQueued(ownerId), ...(await listRetainedOriginals(ownerId)).filter(item => item.prepared?.converted && !item.originalBackup)]
     for (const candidate of queued) {
       if (candidate.dismissed || !!candidate.faceTarget !== (options.kind === 'faces')) continue
       if (!active()) return 'locked'
       try {
-        const item = await claimUpload(ownerId, candidate.key)
+        const item = candidate.itemId ? candidate : await claimUpload(ownerId, candidate.key)
         if (!item) continue
         if (item.faceTarget?.action === 'delete') {
           await syncFace(ownerId, item, options)
           continue
         }
         const prepared = await preparedPhoto(ownerId, item)
+        if (item.itemId && item.itemId !== prepared.captureId) throw new Error('This saved original does not match its capture. Keep its local copy.')
         if (!active()) return 'locked'
-        const request = { captureId: prepared.captureId, name: prepared.name, exif: prepared.exif }
+        const original = prepared.converted ? { size: item.bytes.size, sha256: Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await item.bytes.arrayBuffer())), byte => byte.toString(16).padStart(2, '0')).join('') } : undefined
+        if (!active()) return 'locked'
+        const request = { captureId: prepared.captureId, name: prepared.name, exif: prepared.exif, original }
         options.onProgress({ key: item.key, status: 'uploading' })
         let state = await captureRequest(ownerId, { ...request, action: 'status' })
+        if (!active()) return 'locked'
+        if (original && !state.original) {
+          try {
+            await upload(clientCaptureOriginalPath(ownerId, prepared.captureId), item.bytes, {
+              access: 'private', handleUploadUrl: '/api/blob/upload', contentType: 'image/heic',
+            })
+          } catch (error) {
+            if (!active()) return 'locked'
+            state = await captureRequest(ownerId, { ...request, action: 'status' })
+            if (!state.original) throw error
+          }
+        }
         if (!active()) return 'locked'
         if (state.status === 'missing') {
           try {
@@ -103,9 +120,18 @@ export async function drainCaptures(ownerId: string, options: {
           }
         }
         if (!active()) return 'locked'
-        if (state.status !== 'recorded') state = await captureRequest(ownerId, { ...request, action: 'finish' })
+        if (state.status !== 'recorded' || (original && !state.original)) state = await captureRequest(ownerId, { ...request, action: 'finish' })
         if (!active()) return 'locked'
         if (state.status !== 'recorded' || !state.itemId) throw new Error('Upload is not confirmed yet. Your photograph is saved on this device.')
+        if (original) {
+          if (!state.original) throw new Error('Camera original backup is not confirmed. Its local copy is safe.')
+          await acknowledgeOriginalBackup(ownerId, item.key, prepared.captureId, state.original)
+          if (!active()) return 'locked'
+        }
+        if (item.itemId) {
+          options.onProgress({ key: item.key, status: 'uploaded', itemId: item.itemId, retainedOriginal: true, originalBackup: state.original ?? undefined })
+          continue
+        }
         if (item.faceTarget) {
           await syncFace(ownerId, item, options, state.itemId)
           continue
@@ -133,11 +159,11 @@ export async function drainCaptures(ownerId: string, options: {
           }
           if (!active()) return 'locked'
           await acknowledgeFiling(ownerId, item.key, filed)
-          options.onProgress({ key: item.key, status: 'uploaded', itemId: state.itemId, retainedOriginal: true, filed })
+          options.onProgress({ key: item.key, status: 'uploaded', itemId: state.itemId, retainedOriginal: true, originalBackup: state.original ?? undefined, filed })
           continue
         }
         await acknowledgeUpload(ownerId, item.key, state.itemId)
-        options.onProgress({ key: item.key, status: 'uploaded', itemId: state.itemId, retainedOriginal: prepared.converted })
+        options.onProgress({ key: item.key, status: 'uploaded', itemId: state.itemId, retainedOriginal: prepared.converted, originalBackup: state.original ?? undefined })
         void fetch('/api/derive', {
           method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ itemId: state.itemId }),
         }).then((response) => response.ok && active() ? fetch('/api/extract', {

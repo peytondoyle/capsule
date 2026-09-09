@@ -1,6 +1,7 @@
+import { MEDIA_REFERENCE_LOCK } from './offline/media'
 import { faceBaseline, type FaceTarget, type FaceConflict, type FaceReceipt } from './face-draft'
 import { emptyCaptureDraft } from './capture-draft'
-import type { CaptureExif } from './capture-types'
+import type { CaptureExif, CaptureOriginal } from './capture-types'
 import type { CaptureDraft, CaptureFilingReceipt } from './capture-draft'
 
 const DB = 'capsule-offline'
@@ -25,6 +26,7 @@ export type PendingUpload = {
   queuedAt: number
   prepared?: PreparedUpload
   itemId?: string
+  originalBackup?: CaptureOriginal & { captureId: string }
   draft?: CaptureDraft
   draftRevision?: number
   readyToFile?: boolean
@@ -59,7 +61,7 @@ function result<T>(request: IDBRequest<T>): Promise<T> {
   })
 }
 
-async function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => Promise<T>) {
+async function transaction<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => Promise<T>) {
   const db = await open()
   try {
     return await new Promise<T>((resolve, reject) => {
@@ -76,6 +78,17 @@ async function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => P
   } finally {
     db.close()
   }
+}
+
+async function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => Promise<T>) {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined
+  return mode === 'readwrite' && locks
+    ? locks.request(MEDIA_REFERENCE_LOCK, { mode: 'exclusive' }, () => transaction(mode, run))
+    : transaction(mode, run)
+}
+
+export async function captureMediaReferences(ownerId: string) {
+  return listForOwner(ownerId)
 }
 
 export async function enqueueUpload(ownerId: string, file: File, taken?: string, draft?: CaptureDraft) {
@@ -171,7 +184,7 @@ export function acknowledgeUpload(ownerId: string, key: string, itemId: string) 
     const item = await result<PendingUpload | undefined>(store.get(key))
     if (!item || item.ownerId !== ownerId) throw new Error('Photo is not in this account’s local queue.')
     if (item.draft) throw new Error('Filing must be confirmed before this draft can leave the queue.')
-    // The pipeline uses JPEG for HEIC. Keep the untouched camera original locally until it has its own cloud backup.
+    // Keep the local camera original; storage reclamation is a separate operation.
     if (item.prepared?.converted) await result(store.put({ ...item, itemId }))
     else await result(store.delete(key))
   })
@@ -209,7 +222,7 @@ export function resolveFaceConflict(ownerId: string, key: string, token: string,
     if (!item || item.ownerId !== ownerId || !item.faceTarget || item.dismissed || !item.faceConflict || JSON.stringify({ target: item.faceTarget, conflict: item.faceConflict }) !== token) throw new Error('This photo review changed in another tab. Reopen it before choosing.')
     if (keepLocal && item.faceConflict.objectDeleted) throw new Error('This object was deleted. Save a copy of your photograph instead.')
     const current = item.faceConflict.current
-    await result(store.put(keepLocal ? { ...item, faceTarget: { ...item.faceTarget, operationId: crypto.randomUUID(), faceId: typeof current?.id === 'string' ? current.id : item.faceTarget.action === 'save' ? crypto.randomUUID() : item.faceTarget.faceId, role: current?.role ?? item.faceTarget.role, base: current ? faceBaseline(current) : null }, faceConflict: undefined, prepared: item.faceConflict.sourceChanged ? undefined : item.prepared, syncStarted: false } : { ...item, dismissed: true }))
+    await result(store.put(keepLocal ? { ...item, faceTarget: { ...item.faceTarget, operationId: crypto.randomUUID(), faceId: typeof current?.id === 'string' ? current.id : item.faceTarget.action === 'save' ? crypto.randomUUID() : item.faceTarget.faceId, role: current?.role ?? item.faceTarget.role, base: current ? faceBaseline(current) : null }, faceConflict: undefined, prepared: item.faceConflict.sourceChanged ? undefined : item.prepared, originalBackup: item.faceConflict.sourceChanged ? undefined : item.originalBackup, syncStarted: false } : { ...item, dismissed: true }))
   })
 }
 
@@ -226,5 +239,13 @@ export function acknowledgeFace(ownerId: string, key: string, receipt: FaceRecei
     const item = await result<PendingUpload | undefined>(store.get(key)), target = item?.faceTarget
     if (!item || item.ownerId !== ownerId || !target || !item.syncStarted || receipt.operationId !== target.operationId || receipt.objectId !== target.objectId || receipt.faceId !== target.faceId || receipt.deleted !== (target.action === 'delete') || (target.action === 'save' && receipt.itemId !== item.prepared?.captureId)) throw new Error('The archive did not confirm this photo change. Its local copy is safe.')
     await result(store.put({ ...item, itemId: receipt.itemId ?? receipt.operationId, faceReceipt: receipt }))
+  })
+}
+
+export function acknowledgeOriginalBackup(ownerId: string, key: string, captureId: string, original: CaptureOriginal) {
+  return tx('readwrite', async store => {
+    const item = await result<PendingUpload | undefined>(store.get(key))
+    if (!item || item.ownerId !== ownerId || !item.prepared?.converted || item.prepared.captureId !== captureId || (item.itemId && item.itemId !== captureId) || item.bytes.size !== original.size || !/^[a-f0-9]{64}$/.test(original.sha256)) throw new Error('The archive did not confirm this camera original. Its local copy is safe.')
+    await result(store.put({ ...item, originalBackup: { ...original, captureId } }))
   })
 }
