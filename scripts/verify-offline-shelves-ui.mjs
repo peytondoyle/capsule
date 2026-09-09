@@ -18,8 +18,15 @@ try {
  assert.match(normal, /NEW SHELF NAME/); assert.match(normal, /CREATE SHELF ON DEVICE/)
  const rejected = { ownerId: 'owner', operationId: 'create-1', mutation: { type: 'collection.create', id: 'new', values: { name: 'Rejected shelf' } }, response: { outcome: 'rejected' } }
  const recovery = render({ ...base, operations: [rejected] }); assert.match(recovery, /SAVE NEW SHELF DETAILS/); assert.match(recovery, /DISCARD REJECTED SHELF/); assert.match(recovery, /Rejected shelf/)
- assert.match(render({ ...base, snapshot: { ...snapshot, collections: [{ ...shelf, pendingCreation: true, localOnly: true }] } }), /before adding objects or renaming/)
+ assert.match(render({ ...base, snapshot: { ...snapshot, collections: [{ ...shelf, pendingCreation: true, localOnly: true }] } }), /Objects can be added on this device/)
  assert.match(render({ ...base, snapshot: { ...snapshot, collections: [] }, operations: [conflict] }), /REVIEW UNAVAILABLE SHELF NAME/)
+ const dependency = { ownerId: 'owner', operationId: 'patch-1', sequence: 2, mutation: { type: 'object.patch', shelfDependencies: [{ id: 'new', operationId: 'create-1' }], patch: { id: 'object', baseRevision: 1, base: { inCollections: [] }, changes: { title: 'Preserved title', inCollections: [{ id: 'new', name: 'Rejected shelf' }] } } } }
+ const chain = render({ ...base, operations: [{ ...rejected, sequence: 1 }, dependency] })
+ assert.match(chain, /CANCEL FAILED SHELF REFERENCE/); assert.match(chain, /Other object details and shelf selections stay saved/)
+ const download = chain.match(/href="(data:application\/json[^"]+)"/)[1]
+ const payload = JSON.parse(decodeURIComponent(download.split(',')[1])); assert.equal(payload.affected[0].mutation.patch.changes.title, 'Preserved title')
+ const unsafe = render({ ...base, operations: [{ ...rejected, sequence: 1 }, { ...dependency, response: { outcome: 'applied' } }] })
+ assert.match(unsafe, /cannot be safely changed here/); assert.match(unsafe, /disabled=""[^>]*>CANCEL FAILED SHELF REFERENCE/)
  const hostile = render({ ...base, snapshot: { ...snapshot, collections: [{ ...shelf, name: '<script>alert(1)</script>' }] } }); assert.doesNotMatch(hostile, /<script>/)
  console.log('verify-offline-shelves-ui: passed manual-only list, valid member counts, pending/empty/unavailable recovery states and escaping')
 } finally { rmSync(outdir, { recursive: true, force: true }) }

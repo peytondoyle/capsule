@@ -47,8 +47,8 @@ try {
     const current = await projected(f.owner)
     assert.equal(current.collections.length, 2); assert.equal(current.collections[0].name, 'New shelf'); assert.equal(current.memberships.length, 0)
     assert.equal(current.collections.every(row => row.localOnly && row.pendingCreation), true)
-    assert.equal(links.linkChoices(current, 'inCollections').length, 0)
-    await assert.rejects(store.saveObjectChanges(f.owner, f.object.id, current.records[0], { inCollections: [{ id: first.mutation.id, name: 'New shelf', create: true }] }), /Sync this new shelf/)
+    assert.equal(links.linkChoices(current, 'inCollections').length, 2)
+    assert.equal(links.linkChoices(current, 'inCollections').every(ref => !ref.create), true)
     await assert.rejects(store.saveShelfName(f.owner, first.mutation.id, 'New shelf', 'No'), /already saved/)
     await assert.rejects(store.discardShelfCreation(f.owner, first.operationId), /changed/)
     assert.equal((await syncArchive(f.owner, active)).status, 'synced')
@@ -61,7 +61,7 @@ try {
     assert.equal((await server.getSyncSnapshot(f.owner)).collections.length,2)
     assert.equal((await projected(f.owner)).records[0].inCollections[0].name,'After sync')
   }
-  console.log('1 durable empty shelves/defaults/duplicate IDs, pre-sync dependency guards and post-sync linking/rename passed')
+  console.log('1 durable empty shelves/defaults/duplicate IDs, pre-sync explicit choices and rename guards and post-sync linking/rename passed')
   {
     const f = await setup(), entry = await store.createShelf(f.owner,'Retry shelf'); sent=[];lose=true
     await assert.rejects(syncArchive(f.owner,active),/lost acknowledgement/)
@@ -86,6 +86,7 @@ try {
       assert.equal(current.records[0].inCollections[0].name,'Keep existing')
       assert.equal(current.memberships[0].collectionId,id)
       assert.equal(links.linkChoices(current,'inCollections').length,0)
+      await assert.rejects(store.saveObjectChanges(f.owner,f.object.id,current.records[0],{inCollections:[]}),/Review this new shelf/)
     }
     const before=await server.getSyncSnapshot(f.owner),other=await store.saveObjectChanges(f.owner,f.object.id,(await projected(f.owner)).records[0],{title:'Keep unrelated'})
     await assert.rejects(store.discardShelfCreation('foreign',entry.operationId),/changed/)

@@ -359,9 +359,9 @@ export function OfflineLibrary({ ownerId, onClose }: { ownerId: string; onClose:
   if (shelvesOpen && snapshot) return <OfflineShelves onRemove={id => { const base = shelfDeletionBase(snapshot, id); if (base) setShelfRemoving({ id, base, review: null }) }} onOrder={() => setOrderingShelves(true)} snapshot={snapshot} operations={operations} onRename={openShelfName} onCreate={async name => {
     if (localOwner() !== ownerId) throw new Error('Sign in to this account to create shelves.')
     await createShelf(ownerId, name); await changed()
-  }} onDiscardCreation={async operationId => {
+  }} onDiscardCreation={async (operationId, token) => {
     if (localOwner() !== ownerId) throw new Error('Sign in to this account to review its shelves.')
-    await discardShelfCreation(ownerId, operationId); await changed()
+    await discardShelfCreation(ownerId, operationId, token); await changed()
   }} onClose={() => setShelvesOpen(false)} />
   if (merging) {
     const mutation = merging.review?.entry.mutation

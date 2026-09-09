@@ -145,7 +145,9 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
   const mutation = input.mutation
   if (mutation.type === 'object.create') {
     if (!uuid(mutation.clientId) || !validValues(mutation.values, true)) return rejected
-  } else if (mutation.type === 'object.patch') {
+  } else if (mutation.type === 'object.patch' || mutation.type === 'object.patchWithShelfDependencies') {
+    if (mutation.type === 'object.patch' && mutation.shelfDependencies !== undefined) return rejected
+    if (mutation.type === 'object.patchWithShelfDependencies' && (!Array.isArray(mutation.shelfDependencies) || !mutation.shelfDependencies.length || mutation.shelfDependencies.length > 400 || !mutation.shelfDependencies.every(item => record(item) && uuid(item.id) && uuid(item.operationId)) || new Set(mutation.shelfDependencies.map(item => item.id)).size !== mutation.shelfDependencies.length)) return rejected
     if (!record(mutation.patch) || !uuid(mutation.patch.id) || !revision(mutation.patch.baseRevision) ||
       !record(mutation.patch.base) || !validValues(mutation.patch.changes, false)) return rejected
   } else if (mutation.type === 'object.delete') {
@@ -176,7 +178,7 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
     if (typeof mutation.entity !== 'string' || !['person', 'place', 'occasion'].includes(mutation.entity) || !uuid(mutation.id) || !revision(mutation.baseRevision) || !record(mutation.base) || !record(mutation.base.metadata) || !Array.isArray(mutation.base.links) || !mutation.base.links.every(link => typeof link === 'string')) return rejected
   } else return rejected
 
-  const request = input as SyncRequest
+  const request = (mutation.type === 'object.patchWithShelfDependencies' ? { ...input, mutation: { ...mutation, type: 'object.patch' } } : input) as SyncRequest
   return getTxDb().transaction(async (db) => {
     // Serialize this owner's sync stream, including different operations for the same client ID.
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerId}, 0))`)
@@ -219,7 +221,16 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
       if (!object || state?.deletedAt || conflicts.length || (mutation.type === 'object.delete' && currentRevision !== mutation.baseRevision)) {
         response = { operationId, outcome: 'conflict', conflict: { entity: 'object', id, revision: currentRevision, current, fields: conflicts } }
       } else if (mutation.type === 'object.patch') {
-        if (await ownsReferences(db, ownerId, mutation.patch.changes) && await canWriteLinks(db, ownerId, mutation.patch.changes)) {
+        let dependenciesReady = true
+        for (const dependency of [...(mutation.shelfDependencies ?? [])].sort((a, b) => a.id.localeCompare(b.id))) {
+          const [receipt] = await db.select().from(syncOperations).where(and(eq(syncOperations.ownerId, ownerId), eq(syncOperations.operationId, dependency.operationId))).limit(1)
+          const response = receipt?.response as SyncResponse | undefined
+          const [shelf] = await db.select().from(collections).where(and(eq(collections.ownerId, ownerId), eq(collections.id, dependency.id), eq(collections.kind, 'shelf'))).limit(1).for('key share')
+          const [state] = await db.select().from(syncEntities).where(and(eq(syncEntities.ownerId, ownerId), eq(syncEntities.entity, 'collection'), eq(syncEntities.entityId, dependency.id))).limit(1)
+          const implicit = [mutation.patch.base.inCollections, mutation.patch.changes.inCollections].some(refs => Array.isArray(refs) && refs.some(ref => ref.id === dependency.id && ref.create))
+          if (!response || response.outcome !== 'applied' || response.createdShelfId !== dependency.id || !shelf || state?.deletedAt || implicit) dependenciesReady = false
+        }
+        if (dependenciesReady && await ownsReferences(db, ownerId, mutation.patch.changes) && await canWriteLinks(db, ownerId, mutation.patch.changes)) {
           await writeObjectLinks(db, ownerId, id, mutation.patch.changes)
           const scalarChanges = Object.fromEntries(Object.entries(mutation.patch.changes).filter(([key]) => !isLinkField(key)))
           await db.update(objects).set({ ...scalarChanges, updatedAt: new Date() }).where(and(eq(objects.id, id), eq(objects.ownerId, ownerId)))
@@ -276,7 +287,7 @@ export async function applySyncMutation(ownerId: string, input: unknown): Promis
         if (created) {
           await db.insert(syncEntities).values({ ownerId, entity: 'collection', entityId: mutation.id, revision: 1 })
           await db.insert(syncClientIds).values({ ownerId, entity: 'collection', clientId: mutation.id, serverId: mutation.id })
-          response = { operationId, outcome: 'applied' }
+          response = { operationId, outcome: 'applied', createdShelfId: mutation.id }
         }
       }
     } else if (mutation.type === 'collection.upsert') {
