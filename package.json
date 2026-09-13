@@ -7,7 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "infisical run --env=dev -- next dev",
     "build": "npm run build:sw && npm run build:detect && next build",
     "start": "next start",
     "lint": "eslint",
