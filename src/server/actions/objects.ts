@@ -28,6 +28,7 @@ async function requireOwner() {
 
 function refresh(lotNo: number) {
   revalidatePath('/timeline')
+  revalidatePath('/cabinet')
   revalidatePath(`/o/${lotNo}`)
 }
 
@@ -99,9 +100,24 @@ export async function saveFieldsAction(objectId: string, formData: FormData) {
   const ifPosted = <T extends object>(key: string, patch: T) =>
     formData.has(key) ? patch : {}
 
+  /** undefined = not posted · null = posted blank · number = a valid integer. */
+  const integer = (key: string) => {
+    if (!formData.has(key)) return undefined
+    const value = formData.get(key)
+    if (typeof value !== 'string') throw new Error(`${key} must be an integer`)
+    if (value.trim() === '') return null
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || Math.abs(parsed) > 2147483647) {
+      throw new Error(`${key} must be an integer between -2147483647 and 2147483647`)
+    }
+    return parsed
+  }
+
   const receivedAt = text('receivedAt')
   const placeName = text('place')
   const occasionName = text('occasion')
+  const widthMm = integer('widthMm')
+  const heightMm = integer('heightMm')
 
   const [place, occasion] = await Promise.all([
     placeName ? upsertPlace(ownerId, placeName) : null,
@@ -126,6 +142,9 @@ export async function saveFieldsAction(objectId: string, formData: FormData) {
     ...ifPosted('place', { placeId: place?.id ?? null }),
     ...ifPosted('occasion', { occasionId: occasion?.id ?? null }),
     ...ifPosted('retainedLocation', { retainedLocation: text('retainedLocation') ?? null }),
+    ...ifPosted('widthMm', { widthMm: widthMm ?? null }),
+    ...ifPosted('heightMm', { heightMm: heightMm ?? null }),
+    ...ifPosted('material', { material: text('material') ?? null }),
   })
 
   refresh(lotNo)

@@ -29,6 +29,14 @@ export function PhoneLotSheet({
   ]
     .filter(Boolean)
     .join(' · ')
+  const dimensions = detail.widthMm !== null && detail.heightMm !== null
+    ? `${detail.widthMm} × ${detail.heightMm} MM`
+    : detail.widthMm !== null
+      ? `W ${detail.widthMm} MM`
+      : detail.heightMm !== null
+        ? `H ${detail.heightMm} MM`
+        : null
+  const objectDetails = [detail.material?.toUpperCase(), dimensions].filter(Boolean).join(' · ')
 
   return (
     <div
@@ -65,6 +73,7 @@ export function PhoneLotSheet({
               {detail.title}
             </div>
             {meta ? <Meta className="mt-1.5">{meta}</Meta> : null}
+            {objectDetails ? <Meta className="mt-1.5">{objectDetails}</Meta> : null}
           </div>
         </div>
         {detail.story ? (

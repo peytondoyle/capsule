@@ -9,7 +9,7 @@ import { projectTaxonomyDeletions } from './taxonomy-delete'
 export const editLabels = {
   ...linkLabels,
   title: 'Title', kind: 'Kind', story: 'Story', receivedAt: 'Received date', receivedPrecision: 'Date precision',
-  placeId: 'Place', occasionId: 'Occasion', retention: 'Still have it', retainedLocation: 'Kept at', material: 'Material',
+  placeId: 'Place', occasionId: 'Occasion', retention: 'Still have it', retainedLocation: 'Kept at', material: 'Material', widthMm: 'Width (mm)', heightMm: 'Height (mm)',
 } as const
 export type EditField = keyof typeof editLabels
 
@@ -69,6 +69,7 @@ export function validObjectChanges(changes: Record<string, unknown>) {
     if (field === 'retention') return value === 'retained' || value === 'digital_only'
     if (field === 'placeId' || field === 'occasionId') return value === null || typeof value === 'string'
     if (field === 'title') return typeof value === 'string' && !!value.trim() && value.length <= 250
+    if (field === 'widthMm' || field === 'heightMm') return value === null || typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && Math.abs(value) <= 2147483647
     return value === null || typeof value === 'string' && value.length <= (field === 'story' ? 20000 : 250)
   })
 }

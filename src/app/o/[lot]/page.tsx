@@ -170,7 +170,7 @@ function Field({
   defaultValue?: string | null
   placeholder?: string
   textarea?: boolean
-  type?: 'text' | 'date'
+  type?: 'text' | 'date' | 'number'
 }) {
   const shared =
     'mt-2 w-full border-0 border-b border-hair-strong bg-transparent pb-2 text-[14px] outline-none placeholder:text-mute-3 focus:border-ink'
@@ -191,6 +191,9 @@ function Field({
           type={type ?? 'text'}
           defaultValue={defaultValue ?? ''}
           placeholder={placeholder}
+          min={type === 'number' ? -2147483647 : undefined}
+          max={type === 'number' ? 2147483647 : undefined}
+          step={type === 'number' ? 1 : undefined}
           className={type === 'date' ? `${shared} mn mn-date w-auto tabular-nums` : shared}
         />
       )}
@@ -235,6 +238,9 @@ function EditForm({
         defaultValue={detail.retainedLocation}
         placeholder="In the blue tin, top shelf"
       />
+      <Field label="Width (mm)" name="widthMm" defaultValue={detail.widthMm?.toString()} type="number" />
+      <Field label="Height (mm)" name="heightMm" defaultValue={detail.heightMm?.toString()} type="number" />
+      <Field label="Material" name="material" defaultValue={detail.material} />
 
       <Hairline />
 

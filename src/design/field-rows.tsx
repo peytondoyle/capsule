@@ -61,7 +61,7 @@ export type EditableFieldRow = {
    * ISO string was the whole complaint, and the value posts as YYYY-MM-DD
    * either way.
    */
-  type?: 'text' | 'date'
+  type?: 'text' | 'date' | 'number'
 }
 
 /**
@@ -90,6 +90,9 @@ export function FieldRowsEdit({ rows }: { rows: EditableFieldRow[] }) {
               type={row.type ?? 'text'}
               defaultValue={row.defaultValue ?? ''}
               placeholder={row.placeholder}
+              min={row.type === 'number' ? -2147483647 : undefined}
+              max={row.type === 'number' ? 2147483647 : undefined}
+              step={row.type === 'number' ? 1 : undefined}
               className={[
                 'appearance-none border-b border-transparent bg-transparent text-right',
                 'outline-none transition-colors focus:border-hair-strong',
