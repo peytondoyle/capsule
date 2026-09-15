@@ -333,6 +333,9 @@ function DetailEdit({
               defaultValue: detail.occasionName,
               placeholder: 'What was the occasion?',
             },
+            { label: 'Width (mm)', name: 'widthMm', defaultValue: detail.widthMm?.toString(), type: 'number' },
+            { label: 'Height (mm)', name: 'heightMm', defaultValue: detail.heightMm?.toString(), type: 'number' },
+            { label: 'Material', name: 'material', defaultValue: detail.material },
           ]}
         />
       }

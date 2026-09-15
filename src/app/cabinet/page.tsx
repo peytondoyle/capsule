@@ -188,12 +188,16 @@ export default async function CabinetPage({
               </Link>
             }
             aside={
-              detail.material || (detail.widthMm && detail.heightMm)
+              detail.material || detail.widthMm !== null || detail.heightMm !== null
                 ? [
                     detail.material?.toUpperCase(),
-                    detail.widthMm && detail.heightMm
+                    detail.widthMm !== null && detail.heightMm !== null
                       ? `${detail.widthMm} × ${detail.heightMm} MM`
-                      : null,
+                      : detail.widthMm !== null
+                        ? `W ${detail.widthMm} MM`
+                        : detail.heightMm !== null
+                          ? `H ${detail.heightMm} MM`
+                          : null,
                   ]
                     .filter(Boolean)
                     .join(' · ')
