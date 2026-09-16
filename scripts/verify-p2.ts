@@ -5,9 +5,10 @@
  *   npm run db:verify -- --owner user_seed_dev
  */
 import { and, eq, sql } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
 
 import { getDb } from '../src/server/db'
-import { objects } from '../src/server/db/schema'
+import { objects, shares } from '../src/server/db/schema'
 import { clusterBoardBy, dropOnCluster, getBoard, tidyBoard } from '../src/server/board'
 import {
   assertOwned,
@@ -21,6 +22,7 @@ import {
   searchObjects,
 } from '../src/server/objects'
 import { getPersonStats, listPeopleWithCounts } from '../src/server/people'
+import { getSharedObject } from '../src/server/shares'
 import { listPlacesWithCounts, listTagsWithCounts } from '../src/server/taxonomy'
 import { requireVerificationBranch } from './verify-db'
 
@@ -181,6 +183,69 @@ async function main() {
   check('another owner sees nothing', otherTimeline.length === 0)
   const otherLot = await getObjectByLot('user_does_not_exist', 1)
   check('getObjectByLot is owner-scoped', otherLot === null)
+
+  // --- public shares ------------------------------------------------------
+  const sharedObject = await getObjectByLot(ownerId, 1)
+  if (sharedObject) {
+    const expiredToken = `verify-expired-${randomUUID()}`
+    const liveToken = `verify-live-${randomUUID()}`
+
+    try {
+      await db.insert(shares).values([
+        {
+          ownerId,
+          objectId: sharedObject.id,
+          scope: 'object',
+          token: expiredToken,
+          expiresAt: new Date(Date.now() - 60_000),
+        },
+        {
+          ownerId,
+          objectId: sharedObject.id,
+          scope: 'object',
+          token: liveToken,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      ])
+
+      const unknownShare = await getSharedObject(`verify-unknown-${randomUUID()}`)
+      check('an unknown share token returns null', unknownShare === null)
+
+      const expiredShare = await getSharedObject(expiredToken)
+      check(
+        'an expired share token returns the expired state',
+        expiredShare?.status === 'expired' && Object.keys(expiredShare).length === 1,
+      )
+
+      const liveShare = await getSharedObject(liveToken)
+      const expectedKeys = [
+        'cutStyle',
+        'faces',
+        'giver',
+        'kind',
+        'occasionName',
+        'placeName',
+        'receivedAt',
+        'receivedPrecision',
+        'retention',
+        'rotationDeg',
+        'silhouette',
+        'story',
+        'title',
+      ]
+      check(
+        'a live share returns the unchanged public object fields',
+        liveShare?.status === 'live' &&
+          JSON.stringify(Object.keys(liveShare.value).sort()) === JSON.stringify(expectedKeys) &&
+          liveShare.value.title === sharedObject.title &&
+          liveShare.value.faces.length === sharedObject.faces.length,
+      )
+    } finally {
+      await db.delete(shares).where(sql`${shares.token} in (${expiredToken}, ${liveToken})`)
+    }
+  } else {
+    check('share verification fixture exists', false)
+  }
 
   const victim = await getObjectByLot(ownerId, 1)
   if (victim) {
