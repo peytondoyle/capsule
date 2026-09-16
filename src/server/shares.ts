@@ -63,15 +63,12 @@ export async function getSharedObject(token: string) {
   const [share] = await db
     .select()
     .from(shares)
-    .where(
-      and(
-        eq(shares.token, token),
-        eq(shares.scope, 'object'),
-        or(isNull(shares.expiresAt), sql`${shares.expiresAt} > now()`),
-      ),
-    )
+    .where(and(eq(shares.token, token), eq(shares.scope, 'object')))
     .limit(1)
   if (!share?.objectId) return null
+  if (share.expiresAt && share.expiresAt <= new Date()) {
+    return { status: 'expired' as const }
+  }
 
   const [row] = await db
     .select({
@@ -105,18 +102,21 @@ export async function getSharedObject(token: string) {
     .orderBy(objectFaces.sortOrder)
 
   return {
-    title: row.object.title,
-    kind: row.object.kind,
-    silhouette: row.object.silhouette,
-    cutStyle: row.object.cutStyle,
-    rotationDeg: row.object.rotationDeg,
-    receivedAt: row.object.receivedAt,
-    receivedPrecision: row.object.receivedPrecision,
-    story: row.object.story,
-    retention: row.object.retention,
-    placeName: row.placeName,
-    occasionName: row.occasionName,
-    giver: row.giver,
-    faces,
+    status: 'live' as const,
+    value: {
+      title: row.object.title,
+      kind: row.object.kind,
+      silhouette: row.object.silhouette,
+      cutStyle: row.object.cutStyle,
+      rotationDeg: row.object.rotationDeg,
+      receivedAt: row.object.receivedAt,
+      receivedPrecision: row.object.receivedPrecision,
+      story: row.object.story,
+      retention: row.object.retention,
+      placeName: row.placeName,
+      occasionName: row.occasionName,
+      giver: row.giver,
+      faces,
+    },
   }
 }

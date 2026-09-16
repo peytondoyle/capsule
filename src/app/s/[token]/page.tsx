@@ -17,8 +17,34 @@ export const metadata: Metadata = {
  */
 export default async function SharePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
-  const shared = await getSharedObject(token)
-  if (!shared) notFound()
+  const result = await getSharedObject(token)
+  if (!result) notFound()
+
+  if (result.status === 'expired') {
+    return (
+      <div data-surface="ledger" className="min-h-dvh bg-bg text-ink">
+        <div className="mx-auto flex min-h-dvh max-w-[430px] flex-col px-6">
+          <div className="pt-24">
+            <h1 className="text-[24px] leading-[1.2] font-semibold tracking-[-0.03em]">
+              This share has expired
+            </h1>
+            <p className="mt-3 text-[15px] leading-[1.65] text-mute-1">
+              The owner can share it again with a new link.
+            </p>
+          </div>
+
+          <div className="mt-auto pb-10">
+            <Hairline className="mb-4" />
+            <div className="mn text-[8.5px] tracking-[0.14em] text-mute-3">
+              KEPT IN CAPSULE · AN ARCHIVE OF GIVEN THINGS
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const shared = result.value
 
   const recto = shared.faces.find((face) => face.role === 'recto') ?? shared.faces[0]
   const aspect = aspectOf(recto?.width, recto?.height)
