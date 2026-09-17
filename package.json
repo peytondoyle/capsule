@@ -7,7 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "infisical run --env=dev -- next dev",
+    "dev": "(vercel env pull --yes --environment=development .env.local || [ -f .env.local ]) && ! grep -q SENSITIVE .env.local && next dev",
     "build": "npm run build:sw && npm run build:detect && next build",
     "start": "next start",
     "lint": "eslint",
