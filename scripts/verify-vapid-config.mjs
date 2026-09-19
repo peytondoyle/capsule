@@ -9,7 +9,7 @@ const ownerId = 'vapid-test-owner'
 const row = { endpoint: 'https://push.invalid/test', p256dh: 'synthetic-p256dh', auth: 'synthetic-auth' }
 const payload = { title: 'Test', body: 'Synthetic message', url: '/queue' }
 const keys = { NEXT_PUBLIC_VAPID_PUBLIC_KEY: 'synthetic-public', VAPID_PRIVATE_KEY: 'synthetic-private' }
-const fallback = 'https://capsule-omega-ruby.vercel.app'
+const fallback = 'https://capsule.peytondoyle.app'
 
 function load(env, rows = [row]) {
   const calls = []
